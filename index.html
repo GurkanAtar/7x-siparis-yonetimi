@@ -614,6 +614,27 @@
 </div>
 
 <script>
+// window.storage is a Claude.ai artifact-only API — it does not exist on a
+// real deployed website (Vercel, or anywhere else outside claude.ai's own
+// preview). Without this, every save and load throws immediately, meaning
+// NOTHING persists at all once this file is deployed standalone: the app
+// would silently lose all data on every page refresh. This polyfills the
+// exact same interface using the browser's real localStorage, only when the
+// real window.storage isn't present — so the app keeps working unmodified
+// whether it's opened inside Claude.ai or as a deployed site.
+if(typeof window.storage === 'undefined'){
+  window.storage = {
+    get: async (key) => {
+      const v = localStorage.getItem(key);
+      return v === null ? null : { key, value: v };
+    },
+    set: async (key, value) => {
+      localStorage.setItem(key, value);
+      return { key, value };
+    },
+  };
+}
+
 document.getElementById('saveErrorBannerDismiss').onclick = ()=>{
   document.getElementById('saveErrorBanner').style.display = 'none';
 };
