@@ -585,12 +585,14 @@
     </div>
     <div class="card">
       <h2>Kanalları birleştir</h2>
-      <p class="muted" style="margin-top:-6px">Yanlışlıkla iki ayrı kanal olarak kaydedilmiş aynı bayiyi tek kanal altında birleştirir — birleştirilen kanala ait tüm geçmiş siparişler otomatik olarak seçilen kanala taşınır, birleştirilen kanal kaldırılır. Sadece "Tür" filtresinde şu an seçili olan türdeki kanallar arasında birleştirme yapılabilir.</p>
+      <p class="muted" style="margin-top:-6px">Yanlışlıkla iki ayrı kanal olarak kaydedilmiş aynı bayiyi tek kanal altında birleştirir — birleştirilen kanala ait tüm geçmiş siparişler otomatik olarak seçilen kanala taşınır, birleştirilen kanal kaldırılır. "Tür" filtresinde seçili olan ailedeki (örn. Instagram kurumsal + Instagram bayi birlikte) tüm kanallar arasında birleştirme yapılabilir — böylece yanlış türde kaydedilmiş bir kanal da düzeltilebilir.</p>
+      <p class="muted" style="margin-top:-4px;font-size:12px;">Dropdown'da her kanalın türü de gösterilir (örn. "Instagram kurumsal") — birleştirmeden önce doğru iki kanalı seçtiğinizden emin olun.</p>
       <div class="row row3">
         <div><label>Birleştirilecek kanal (kaldırılacak)</label><select id="mergeChanFrom"></select></div>
         <div><label>Bu kanalla birleştirilsin (kalacak)</label><select id="mergeChanTo"></select></div>
         <div style="display:flex;align-items:flex-end;"><button id="mergeChanBtn">Birleştir</button></div>
       </div>
+      <div id="channelMergeHistory" style="margin-top:6px;"></div>
     </div>
   </div>
 
@@ -1185,7 +1187,7 @@ function showPinModal(labelText){
     };
   });
 }
-let state = { orders: [], uploadBatches: [], activityLog: [], setTemplates: [], commonSizes: ['160x220','180x270','200x300'], productCatalog: {}, channels: [
+let state = { orders: [], uploadBatches: [], activityLog: [], setTemplates: [], commonSizes: ['160x220','180x270','200x300'], productCatalog: {}, channelMerges: [], channels: [
   {name:'qatalina', type:'Instagram kurumsal'},
   {name:'7xhome', type:'Instagram kurumsal'},
   {name:'Carpetra Home', type:'Instagram kurumsal'},
@@ -1388,6 +1390,7 @@ async function loadState(){
         logActivity(`Yükleme kaydı kurtarıldı: "${rebuilt.fileName}" (${group.length} sipariş) — önceki bir hatadan dolayı kaybolmuştu`);
       });
       state.setTemplates = loaded.setTemplates || [];
+      state.channelMerges = loaded.channelMerges || [];
       state.commonSizes = (loaded.commonSizes && loaded.commonSizes.length) ? loaded.commonSizes : state.commonSizes;
       state.productCatalog = loaded.productCatalog || {};
       // Which channel and which of the four operational stages (Sipariş
@@ -1635,6 +1638,7 @@ function saveState(){
         commonSizes: state.commonSizes,
         productCatalog: state.productCatalog,
         channels: state.channels,
+        channelMerges: state.channelMerges,
         currentEntryMode: state.currentEntryMode,
         currentStageMode: state.currentStageMode,
       };
@@ -7180,26 +7184,31 @@ function renderChannels(){
       saveState(); render();
     };
   });
-  // Same type-filtered list as the tags above, feeding the merge dropdowns —
-  // merging only ever makes sense within one type (e.g. two Instagram bayi
-  // entries that turned out to be the same dealer), never across types.
-  // Dealer names in particular are the ones most likely to get accidentally
-  // duplicated (a plain typed name, easy to mistype or re-add slightly
-  // differently) — showing each one's order count, and its registered marka
-  // if it has one, makes it much easier to recognize "these two are
-  // probably the same dealer" at a glance, rather than judging by name alone.
-  const mergeOptHtml = filtered.length
-    ? filtered.map(c=>{
+  // The merge dropdowns use the whole FAMILY (Instagram/Trendyol/etc.), not
+  // the exact type — unlike the tags list above, which stays exact-type for
+  // clean display. This is deliberate: merge is exactly the tool for fixing
+  // a channel registered under the wrong type by mistake (e.g. a dealer
+  // accidentally added as "Instagram kurumsal" instead of "Instagram
+  // bayi"), so kurumsal and bayi entries of the same family need to be
+  // visible together here, not hidden from each other by the type filter.
+  function channelFamily(type){
+    return (type||'').replace(/ kurumsal$| bayi$/,'');
+  }
+  const family = channelFamily(filterType);
+  const filteredFamily = state.channels.filter(c=>channelFamily(c.type)===family);
+  const mergeOptHtml = filteredFamily.length
+    ? filteredFamily.map(c=>{
         const orderCount = state.orders.filter(o=>channelNamesMatch(o.channel,c.name)).length;
         const markaNote = c.marka ? `, Marka: ${c.marka}` : '';
-        return `<option value="${c.name}">${c.name} (${orderCount} sipariş${markaNote})</option>`;
+        return `<option value="${c.name}">${c.name} — ${c.type} (${orderCount} sipariş${markaNote})</option>`;
       }).join('')
-    : `<option value="">"${filterType}" türünde henüz kanal yok.</option>`;
+    : `<option value="">"${family}" ailesinde henüz kanal yok.</option>`;
   const mergeFromEl = document.getElementById('mergeChanFrom');
   const mergeToEl = document.getElementById('mergeChanTo');
   if(mergeFromEl) mergeFromEl.innerHTML = mergeOptHtml;
   if(mergeToEl) mergeToEl.innerHTML = mergeOptHtml;
   renderMarkaRegistry();
+  renderChannelMerges();
 }
 
 // Every Instagram bayi, always shown here regardless of the type filter
@@ -7278,13 +7287,76 @@ document.getElementById('mergeChanBtn').onclick = async ()=>{
   // over to the surviving channel's name — this is what actually combines
   // their sales history into one, not just the registry entry itself.
   const affectedOrders = state.orders.filter(o=>channelNamesMatch(o.channel,fromName));
-  const auth = await requireAdmin(`"${fromName}" kanalını "${toName}" ile birleştirme (${affectedOrders.length} sipariş "${toName}" altına taşınacak, "${fromName}" kanalı kaldırılacak)`);
+  const auth = await requireAdmin(`"${fromName}" kanalını "${toName}" ile birleştirme (${affectedOrders.length} sipariş "${toName}" altına taşınacak, "${fromName}" kanalı kaldırılacak) — bu işlem "Geri al" ile daha sonra geri alınabilir.`);
   if(!auth) return;
+  const fromChan = state.channels.find(c=>c.name===fromName);
+  // Recorded by exact order id (not just a count, and not by re-matching
+  // the channel name later) — after the merge every one of these orders
+  // shows the SAME channel name as whatever was already under "toName", so
+  // there would be no way to tell them apart again by name alone. The id
+  // list is what makes an exact, safe revert possible afterward.
+  state.channelMerges.push({
+    id: uid(),
+    fromName, fromType: fromChan ? fromChan.type : '',
+    toName,
+    orderIds: affectedOrders.map(o=>o.id),
+    orderCount: affectedOrders.length,
+    mergedAt: new Date().toISOString(),
+    mergedBy: operatorName || 'Bilinmeyen',
+    revertedAt: null, revertedBy: null,
+  });
   affectedOrders.forEach(o=>{ o.channel = toName; });
   state.channels = state.channels.filter(c=>c.name!==fromName);
   logActivity(`Kanal birleştirildi: "${fromName}" → "${toName}" (${affectedOrders.length} sipariş taşındı, "${fromName}" kaldırıldı)`, auth==='pin' ? 'Admin' : undefined);
   saveState(); render();
 };
+
+function renderChannelMerges(){
+  const el = document.getElementById('channelMergeHistory');
+  if(!el) return;
+  const merges = (state.channelMerges||[]).slice().sort((a,b)=>new Date(b.mergedAt)-new Date(a.mergedAt));
+  if(!merges.length){ el.innerHTML = ''; return; }
+  el.innerHTML = `<h3 style="font-family:'Fraunces',serif;font-size:15px;margin:20px 0 8px;">Son birleştirmeler</h3>` +
+    merges.map(m=>{
+      const dateStr = new Date(m.mergedAt).toLocaleString('tr-TR');
+      const status = m.revertedAt
+        ? `<span class="muted">Geri alındı (${new Date(m.revertedAt).toLocaleString('tr-TR')}, ${m.revertedBy||''})</span>`
+        : `<button class="ghost small revert-merge" data-id="${m.id}">Geri al</button>`;
+      return `<div class="row" style="grid-template-columns:1fr auto;display:grid;gap:8px;align-items:center;margin-bottom:6px;">
+        <span>${dateStr} — <strong>"${m.fromName}"</strong> → <strong>"${m.toName}"</strong> (${m.orderCount} sipariş, ${m.mergedBy})</span>
+        ${status}
+      </div>`;
+    }).join('');
+  el.querySelectorAll('.revert-merge').forEach(b=>{
+    b.onclick = async ()=>{
+      const merge = state.channelMerges.find(m=>m.id===b.dataset.id);
+      if(!merge || merge.revertedAt) return;
+      const auth = await requireAdmin(`"${merge.fromName}" → "${merge.toName}" birleştirmesini geri alma (${merge.orderCount} sipariş "${merge.fromName}" kanalına geri taşınacak, kanal yeniden eklenecek)`);
+      if(!auth) return;
+      // Only orders that still show the merge's result get reverted — if one
+      // was manually re-assigned to a different channel afterward, reverting
+      // it here would silently undo THAT later change too, which isn't what
+      // "undo this merge" should mean. Such orders are skipped and counted
+      // separately so nothing is silently lost.
+      let reverted = 0, skipped = 0;
+      merge.orderIds.forEach(id=>{
+        const o = state.orders.find(x=>x.id===id);
+        if(!o){ skipped++; return; }
+        if(!channelNamesMatch(o.channel, merge.toName)){ skipped++; return; }
+        o.channel = merge.fromName;
+        reverted++;
+      });
+      if(!state.channels.some(c=>channelNamesMatch(c.name,merge.fromName))){
+        state.channels.push({ name: merge.fromName, type: merge.fromType || 'Instagram bayi' });
+      }
+      merge.revertedAt = new Date().toISOString();
+      merge.revertedBy = operatorName || 'Bilinmeyen';
+      const skipNote = skipped ? ` (${skipped} sipariş bu arada başka bir kanala taşınmış olduğu için atlandı)` : '';
+      logActivity(`Kanal birleştirmesi geri alındı: "${merge.toName}" → "${merge.fromName}" (${reverted} sipariş geri taşındı${skipNote})`, auth==='pin' ? 'Admin' : undefined);
+      saveState(); render();
+    };
+  });
+}
 
 function renderLog(){
   const tbody = document.getElementById('logBody');
