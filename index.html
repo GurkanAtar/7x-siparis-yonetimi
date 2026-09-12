@@ -1538,8 +1538,12 @@ function saveState(){
       const removedIds = [...lastSyncedOrderIds].filter(id=>!currentIds.has(id));
 
       if(newOrders.length){
+        // Upsert here too, not a plain insert — if another overlapping save
+        // (or the batch-reconciliation save right after login) already
+        // wrote this exact row a moment earlier, a plain insert would fail
+        // outright on the primary key instead of harmlessly no-oping.
         const rows = newOrders.map(o=>({ id:o.id, order_number:o.orderNumber||null, data:stripImages(o), created_by:currentUser.id }));
-        const { error } = await sb.from('orders').insert(rows);
+        const { error } = await sb.from('orders').upsert(rows, { onConflict:'id' });
         if(error) throw error;
       }
       if(existingOrders.length){
@@ -1575,8 +1579,10 @@ function saveState(){
       const removedBatchIds = [...lastSyncedBatchIds].filter(id=>!currentBatchIds.has(id));
 
       if(newBatches.length){
+        // Same reasoning as orders above — upsert, not insert, so an
+        // overlapping save can never hit a hard primary-key failure here.
         const rows = newBatches.map(b=>({ id:b.id, data:stripImages(b), created_by:currentUser.id }));
-        const { error } = await sb.from('upload_batches').insert(rows);
+        const { error } = await sb.from('upload_batches').upsert(rows, { onConflict:'id' });
         if(error) throw error;
       }
       if(existingBatches.length){
