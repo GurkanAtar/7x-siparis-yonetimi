@@ -18,7 +18,7 @@
   }
   *{box-sizing:border-box;}
   body{margin:0;background:var(--paper);color:var(--ink);font-family:'IBM Plex Sans',sans-serif;}
-  .wrap{max-width:1080px;margin:0 auto;padding:28px 24px 60px;}
+  .wrap{max-width:1800px;margin:0 auto;padding:28px 24px 60px;}
   h1{font-family:'Fraunces',serif;font-weight:600;font-size:26px;margin:0 0 2px;letter-spacing:-.2px;}
   .sub{color:var(--ink-soft);font-size:13px;margin:0 0 22px;}
   .tabs{display:flex;gap:4px;border-bottom:1px solid var(--line);margin-bottom:22px;flex-wrap:wrap;}
@@ -2174,6 +2174,11 @@ function updateExchangeTL(){
 document.getElementById('exRate').addEventListener('input', updateExchangeTL);
 
 let selectedFileFilterIds = new Set();
+// How many of the most recent files are shown by default in each Dosya
+// dropdown before "Daha fazla göster" is clicked — keyed by listElId since
+// Sipariş girişi/Baskı öncesi/Ayırma/Üretim each have their own independent
+// dropdown and their own independently-expandable count.
+let fileListShowCount = {};
 
 // Trendyol gets its own continuous counter (1001, 1002, ...) instead of the
 // day-based scheme every other channel uses — it never resets, and once an
@@ -2223,9 +2228,25 @@ function renderFileFilterListGeneric(listElId, toggleId, searchId, selectedSet, 
   if(!listEl || !toggle) return;
   const searchInput = document.getElementById(searchId);
   const term = searchInput ? searchInput.value.trim().toLocaleLowerCase('tr') : '';
-  const batches = state.uploadBatches.slice().sort((a,b)=>new Date(b.savedAt)-new Date(a.savedAt))
+  const allBatches = state.uploadBatches.slice().sort((a,b)=>new Date(b.savedAt)-new Date(a.savedAt))
     .filter(b=>batchMatchesCategory(b, category))
     .filter(b=>!term || b.fileName.toLocaleLowerCase('tr').includes(term) || b.sheetName.toLocaleLowerCase('tr').includes(term));
+  // Only the most recent files show by default — after a few months there
+  // can easily be well over a hundred, which is unmanageable in one dropdown.
+  // Actively searching bypasses this entirely (typing a name means you're
+  // deliberately looking for something specific, however old), and a file
+  // that's already ticked always stays visible even if it's aged out of the
+  // "recent" window, so unchecking it is never blocked by this limit.
+  const showCount = fileListShowCount[listElId] || 10;
+  let batches = allBatches;
+  let moreCount = 0;
+  if(!term){
+    const recent = allBatches.slice(0, showCount);
+    const recentIds = new Set(recent.map(b=>b.id));
+    const selectedButHidden = allBatches.filter(b=>selectedSet.has(b.id) && !recentIds.has(b.id));
+    batches = recent.concat(selectedButHidden).sort((a,b)=>new Date(b.savedAt)-new Date(a.savedAt));
+    moreCount = allBatches.length - recent.length - selectedButHidden.length;
+  }
   // "Manuel girişler" is always offered as its own selectable option alongside
   // real files — checking it in isolation shows only hand-entered orders;
   // checking it plus a file combines the two; checking nothing (the default)
@@ -2237,17 +2258,26 @@ function renderFileFilterListGeneric(listElId, toggleId, searchId, selectedSet, 
       <input type="checkbox" class="ffc-${listElId}" data-id="__manual__" ${selectedSet.has('__manual__')?'checked':''}>
       <span>${manualLabel}</span>
     </label>` : '';
+  const moreHtml = moreCount>0 ? `
+    <div class="dropdown-item show-more-files" data-list="${listElId}" style="cursor:pointer;color:var(--indigo);font-weight:600;">Daha fazla göster (+${Math.min(10,moreCount)}, ${moreCount} kaldı)</div>` : '';
   listEl.innerHTML = manualHtml + (batches.length ? batches.map(b=>`
     <label class="dropdown-item" style="display:flex;align-items:center;gap:8px;white-space:normal;">
       <input type="checkbox" class="ffc-${listElId}" data-id="${b.id}" ${selectedSet.has(b.id)?'checked':''}>
       <span>${b.fileName} — ${b.sheetName} (${new Date(b.savedAt).toLocaleDateString('tr-TR')}, ${b.orderCount} sipariş)</span>
-    </label>`).join('') : (manualHtml ? '' : '<div class="dropdown-item muted">Eşleşen dosya yok</div>'));
+    </label>`).join('') : (manualHtml ? '' : '<div class="dropdown-item muted">Eşleşen dosya yok</div>')) + moreHtml;
   listEl.querySelectorAll(`.ffc-${listElId}`).forEach(cb=>{
     cb.onchange = ()=>{
       if(cb.checked) selectedSet.add(cb.dataset.id); else selectedSet.delete(cb.dataset.id);
       onChange();
     };
   });
+  const moreBtn = listEl.querySelector('.show-more-files');
+  if(moreBtn){
+    moreBtn.onclick = ()=>{
+      fileListShowCount[listElId] = showCount + 10;
+      renderFileFilterListGeneric(listElId, toggleId, searchId, selectedSet, category, onChange);
+    };
+  }
   toggle.textContent = (selectedSet.size ? `${selectedSet.size} seçili` : 'Tüm dosyalar') + ' ▾';
 }
 
