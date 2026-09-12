@@ -7,6 +7,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:wght@500;600&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@500&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 <style>
   :root{
     --paper:#EDEAE1; --card:#FBFAF6; --ink:#2A2622; --ink-soft:#6B655C;
@@ -111,7 +112,7 @@
     <div class="tab" data-tab="setrecord">Halı Set ve Ölçü Kayıt</div>
     <div class="tab" data-tab="log">İşlem kayıtları</div>
     <div class="tab" data-tab="reports">Raporlar</div>
-    <div class="tab" data-tab="auth">PIN'ler &amp; Yetkilendirme</div>
+    <div class="tab" data-tab="auth">Hesabım &amp; Yetkiler</div>
   </div>
 
   <div id="siparismerkezi" class="panel active">
@@ -601,8 +602,8 @@
 
   <div id="auth" class="panel">
     <div class="card">
-      <h2>Kullanıcılar &amp; PIN'ler — Yönetici</h2>
-      <p class="muted" style="margin-top:-6px">Yönetici PIN'i ("ana pin") arkasında kilitlidir. Sadece bilenler kullanıcı PIN'lerini oluşturabilir, görebilir, değiştirebilir veya silebilir. Not: hâlâ hafif bir prototip önlemi, gerçek güvenlik değil — buradaki her şey tarayıcıda saklanır, sunucuda hash'lenmez, bu yüzden başka bir yeri koruyan bir PIN'i tekrar kullanmayın.</p>
+      <h2>Hesabım &amp; Yetkiler</h2>
+      <p class="muted" style="margin-top:-6px">Giriş, e-posta ve şifre ile yapılır — gerçek hesaplar Supabase üzerinden yönetilir. Silme ve 24 saatten eski düzenleme gibi işlemler için yönetici geçici yetki verebilir.</p>
       <div id="adminPanel"></div>
     </div>
   </div>
@@ -633,27 +634,128 @@
   <button id="imgLightboxClose" style="position:fixed;top:18px;right:24px;background:rgba(255,255,255,.15);color:#fff;border:1px solid rgba(255,255,255,.3);border-radius:50%;width:38px;height:38px;font-size:18px;cursor:pointer;">×</button>
 </div>
 
+<div id="loginOverlay" style="display:flex;position:fixed;inset:0;background:var(--paper);z-index:300;align-items:center;justify-content:center;">
+  <div style="background:var(--card);border-radius:12px;padding:32px;width:320px;box-shadow:0 8px 28px rgba(0,0,0,.2);">
+    <h1 style="font-size:20px;margin:0 0 4px;">7X Group — Sipariş Merkezi</h1>
+    <p class="muted" style="margin:0 0 18px;">Devam etmek için giriş yapın</p>
+    <div style="display:flex;flex-direction:column;gap:10px;">
+      <input id="loginEmail" type="email" placeholder="E-posta" autocomplete="username">
+      <input id="loginPassword" type="password" placeholder="Şifre" autocomplete="current-password">
+      <button id="loginSubmit">Giriş yap</button>
+      <span id="loginStatus" class="muted" style="min-height:16px;"></span>
+    </div>
+  </div>
+</div>
+
+<div id="recoveryOverlay" style="display:none;position:fixed;inset:0;background:var(--paper);z-index:301;align-items:center;justify-content:center;">
+  <div style="background:var(--card);border-radius:12px;padding:32px;width:320px;box-shadow:0 8px 28px rgba(0,0,0,.2);">
+    <h1 style="font-size:20px;margin:0 0 4px;">Yeni şifre belirle</h1>
+    <p class="muted" style="margin:0 0 18px;">Sıfırlama bağlantısı doğrulandı — şimdi yeni bir şifre girin.</p>
+    <div style="display:flex;flex-direction:column;gap:10px;">
+      <input id="recoveryPassword" type="password" placeholder="Yeni şifre" autocomplete="new-password">
+      <button id="recoverySubmit">Şifreyi kaydet</button>
+      <span id="recoveryStatus" class="muted" style="min-height:16px;"></span>
+    </div>
+  </div>
+</div>
+
 <script>
-// window.storage is a Claude.ai artifact-only API — it does not exist on a
-// real deployed website (Vercel, or anywhere else outside claude.ai's own
-// preview). Without this, every save and load throws immediately, meaning
-// NOTHING persists at all once this file is deployed standalone: the app
-// would silently lose all data on every page refresh. This polyfills the
-// exact same interface using the browser's real localStorage, only when the
-// real window.storage isn't present — so the app keeps working unmodified
-// whether it's opened inside Claude.ai or as a deployed site.
-if(typeof window.storage === 'undefined'){
-  window.storage = {
-    get: async (key) => {
-      const v = localStorage.getItem(key);
-      return v === null ? null : { key, value: v };
-    },
-    set: async (key, value) => {
-      localStorage.setItem(key, value);
-      return { key, value };
-    },
-  };
+// ===========================================================================
+// Supabase — real multi-user backend. Replaces the old single-browser
+// localStorage/window.storage approach entirely: every order lives in its
+// own row in the `orders` table (so the database itself can enforce who is
+// allowed to delete what), and everything else shared (channels, product
+// catalog, set templates, common sizes) lives in one row of `app_state`.
+// Accounts, roles (owner/sales/production/finance), and temporary delete
+// permissions are handled by Supabase Auth + the `profiles` and
+// `delete_grants` tables — replacing the old PIN system completely.
+// ===========================================================================
+const SUPABASE_URL = 'https://quiaoxwhehaqnsdmmpfy.supabase.co';
+const SUPABASE_ANON_KEY = 'sb_publishable_BB7s4HpyqVoX2BfIcJ900w_LMrXKQtX';
+const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+let currentUser = null;      // { id, email } — the logged-in Supabase auth user
+let currentProfile = null;   // { id, name, role } — this user's row in profiles
+let allProfiles = [];        // every profile — used for the owner's grant picker
+let activeGrants = [];       // rows from delete_grants that haven't expired
+// Snapshot of order ids known to already exist in Supabase as of the last
+// successful load/save — used by saveState() to work out which orders are
+// new (insert), changed (update), or missing (an actual delete to send).
+let lastSyncedOrderIds = new Set();
+
+async function fetchProfileAndGrants(){
+  const { data: prof } = await sb.from('profiles').select('*').eq('id', currentUser.id).maybeSingle();
+  currentProfile = prof || { id: currentUser.id, name: currentUser.email, role: 'sales' };
+  const { data: profs } = await sb.from('profiles').select('*');
+  allProfiles = profs || [];
+  const { data: grants } = await sb.from('delete_grants').select('*').gt('expires_at', new Date().toISOString());
+  activeGrants = grants || [];
 }
+
+function showLoginError(msg){
+  const el = document.getElementById('loginStatus');
+  el.textContent = msg;
+  el.style.color = 'var(--rust)';
+}
+
+async function attemptLogin(){
+  const email = document.getElementById('loginEmail').value.trim();
+  const password = document.getElementById('loginPassword').value;
+  if(!email || !password){ showLoginError('E-posta ve şifre gerekli.'); return; }
+  document.getElementById('loginSubmit').disabled = true;
+  const { data, error } = await sb.auth.signInWithPassword({ email, password });
+  document.getElementById('loginSubmit').disabled = false;
+  if(error){ showLoginError('Giriş başarısız — e-posta veya şifre yanlış.'); return; }
+  await enterApp(data.user);
+}
+
+async function enterApp(user){
+  currentUser = user;
+  await fetchProfileAndGrants();
+  operatorName = currentProfile.name || currentUser.email;
+  document.getElementById('loginOverlay').style.display = 'none';
+  await loadState();
+}
+
+document.getElementById('loginSubmit').onclick = attemptLogin;
+document.getElementById('loginPassword').onkeydown = (e)=>{ if(e.key==='Enter') attemptLogin(); };
+
+async function showRecoveryError(msg){
+  const el = document.getElementById('recoveryStatus');
+  el.textContent = msg;
+  el.style.color = 'var(--rust)';
+}
+
+document.getElementById('recoverySubmit').onclick = async ()=>{
+  const newPassword = document.getElementById('recoveryPassword').value;
+  if(!newPassword || newPassword.length < 6){ showRecoveryError('Şifre en az 6 karakter olmalı.'); return; }
+  document.getElementById('recoverySubmit').disabled = true;
+  const { data, error } = await sb.auth.updateUser({ password: newPassword });
+  document.getElementById('recoverySubmit').disabled = false;
+  if(error){ showRecoveryError('Şifre kaydedilemedi: ' + error.message); return; }
+  document.getElementById('recoveryOverlay').style.display = 'none';
+  await enterApp(data.user);
+};
+
+async function initAuth(){
+  // A password-reset (or invite) link lands here with a special recovery
+  // session already active in the URL — caught here BEFORE the normal login
+  // check, so the person gets a clear "set a new password" screen instead of
+  // silently landing straight in the dashboard on someone else's old link.
+  const { data: { session } } = await sb.auth.getSession();
+  const hash = window.location.hash || '';
+  if(session && hash.includes('type=recovery')){
+    document.getElementById('loginOverlay').style.display = 'none';
+    document.getElementById('recoveryOverlay').style.display = 'flex';
+    return;
+  }
+  if(session && session.user){
+    await enterApp(session.user);
+  }
+  // If there's no session, the login overlay (visible by default) just stays
+  // up — nothing else in the app runs until attemptLogin() succeeds.
+}
+initAuth();
 
 document.getElementById('saveErrorBannerDismiss').onclick = ()=>{
   document.getElementById('saveErrorBanner').style.display = 'none';
@@ -1037,7 +1139,7 @@ function showPinModal(labelText){
     };
   });
 }
-let state = { orders: [], uploadBatches: [], activityLog: [], setTemplates: [], users: [], anaPin: '', tempGrants: {}, commonSizes: ['160x220','180x270','200x300'], productCatalog: {}, channels: [
+let state = { orders: [], uploadBatches: [], activityLog: [], setTemplates: [], commonSizes: ['160x220','180x270','200x300'], productCatalog: {}, channels: [
   {name:'qatalina', type:'Instagram kurumsal'},
   {name:'7xhome', type:'Instagram kurumsal'},
   {name:'Carpetra Home', type:'Instagram kurumsal'},
@@ -1077,58 +1179,51 @@ let adminUnlocked = false;
 
 function renderOperatorBar(){
   const bar = document.getElementById('operatorBar');
-  if(operatorName){
-    const grantExpiry = state.tempGrants[operatorName];
-    const hasActiveGrant = grantExpiry && new Date(grantExpiry).getTime() > Date.now();
-    const grantNote = hasActiveGrant
-      ? ` <span class="pill pill-coded" title="Silme ve 24 saatten eski düzenleme gibi yönetici işlemleri için geçici yetkiniz var">Geçici yönetici yetkisi — ${Math.max(0,Math.round((new Date(grantExpiry).getTime()-Date.now())/60000))} dakika kaldı</span>`
-      : '';
-    bar.innerHTML = `
-      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
-        <span><strong>${operatorName}</strong> olarak çalışıyorsunuz</span>
-        <span class="muted">İşlemler bu isim altında kaydedilecek.</span>${grantNote}
-        <button class="ghost small" id="switchUser">Kullanıcı değiştir</button>
-      </div>`;
-    document.getElementById('switchUser').onclick = ()=>{ operatorName=''; renderOperatorBar(); };
-  } else if(!state.users.length){
-    bar.innerHTML = `<span class="muted">Henüz kullanıcı yok — Kanallar sekmesinde bir tane ekleyin, sonra buraya dönüp giriş yapın.</span>`;
-  } else {
-    bar.innerHTML = `
-      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
-        <label style="margin:0">PIN girin</label>
-        <input id="pinInput" type="password" placeholder="PIN" style="width:100px" maxlength="12">
-        <button class="ghost small" id="pinSubmit">Kilidi aç</button>
-        <span class="muted" id="pinStatus">İşlemler, oturumun kilidini açan PIN'in sahibine ait olarak kaydedilir.</span>
-      </div>`;
-    const submit = ()=>{
-      const pin = document.getElementById('pinInput').value.trim();
-      const match = state.users.find(u=>u.pin===pin);
-      if(match){ operatorName = match.name; renderOperatorBar(); }
-      else { document.getElementById('pinStatus').textContent = 'Yanlış PIN.'; document.getElementById('pinStatus').style.color = 'var(--rust)'; }
-    };
-    document.getElementById('pinSubmit').onclick = submit;
-    document.getElementById('pinInput').onkeydown = (e)=>{ if(e.key==='Enter') submit(); };
-  }
+  const isOwner = currentProfile && currentProfile.role === 'owner';
+  const myGrant = currentUser && activeGrants.find(g=>g.user_id===currentUser.id);
+  const grantNote = (!isOwner && myGrant)
+    ? ` <span class="pill pill-coded" title="Silme ve 24 saatten eski düzenleme gibi yönetici işlemleri için geçici yetkiniz var">Geçici yönetici yetkisi — ${Math.max(0,Math.round((new Date(myGrant.expires_at).getTime()-Date.now())/60000))} dakika kaldı</span>`
+    : '';
+  const roleLabel = isOwner ? 'Yönetici' : (currentProfile ? currentProfile.role : '');
+  bar.innerHTML = `
+    <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+      <span><strong>${operatorName}</strong> olarak çalışıyorsunuz <span class="muted">(${roleLabel})</span></span>
+      <span class="muted">İşlemler bu isim altında kaydedilecek.</span>${grantNote}
+      <button class="ghost small" id="logoutBtn">Çıkış yap</button>
+    </div>`;
+  document.getElementById('logoutBtn').onclick = async ()=>{
+    await sb.auth.signOut();
+    location.reload();
+  };
 }
 
 async function requireAdmin(actionLabel){
-  // Gate for deleting persisted data: any user can add/enter data, but every
-  // single deletion needs the admin PIN entered right here via the in-page modal
-  // (native browser prompt() is blocked inside the artifact sandbox, so it must
-  // be a real DOM element) — this always prompts, even if the Authorization tab
-  // happens to be unlocked, so a delete is never silently authorized by that.
+  // Gate for admin-only actions (deleting a channel/template/batch, clearing
+  // the catalog, editing an already-produced or >24h-old order, etc). Real
+  // enforcement lives in Supabase's Row Level Security policies — this is
+  // just the matching front-end check, so the person gets a clear message
+  // instead of a confusing silent failure when they try something the
+  // database will reject anyway.
   // Returns false if denied, or a string saying HOW it was authorized: 'temp'
-  // (an admin-granted temporary window for this specific user — logged under
-  // their own name) or 'pin' (the actual ana pin was entered — logged as
-  // "Admin"). Callers use this to decide who an action gets attributed to.
-  const grantExpiry = operatorName && state.tempGrants[operatorName];
-  if(grantExpiry && new Date(grantExpiry).getTime() > Date.now()) return 'temp';
-  if(!state.anaPin){ showMessage('Önce PINler & Yetkilendirme sekmesinde bir yönetici PIN\'i belirleyin.'); return false; }
-  const pin = await showPinModal(`${actionLabel} işlemi yönetici PIN'i gerektirir:`);
-  if(pin===null) return false;
-  if(pin===state.anaPin) return 'pin';
-  showMessage('Yanlış yönetici PIN\'i.');
+  // (a currently-active grant from the owner — logged under the user's own
+  // name) or 'pin' (the user IS the owner — logged as "Admin"). Callers use
+  // this to decide who an action gets attributed to.
+  if(currentProfile && currentProfile.role === 'owner') return 'pin';
+  const myGrant = currentUser && activeGrants.find(g=>g.user_id===currentUser.id);
+  if(myGrant) return 'temp';
+  showMessage(`${actionLabel} işlemi için yönetici yetkisi gerekiyor. Yöneticinizden geçici yetki istemeniz gerekir.`);
   return false;
+}
+
+// Order/item deletion specifically also allows ANY authorized user to delete
+// freely within the first 24 hours after the order was recorded — matching
+// the same window enforced by the orders_delete_owner_or_grant policy in
+// Supabase. After 24 hours, this falls back to the normal requireAdmin()
+// check (owner, or someone holding a temporary grant).
+async function requireDeleteAuth(actionLabel, order){
+  const ageMs = order && order.recordedAt ? (Date.now() - new Date(order.recordedAt).getTime()) : Infinity;
+  if(ageMs < 24*3600*1000) return 'fresh';
+  return requireAdmin(actionLabel);
 }
 
 function logActivity(action, byOverride){
@@ -1139,13 +1234,19 @@ function logActivity(action, byOverride){
 }
 
 async function loadState(){
-  // Retries a few times before giving up — a transient failure here is worse
-  // than on save, since it silently shows an empty app instead of your real
-  // data with no indication anything went wrong.
-  let res = null, lastErr = null;
+  // Loads orders individually from the `orders` table (one row per order —
+  // this is what lets Supabase's Row Level Security actually enforce who can
+  // delete what) and everything else shared (channels, catalog, templates,
+  // sizes, activity log, upload history) from the single `app_state` row.
+  let orderRows = null, appRow = null, lastErr = null;
   for(let attempt=0; attempt<3; attempt++){
     try{
-      res = await window.storage.get('oc-state');
+      const ordersRes = await sb.from('orders').select('*');
+      if(ordersRes.error) throw ordersRes.error;
+      orderRows = ordersRes.data;
+      const appRes = await sb.from('app_state').select('data').eq('id','global').maybeSingle();
+      if(appRes.error) throw appRes.error;
+      appRow = appRes.data;
       lastErr = null;
       break;
     }catch(e){
@@ -1162,12 +1263,13 @@ async function loadState(){
     return;
   }
   try{
-    if(res && res.value){
-      const loaded = JSON.parse(res.value);
+    {
+      const loaded = appRow ? appRow.data : {};
       // Backfill fields that may be missing from state saved before they existed,
       // instead of overwriting the whole object (which breaks newer code that
       // expects them, e.g. activityLog.push).
-      state.orders = loaded.orders || [];
+      state.orders = (orderRows||[]).map(r=>({ ...(r.data||{}), id: r.id }));
+      lastSyncedOrderIds = new Set(state.orders.map(o=>o.id));
       // Fringe must never be empty going forward — any item saved before that rule
       // existed gets backfilled to Saçaksız (the same default the dropdowns and the
       // Excel importer use for a blank value), so no stored item is left unspecified.
@@ -1192,11 +1294,8 @@ async function loadState(){
       });
       state.activityLog = loaded.activityLog || [];
       state.setTemplates = loaded.setTemplates || [];
-      state.users = loaded.users || [];
-      state.anaPin = loaded.anaPin || '';
       state.commonSizes = (loaded.commonSizes && loaded.commonSizes.length) ? loaded.commonSizes : state.commonSizes;
       state.productCatalog = loaded.productCatalog || {};
-      state.tempGrants = loaded.tempGrants || {};
       // Which channel and which of the four operational stages (Sipariş
       // girişi / Baskı öncesi / Ayırma & etiketler / Üretim) was last open —
       // restored below so re-entering the app picks up exactly where you
@@ -1355,40 +1454,72 @@ async function loadState(){
   render();
 }
 let saveTimer = null;
+function stripImages(obj){
+  // Design-photo base64 data is kept in memory for this session only — excluded
+  // from what gets persisted, since embedding several photos in one saved record
+  // is far too large for a normal database row. Order/status data always persists.
+  return JSON.parse(JSON.stringify(obj, (key, value) => key==='images' ? undefined : value));
+}
 function saveState(){
   // Debounce rapid, successive calls (e.g. deleting several rows quickly) into a
   // single write shortly after the last change, instead of firing overlapping
-  // storage.set calls that can collide and fail.
+  // writes that can collide.
   clearTimeout(saveTimer);
   saveTimer = setTimeout(async ()=>{
-    let light;
     try{
-      // Design-photo base64 data is kept in memory for this session only — it's excluded
-      // from what gets persisted, since embedding several photos in one saved record
-      // exceeds the storage size limit and causes save failures. Order/status data
-      // always persists normally.
-      light = JSON.stringify(state, (key, value) => key==='images' ? undefined : value);
-      await window.storage.set('oc-state', light);
+      const currentIds = new Set(state.orders.map(o=>o.id));
+      const newOrders = state.orders.filter(o=>!lastSyncedOrderIds.has(o.id));
+      const existingOrders = state.orders.filter(o=>lastSyncedOrderIds.has(o.id));
+      const removedIds = [...lastSyncedOrderIds].filter(id=>!currentIds.has(id));
+
+      if(newOrders.length){
+        const rows = newOrders.map(o=>({ id:o.id, order_number:o.orderNumber||null, data:stripImages(o), created_by:currentUser.id }));
+        const { error } = await sb.from('orders').insert(rows);
+        if(error) throw error;
+      }
+      if(existingOrders.length){
+        const rows = existingOrders.map(o=>({ id:o.id, order_number:o.orderNumber||null, data:stripImages(o) }));
+        const { error } = await sb.from('orders').upsert(rows, { onConflict:'id' });
+        if(error) throw error;
+      }
+      // Deletions are sent one at a time so a rejection (order too old, and
+      // this user isn't the owner or holding a temporary grant) can be
+      // detected and that specific order restored — instead of the whole
+      // save silently failing or silently succeeding when it actually didn't.
+      const revived = [];
+      for(const id of removedIds){
+        const { error } = await sb.from('orders').delete().eq('id', id);
+        if(error){
+          console.error('delete rejected', id, error);
+          const { data: back } = await sb.from('orders').select('*').eq('id', id).maybeSingle();
+          if(back) revived.push({ ...(back.data||{}), id: back.id });
+        }
+      }
+      if(revived.length){
+        state.orders = state.orders.concat(revived);
+        showMessage('Bazı silme işlemleri yönetici yetkisi gerektirdiği için geri alındı — o siparişler geri getirildi.');
+        render();
+      }
+
+      const rest = {
+        uploadBatches: state.uploadBatches,
+        activityLog: state.activityLog,
+        setTemplates: state.setTemplates,
+        commonSizes: state.commonSizes,
+        productCatalog: state.productCatalog,
+        channels: state.channels,
+        currentEntryMode: state.currentEntryMode,
+        currentStageMode: state.currentStageMode,
+      };
+      const { error: appErr } = await sb.from('app_state').update({ data: stripImages(rest), updated_at: new Date().toISOString() }).eq('id','global');
+      if(appErr) throw appErr;
+
+      lastSyncedOrderIds = new Set(state.orders.map(o=>o.id));
       document.getElementById('saveErrorBanner').style.display = 'none';
     }catch(e){
-      console.error('storage failed', e);
-      // Surface the actual error (e.g. QuotaExceededError) and the size of what
-      // was being saved directly in the banner — a generic "connection or
-      // storage issue" message gives no way to tell a quota problem (fixable by
-      // trimming stored data) apart from anything else, without opening dev tools.
-      const sizeKB = light ? (light.length/1024).toFixed(0) : '?';
-      // Per-category breakdown — same exclusion (images) applied per key as the
-      // real save does, so these numbers add up to match the total above. This
-      // is what actually tells us WHAT to trim, not just that something's too big.
-      const breakdown = ['orders','uploadBatches','activityLog','productCatalog','channels','setTemplates','users']
-        .map(k=>{
-          try{
-            const s = JSON.stringify(state[k], (key, value) => key==='images' ? undefined : value);
-            return `${k}: ${(s.length/1024).toFixed(0)}KB`;
-          }catch(e2){ return `${k}: ?`; }
-        }).join(', ');
+      console.error('save failed', e);
       document.getElementById('saveErrorBannerText').textContent =
-        `⚠️ Son değişiklik kaydedilemedi — bağlantı veya depolama sorunu olabilir. Verileriniz kaybolmuş olabilir. Sayfayı kapatmadan/yenilemeden önce bağlantınızı kontrol edip tekrar deneyin. (Teknik detay: ${e.name||'Error'}: ${e.message||e} — toplam: ${sizeKB} KB — dağılım: ${breakdown})`;
+        `⚠️ Son değişiklik kaydedilemedi — bağlantı sorunu olabilir. Sayfayı kapatmadan/yenilemeden önce bağlantınızı kontrol edip tekrar deneyin. (Teknik detay: ${e.message||e})`;
       document.getElementById('saveErrorBanner').style.display = 'block';
     }
   }, 400);
@@ -2924,149 +3055,76 @@ function renderSetTemplates(){
 function renderUsers(){
   const el = document.getElementById('adminPanel');
   if(!el) return;
+  const isOwner = currentProfile && currentProfile.role === 'owner';
 
-  if(!state.anaPin){
-    // First-run bootstrap: no admin PIN set yet.
-    el.innerHTML = `
-      <p class="muted">Henüz yönetici PIN'i belirlenmemiş. Şimdi bir tane belirleyin — bilen kişi kullanıcıları buradan yönetebilir.</p>
-      <div class="row row2">
-        <div><label>Yeni yönetici PIN'i</label><input id="anaPinSet" placeholder="örn. 999000" maxlength="12"></div>
-        <div><label>Onayla</label><input id="anaPinConfirm" placeholder="tekrar girin" maxlength="12"></div>
-      </div>
-      <button id="anaPinSave">Yönetici PIN'ini belirle</button>`;
-    document.getElementById('anaPinSave').onclick = ()=>{
-      const p1 = document.getElementById('anaPinSet').value.trim();
-      const p2 = document.getElementById('anaPinConfirm').value.trim();
-      if(!p1 || p1!==p2){ showMessage('PIN\'ler eşleşmeli ve boş olmamalı.'); return; }
-      state.anaPin = p1;
-      logActivity('Yönetici PIN\'i belirlendi');
-      saveState(); render();
-    };
+  const roleLabels = { owner:'Yönetici', sales:'Satış', production:'Üretim', finance:'Finans' };
+  const myRow = `
+    <div style="margin-bottom:18px;">
+      <p class="muted" style="margin:0 0 4px;">Hesabınız</p>
+      <p style="margin:0;"><strong>${currentProfile ? (currentProfile.name||currentUser.email) : ''}</strong> — ${currentProfile ? (roleLabels[currentProfile.role]||currentProfile.role) : ''} (${currentUser ? currentUser.email : ''})</p>
+    </div>`;
+
+  if(!isOwner){
+    // Non-owner accounts don't manage other accounts or grants — new
+    // accounts and roles are set up directly in Supabase by the owner.
+    const myGrant = currentUser && activeGrants.find(g=>g.user_id===currentUser.id);
+    const grantNote = myGrant
+      ? `<p class="muted">Geçici yönetici yetkiniz var — ${Math.max(0,Math.round((new Date(myGrant.expires_at).getTime()-Date.now())/60000))} dakika kaldı.</p>`
+      : `<p class="muted">Şu anda yönetici yetkiniz yok. Silme/24 saatten eski düzenleme gibi işlemler için yöneticinizden geçici yetki isteyin.</p>`;
+    el.innerHTML = myRow + grantNote;
     return;
   }
 
-  if(!adminUnlocked){
-    el.innerHTML = `
-      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
-        <label style="margin:0">Yönetici PIN'i</label>
-        <input id="anaPinInput" type="password" placeholder="ana pin" style="width:120px" maxlength="12">
-        <button class="ghost small" id="anaPinUnlock">Kilidi aç</button>
-        <span class="muted" id="anaPinStatus"></span>
-      </div>`;
-    const tryUnlock = ()=>{
-      const val = document.getElementById('anaPinInput').value.trim();
-      if(val === state.anaPin){ adminUnlocked = true; render(); }
-      else { document.getElementById('anaPinStatus').textContent = 'Yanlış yönetici PIN\'i.'; document.getElementById('anaPinStatus').style.color = 'var(--rust)'; }
-    };
-    document.getElementById('anaPinUnlock').onclick = tryUnlock;
-    document.getElementById('anaPinInput').onkeydown = (e)=>{ if(e.key==='Enter') tryUnlock(); };
-    return;
-  }
+  // Owner view: see every account's role, and grant/revoke temporary
+  // delete/edit authority to any of them — replacing the old ana PIN +
+  // per-user PIN system entirely. Adding a brand-new person's account still
+  // happens directly in Supabase (Authentication → Users, then a matching
+  // row in profiles) — this panel only manages temporary permissions for
+  // accounts that already exist.
+  const otherProfiles = allProfiles.filter(p=>p.id !== currentUser.id);
+  const profileRows = otherProfiles.map(p=>{
+    const grant = activeGrants.find(g=>g.user_id===p.id);
+    const grantNote = grant
+      ? `<span class="tag">Geçici yetki — ${Math.max(0,Math.round((new Date(grant.expires_at).getTime()-Date.now())/60000))} dk kaldı <button class="ghost small revoke-grant" data-id="${p.id}" style="margin-left:6px">Geri al</button></span>`
+      : `<button class="ghost small grant-temp" data-id="${p.id}">1 saatlik yetki ver</button>`;
+    return `
+    <div class="row" style="grid-template-columns:1fr auto auto;display:grid;gap:8px;align-items:center;margin-bottom:8px;">
+      <span>${p.name||'(isimsiz)'} — <span class="muted">${roleLabels[p.role]||p.role}</span></span>
+      <span>${grantNote}</span>
+    </div>`;
+  }).join('') || '<p class="muted">Başka hesap yok. Yeni bir kullanıcı için Supabase panelinden hesap oluşturup profiles tablosuna ekleyin.</p>';
 
-  // Unlocked: full management view, PINs shown plainly.
-  const rows = state.users.map((u,idx)=>`
-    <div class="row" style="grid-template-columns:1fr 1fr auto auto;display:grid;gap:8px;align-items:center;margin-bottom:8px;">
-      <input class="user-name-edit" data-idx="${idx}" value="${u.name}">
-      <input class="user-pin-edit" data-idx="${idx}" value="${u.pin}">
-      <button class="ghost small save-user" data-idx="${idx}">Kaydet</button>
-      <button class="ghost small del-user" data-idx="${idx}">Sil</button>
-    </div>`).join('');
-  const activeGrants = Object.entries(state.tempGrants).filter(([name,exp])=>new Date(exp).getTime()>Date.now());
-  const grantRows = activeGrants.map(([name,exp])=>{
-    const minsLeft = Math.max(0, Math.round((new Date(exp).getTime()-Date.now())/60000));
-    return `<span class="tag">${name} — ${minsLeft} dakika kaldı <button class="ghost small revoke-grant" data-name="${name}" style="margin-left:6px">Geri al</button></span>`;
-  }).join('') || '<p class="muted">Şu anda aktif geçici yetki yok.</p>';
-  const userOptions = state.users.map(u=>`<option value="${u.name}">${u.name}</option>`).join('');
-
-  el.innerHTML = `
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
-      <span class="muted">Kilit açık — PIN'ler aşağıda görünür.</span>
-      <div style="display:flex;gap:8px;">
-        <button class="ghost small" id="changeAnaPin">Yönetici PIN'ini değiştir</button>
-        <button class="ghost small" id="lockAdmin">Kilitle</button>
-      </div>
-    </div>
-    <div class="row row2">
-      <div><label>Ad</label><input id="newUserName" placeholder="örn. Gürkan"></div>
-      <div><label>PIN</label><input id="newUserPin" placeholder="örn. 4821" maxlength="12"></div>
-    </div>
-    <button id="addUser" style="margin-bottom:14px">Kullanıcı ekle</button>
-    ${rows || '<p class="muted">Henüz kullanıcı yok.</p>'}
-
-    <h3 style="font-family:'Fraunces',serif;font-size:15px;margin:24px 0 8px;">Geçici yetki ver</h3>
-    <p class="muted" style="margin-top:-4px">Yönetici PIN'ini paylaşmadan, seçilen kullanıcıya 1 saatliğine yönetici işlemleri için yetki verir (silme, 24 saatten eski düzenleme). Süre dolunca otomatik biter. İşlemler, PIN ile değil bu şekilde yetkilendirildiğinde yine o kullanıcının kendi adıyla kaydedilir.</p>
-    <div class="row row2">
-      <div><label>Kullanıcı</label><select id="grantUserSelect">${userOptions || '<option value="">Önce kullanıcı ekleyin</option>'}</select></div>
-      <div style="display:flex;align-items:flex-end;"><button id="grantTempAuth">1 saatlik yetki ver</button></div>
-    </div>
-    <div style="margin-top:10px">${grantRows}</div>
+  el.innerHTML = myRow + `
+    <h3 style="font-family:'Fraunces',serif;font-size:15px;margin:0 0 8px;">Ekip &amp; geçici yetkiler</h3>
+    <p class="muted" style="margin-top:-4px">Silme ve 24 saatten eski düzenleme gibi yönetici işlemleri için, seçilen kişiye 1 saatliğine yetki verir. Süre dolunca otomatik biter. Yeni hesap eklemek Supabase panelinden yapılır.</p>
+    ${profileRows}
   `;
 
-  document.getElementById('lockAdmin').onclick = ()=>{ adminUnlocked=false; render(); };
-  document.getElementById('changeAnaPin').onclick = async ()=>{
-    const np = await showPinModal('Yeni yönetici PIN\'i:');
-    if(!np) return;
-    state.anaPin = np;
-    logActivity('Yönetici PIN\'i değiştirildi');
-    saveState();
-  };
-  document.getElementById('addUser').onclick = ()=>{
-    const name = document.getElementById('newUserName').value.trim();
-    const pin = document.getElementById('newUserPin').value.trim();
-    if(!name || !pin) return;
-    if(state.users.some(u=>u.pin===pin)){
-      showMessage('Bu PIN zaten başka bir kullanıcı tarafından kullanılıyor — farklı bir tane seçin.');
-      return;
-    }
-    state.users.push({ name, pin });
-    logActivity(`Kullanıcı eklendi: "${name}"`);
-    saveState(); render();
-  };
-  if(document.getElementById('grantTempAuth')){
-    document.getElementById('grantTempAuth').onclick = ()=>{
-      const name = document.getElementById('grantUserSelect').value;
-      if(!name) return;
-      state.tempGrants[name] = new Date(Date.now() + 60*60*1000).toISOString();
-      logActivity(`"${name}" kullanıcısına 1 saatlik geçici yönetici yetkisi verildi`, 'Admin');
-      saveState(); render();
+  el.querySelectorAll('.grant-temp').forEach(b=>{
+    b.onclick = async ()=>{
+      const userId = b.dataset.id;
+      const target = allProfiles.find(p=>p.id===userId);
+      const expiresAt = new Date(Date.now() + 60*60*1000).toISOString();
+      const { error } = await sb.from('delete_grants').insert({ user_id: userId, granted_by: currentUser.id, expires_at: expiresAt });
+      if(error){ showMessage('Yetki verilemedi: ' + error.message); return; }
+      logActivity(`"${target ? target.name : userId}" kullanıcısına 1 saatlik geçici yönetici yetkisi verildi`, 'Admin');
+      await fetchProfileAndGrants();
+      render();
     };
-  }
+  });
   el.querySelectorAll('.revoke-grant').forEach(b=>{
-    b.onclick = ()=>{
-      const name = b.dataset.name;
-      delete state.tempGrants[name];
-      logActivity(`"${name}" kullanıcısının geçici yönetici yetkisi geri alındı`, 'Admin');
-      saveState(); render();
-    };
-  });
-  el.querySelectorAll('.save-user').forEach(b=>{
-    b.onclick = ()=>{
-      const idx = parseInt(b.dataset.idx);
-      const newName = el.querySelector(`.user-name-edit[data-idx="${idx}"]`).value.trim();
-      const newPin = el.querySelector(`.user-pin-edit[data-idx="${idx}"]`).value.trim();
-      if(!newName || !newPin) return;
-      if(state.users.some((u,i)=>i!==idx && u.pin===newPin)){
-        showMessage('Bu PIN zaten başka bir kullanıcı tarafından kullanılıyor — farklı bir tane seçin.');
-        return;
-      }
-      const old = state.users[idx];
-      if(operatorName===old.name && old.name!==newName) operatorName = newName;
-      logActivity(`Kullanıcı güncellendi: "${old.name}" → "${newName}"`);
-      state.users[idx] = { name:newName, pin:newPin };
-      saveState(); render();
-    };
-  });
-  el.querySelectorAll('.del-user').forEach(b=>{
-    b.onclick = ()=>{
-      const idx = parseInt(b.dataset.idx);
-      const u = state.users[idx];
-      if(operatorName===u.name) operatorName='';
-      logActivity(`Kullanıcı kaldırıldı: "${u.name}"`);
-      state.users.splice(idx,1);
-      saveState(); render();
+    b.onclick = async ()=>{
+      const userId = b.dataset.id;
+      const target = allProfiles.find(p=>p.id===userId);
+      const { error } = await sb.from('delete_grants').delete().eq('user_id', userId).gt('expires_at', new Date().toISOString());
+      if(error){ showMessage('Yetki geri alınamadı: ' + error.message); return; }
+      logActivity(`"${target ? target.name : userId}" kullanıcısının geçici yönetici yetkisi geri alındı`, 'Admin');
+      await fetchProfileAndGrants();
+      render();
     };
   });
 }
+
 
 function getEntryFieldValues(){
   // Normalizes whichever sub-tab is active into one shared shape, so the rest
@@ -5219,9 +5277,9 @@ function wireOrdersRowHandlers(tbody){
   });
   tbody.querySelectorAll('.del-order').forEach(b=>{
     b.onclick = async ()=>{
-      const auth = await requireAdmin('Bu siparişi silme');
-      if(!auth) return;
       const order = state.orders.find(o=>o.id===b.dataset.id);
+      const auth = await requireDeleteAuth('Bu siparişi silme', order);
+      if(!auth) return;
       if(order) logActivity(`Sipariş silindi: ${order.customerName} (${order.channel})`, auth==='pin' ? 'Admin' : undefined);
       state.orders = state.orders.filter(o=>o.id!==b.dataset.id); saveState(); render();
     };
@@ -5233,9 +5291,9 @@ function wireOrdersRowHandlers(tbody){
   // with zero items.
   tbody.querySelectorAll('.del-order-item').forEach(b=>{
     b.onclick = async ()=>{
-      const auth = await requireAdmin('Bu kalemi silme');
-      if(!auth) return;
       const order = state.orders.find(o=>o.id===b.dataset.id);
+      const auth = await requireDeleteAuth('Bu kalemi silme', order);
+      if(!auth) return;
       if(!order) return;
       const ids = b.dataset.ids.split(',');
       const removed = order.items.filter(i=>ids.includes(i.id));
@@ -5411,9 +5469,9 @@ function renderExportOrders(){
   // (now-empty) order record is removed too.
   tbody.querySelectorAll('.del-order-item').forEach(b=>{
     b.onclick = async ()=>{
-      const auth = await requireAdmin('Bu kalemi silme');
-      if(!auth) return;
       const order = state.orders.find(o=>o.id===b.dataset.id);
+      const auth = await requireDeleteAuth('Bu kalemi silme', order);
+      if(!auth) return;
       if(!order) return;
       const ids = b.dataset.ids.split(',');
       const removed = order.items.filter(i=>ids.includes(i.id));
@@ -6674,7 +6732,10 @@ document.getElementById('tsFrom').value = monthStartVal;
 document.getElementById('tsTo').value = todayVal;
 document.getElementById('exTsFrom').value = monthStartVal;
 document.getElementById('exTsTo').value = todayVal;
-loadState();
+// loadState() is no longer called here directly — it now runs from
+// enterApp(), right after a successful Supabase login (see initAuth() near
+// the top of this script), since nothing should load before we know who's
+// logged in.
 </script>
 </body>
 </html>
