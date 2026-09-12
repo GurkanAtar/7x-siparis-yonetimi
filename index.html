@@ -1611,22 +1611,61 @@ function normPhone(s){
 
 function ordersLikelySameCustomer(a, b){
   // Name must always match — two different names are never the same customer,
-  // no matter what else lines up. Beyond that, address and phone don't both
-  // need to match — a blank field on either side is treated as "no information
-  // to contradict", not as a mismatch (a phone left blank on a continuation
-  // row, for instance) — but if BOTH are filled in on both orders, at least
-  // one of the two must actually agree.
+  // no matter what else lines up. Beyond that, address, phone, and sale type
+  // don't all need to match — a blank field on either side is treated as "no
+  // information to contradict" (e.g. a Kayıp Kargo note or a phone number
+  // that only got typed on one of the order's several rows), not as a
+  // mismatch — but if BOTH sides have a value for a given field, they must
+  // actually agree: for address/phone, at least one of the two must agree;
+  // for sale type, it must agree exactly — a genuine Kayıp Kargo replacement
+  // and an ordinary sale are fundamentally different kinds of order even
+  // from the same customer the same day.
   if(normText(a.customerName) !== normText(b.customerName)) return false;
   if(a.date !== b.date || a.channel !== b.channel) return false;
-  // Sipariş Türü must also agree (both blank/"Satış" counts as agreeing with
-  // each other) — a Kayıp Kargo replacement and an ordinary sale are
-  // fundamentally different kinds of order even when the same customer
-  // placed both the same day, and merging them would silently mislabel
-  // whichever row got absorbed as something it was never marked as.
-  if((a.saleType||'') !== (b.saleType||'')) return false;
+  const saleTypeOk = !a.saleType || !b.saleType || (a.saleType===b.saleType);
+  if(!saleTypeOk) return false;
   const addrOk = !a.address || !b.address || normText(a.address)===normText(b.address);
   const phoneOk = !a.phone || !b.phone || normPhone(a.phone)===normPhone(b.phone);
   return addrOk || phoneOk;
+}
+
+// Kayıp Kargo rows arriving via upload have no interactive lookup step the
+// way manual entry does — so a genuinely-known customer (already in the
+// system from a real order in the last 30 days) can still show up with a
+// blank Telefon/Adres just because whoever filled the spreadsheet didn't
+// retype already-known info. This backfills those two fields from the best
+// matching PRIOR real order (same name, same channel category, last 30
+// days, not itself a Kayıp Kargo case) before the missing-info check ever
+// runs — so it's only flagged as genuinely missing when no such match
+// exists at all. Returns a list of human-readable notes for the activity
+// log, mirroring the manual lookup's own logging.
+function backfillLostCargoContactInfo(orders){
+  const cutoff = Date.now() - 30*24*60*60*1000;
+  const notes = [];
+  orders.forEach(o=>{
+    if(o.saleType !== 'Kayıp Kargo') return;
+    const missingPhone = !o.phone || !o.phone.trim();
+    const missingAddress = !o.address || !o.address.trim();
+    if(!missingPhone && !missingAddress) return;
+    const category = channelCategoryForNumbering(o.channel);
+    const match = state.orders.find(cand=>{
+      if(cand.saleType === 'Kayıp Kargo') return false;
+      if(normText(cand.customerName) !== normText(o.customerName)) return false;
+      if(channelCategoryForNumbering(cand.channel) !== category) return false;
+      const placedAt = orderPlacedAt(cand);
+      if(!placedAt || placedAt.getTime() < cutoff) return false;
+      return (cand.phone && cand.phone.trim()) || (cand.address && cand.address.trim());
+    });
+    if(!match) return;
+    let filled = [];
+    if(missingPhone && match.phone && match.phone.trim()){ o.phone = match.phone; filled.push('Telefon'); }
+    if(missingAddress && match.address && match.address.trim()){ o.address = match.address; filled.push('Adres'); }
+    if(filled.length){
+      o._lostCargoContactFrom = match.id;
+      notes.push(`Kayıp Kargo: "${o.customerName}" için ${filled.join(', ')} — ${match.date||'-'} tarihli önceki siparişten otomatik dolduruldu`);
+    }
+  });
+  return notes;
 }
 
 function clusterAndMergeOrders(orders){
@@ -4098,7 +4137,8 @@ document.getElementById('fileInput').onchange = async (e)=>{
     // a discarded preview shouldn't leave activity-log entries behind).
     const mergeResult = clusterAndMergeOrders(parsed);
     parsed = mergeResult.orders;
-    pendingUpload = { fileName: file.name, sheetName: found.name, orders: parsed, mergeLog: mergeResult.mergeLog };
+    const lostCargoNotes = backfillLostCargoContactInfo(parsed);
+    pendingUpload = { fileName: file.name, sheetName: found.name, orders: parsed, mergeLog: mergeResult.mergeLog, lostCargoNotes };
     const skipNote = namedOnlySkipped ? ` ${namedOnlySkipped} satırda set adı var ama eşleşen ölçü yok (kayıtlı şablonlarınızda veya hazır kombinasyonlarda değil) ve atlandı — önce ölçü ekleyin veya o adı şablon olarak kaydedin.` : '';
     const itemsWithoutImage = parsed.reduce((n,o)=>n + o.items.filter(i=>!i.images || !i.images.length).length, 0);
     const imgWarning = itemsWithoutImage
@@ -4699,14 +4739,27 @@ function renderUploadPreview(){
   // entry's own validation, so it shouldn't silently pass just because it
   // arrived through an upload instead.
   const missingList = [];
-  const rows = pendingUpload.orders.map(o=>{
+  // Kayıp Kargo rows are shown last in this preview (stable sort — everything
+  // else keeps its original order), matching where they'll sit once saved,
+  // so the list already looks the way it will after saving, not just after.
+  const displayOrders = pendingUpload.orders
+    .map((o,i)=>({o,i}))
+    .sort((a,b)=>{
+      const aLost = a.o.saleType==='Kayıp Kargo' ? 1 : 0;
+      const bLost = b.o.saleType==='Kayıp Kargo' ? 1 : 0;
+      return aLost - bLost || a.i - b.i;
+    })
+    .map(x=>x.o);
+  const rows = displayOrders.map(o=>{
     const missingFields = [];
     if(!o.phone || !o.phone.trim()) missingFields.push('Telefon');
     if(!o.address || !o.address.trim()) missingFields.push('Adres');
     const isIncomplete = missingFields.length>0;
     if(isIncomplete) missingList.push(`${o.customerName} (${o.items.map(i=>i.size).join(', ')}): ${missingFields.join(', ')} eksik`);
+    const lostCargoTag = o.saleType==='Kayıp Kargo' ? ' <span class="pill" style="background:#fff3e0;">Kayıp Kargo</span>' : '';
+    const autoFilledTag = o._lostCargoContactFrom ? ' <span class="muted" style="font-size:11px;">(iletişim bilgisi önceki siparişten dolduruldu)</span>' : '';
     const rowStyle = isIncomplete ? ' style="background:#fff3e0;"' : '';
-    return `<tr${rowStyle}><td>${o.date||'-'}</td><td>${o.customerName}</td><td>${o.items.map(i=>i.size+' ×'+i.qty).join(', ')}</td><td>${o.price||'-'}</td></tr>`;
+    return `<tr${rowStyle}><td>${o.date||'-'}</td><td>${o.customerName}${lostCargoTag}${autoFilledTag}</td><td>${o.items.map(i=>i.size+' ×'+i.qty).join(', ')}</td><td>${o.price||'-'}</td></tr>`;
   }).join('');
   const hasIncomplete = missingList.length>0;
   const warningHtml = hasIncomplete ? `
@@ -4748,6 +4801,9 @@ function renderUploadPreview(){
     pendingUpload.orders.forEach(o=>{ o.recordedAt = now; o.batchId = batch.id; o.createdBy = operatorName || 'Bilinmeyen'; });
     if(pendingUpload.mergeLog && pendingUpload.mergeLog.length){
       pendingUpload.mergeLog.forEach(entry=>logActivity(`Satır birleştirme: ${entry}`));
+    }
+    if(pendingUpload.lostCargoNotes && pendingUpload.lostCargoNotes.length){
+      pendingUpload.lostCargoNotes.forEach(entry=>logActivity(entry));
     }
     // Any channel name in the sheet that isn't already registered gets added
     // automatically as an Instagram bayi (dealer) — corporate shops are always
@@ -5044,6 +5100,18 @@ function renderOrders(){
       return true;
     });
   }
+  // Kayıp Kargo orders are shown last in this list — they're a replacement/
+  // exception case, not part of the normal flow of real orders, so keeping
+  // them out of the way at the bottom (stable sort — everything else keeps
+  // its existing order) makes the real order list easier to scan.
+  igOrders = igOrders
+    .map((o,i)=>({o,i}))
+    .sort((a,b)=>{
+      const aLost = a.o.saleType==='Kayıp Kargo' ? 1 : 0;
+      const bLost = b.o.saleType==='Kayıp Kargo' ? 1 : 0;
+      return aLost - bLost || a.i - b.i;
+    })
+    .map(x=>x.o);
   document.getElementById('ordersEmpty').style.display = igOrders.length? 'none':'block';
   // Trendyol and Hepsiburada orders have no prepayment concept at all —
   // the marketplace itself handles the full payment, so Peşinat/Bakiye are
