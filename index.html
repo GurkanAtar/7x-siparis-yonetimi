@@ -5095,6 +5095,23 @@ function getAllItemGroups(){
 // position in one shared pool. Trendyol keeps its own separate permanent
 // 1001+ scheme untouched (handled entirely outside this map).
 const NUMBERING_PREFIX = { ig:'IG-', sicaksatis:'SS-', ihracat:'EXP-', hepsiburada:'HB-' };
+// Shared by both the row highlight/badge and the list's sort order, so the
+// two can never disagree about which orders count as "missing contact
+// info" — scoped to Instagram specifically, since Trendyol/Hepsiburada never
+// collect phone/address at all and would otherwise be flagged constantly.
+// A Kayıp Kargo order stops needing visual attention once every one of its
+// items has actually reached a resolved end state — found on the floor, or
+// fully produced (not just coded/sorted, which still means work remains).
+// This ONLY affects the highlight/sort placement — saleType itself never
+// changes, so revenue exclusion and the Raporlar Kayıp Kargo breakdown keep
+// counting it forever regardless of this.
+function isLostCargoFullyResolved(o){
+  return o.saleType==='Kayıp Kargo' && o.items.length>0 && o.items.every(i=>i.status==='lostcargo-found' || i.status==='produced');
+}
+function orderHasMissingContactWarning(o){
+  const isInstagram = channelCategoryForNumbering(o.channel) === 'ig';
+  return isInstagram && ((!o.phone || !o.phone.trim()) || (!o.address || !o.address.trim()));
+}
 function channelCategoryForNumbering(channelName){
   if(channelName==='İhracat') return 'ihracat';
   if(channelName==='Sıcak Satış') return 'sicaksatis';
@@ -5228,16 +5245,26 @@ function renderOrders(){
       return true;
     });
   }
-  // Kayıp Kargo orders are shown last in this list — they're a replacement/
-  // exception case, not part of the normal flow of real orders, so keeping
-  // them out of the way at the bottom (stable sort — everything else keeps
-  // its existing order) makes the real order list easier to scan.
+  // Three tiers: anything flagged with the missing-contact-info warning
+  // always comes first (regardless of Kayıp Kargo status) so it's never
+  // missed; Kayıp Kargo orders that AREN'T flagged still sink to the bottom,
+  // same as before — they're a replacement/exception case, not part of the
+  // normal flow; everything else in between is genuinely chronological by
+  // when it actually entered the system (recordedAt via orderPlacedAt),
+  // newest first, oldest last — no longer relying on incidental array order.
   igOrders = igOrders
     .map((o,i)=>({o,i}))
     .sort((a,b)=>{
-      const aLost = a.o.saleType==='Kayıp Kargo' ? 1 : 0;
-      const bLost = b.o.saleType==='Kayıp Kargo' ? 1 : 0;
-      return aLost - bLost || a.i - b.i;
+      const aWarn = orderHasMissingContactWarning(a.o) ? 0 : 1;
+      const bWarn = orderHasMissingContactWarning(b.o) ? 0 : 1;
+      if(aWarn !== bWarn) return aWarn - bWarn;
+      const aLost = (a.o.saleType==='Kayıp Kargo' && !isLostCargoFullyResolved(a.o)) ? 1 : 0;
+      const bLost = (b.o.saleType==='Kayıp Kargo' && !isLostCargoFullyResolved(b.o)) ? 1 : 0;
+      if(aLost !== bLost) return aLost - bLost;
+      const aTime = orderPlacedAt(a.o) ? orderPlacedAt(a.o).getTime() : 0;
+      const bTime = orderPlacedAt(b.o) ? orderPlacedAt(b.o).getTime() : 0;
+      if(aTime !== bTime) return bTime - aTime;
+      return a.i - b.i;
     })
     .map(x=>x.o);
   document.getElementById('ordersEmpty').style.display = igOrders.length? 'none':'block';
@@ -5251,13 +5278,12 @@ function renderOrders(){
   document.getElementById('thPrepaid').style.display = hidePrepaidCols ? 'none' : '';
   document.getElementById('thBalance').style.display = hidePrepaidCols ? 'none' : '';
   const itemNumbers = computeItemNumbers();
-  // Same reverse-insertion-order pattern as Baskı öncesi — newest upload/entry
-  // on top, last row of that upload nearest the top of its own block. No longer
-  // separately bubbling carried-over orders to the top of this list, since a
-  // consistent, predictable chronological order was explicitly asked for; the
-  // red carried-over flag on the Sipariş # itself still shows wherever it
-  // applies, this only changes the row ordering.
-  const sorted = igOrders.slice().reverse();
+  // igOrders is already in its final display order at this point — warning
+  // rows first, then genuinely chronological (newest first), Kayıp Kargo
+  // last — set up above. No reversal needed here anymore; the old
+  // reverse-insertion-order trick this used to rely on is gone now that
+  // real chronological sorting replaced it.
+  const sorted = igOrders;
   // Sıcak Satış and İhracat buyers often place several genuinely separate
   // purchases under the same name — grouping them under one shared rowspanned
   // total (as every other channel's list does) implied they were one combined
@@ -5314,19 +5340,26 @@ function renderOrders(){
       // "missing" would be constant, meaningless noise. A regular order
       // still counts toward the totals even if incomplete (it's a real
       // sale); only Kayıp Kargo is excluded from totals regardless.
-      const isInstagram = channelCategoryForNumbering(o.channel) === 'ig';
-      const missingContactInfo = isInstagram && ((!o.phone || !o.phone.trim()) || (!o.address || !o.address.trim()));
+      const missingContactInfo = orderHasMissingContactWarning(o);
       const isLostCargo = o.saleType === 'Kayıp Kargo';
-      if(isLostCargo){
+      const isLostCargoResolved = isLostCargoFullyResolved(o);
+      if(isLostCargo && !isLostCargoResolved){
         tr.style.background = '#fff3e0';
         tr.style.borderLeft = '4px solid var(--rust)';
-      } else {
+      } else if(!isLostCargo){
         orderM2Sum += groupM2;
         if(groupTotal!==null) orderTutarSum += groupTotal;
         if(missingContactInfo){
           tr.style.background = '#fff3e0';
           tr.style.borderLeft = '4px solid var(--rust)';
         }
+      } else if(missingContactInfo){
+        // Resolved Kayıp Kargo, but still genuinely missing contact info —
+        // the warning still applies even though the highlight for "still
+        // needs a decision" no longer does. Never added to totals either
+        // way, resolved or not — that classification never changes.
+        tr.style.background = '#fff3e0';
+        tr.style.borderLeft = '4px solid var(--rust)';
       }
       const missingContactBadge = missingContactInfo
         ? ' <span class="pill" style="background:var(--rust);color:#fff;">İletişim bilgisi eksik</span>' : '';
@@ -5428,12 +5461,14 @@ function renderOrders(){
       const tr = document.createElement('tr');
       // Same highlight as Baskı öncesi — a Kayıp Kargo entry isn't a real
       // sale, so it needs to stand out here too rather than blending in with
-      // ordinary orders in this list. ANY order missing phone/address gets
-      // the same highlight plus an explicit text badge too — not just
-      // Kayıp Kargo cases — so an incomplete record never just quietly
-      // shows a blank dash with no visual flag at all.
+      // ordinary orders in this list — but only while still unresolved (see
+      // isLostCargoFullyResolved). ANY order missing phone/address gets the
+      // same highlight plus an explicit text badge too — not just Kayıp
+      // Kargo cases — so an incomplete record never just quietly shows a
+      // blank dash with no visual flag at all.
       const missingContactInfo = (!o.phone || !o.phone.trim()) || (!o.address || !o.address.trim());
-      if(o.saleType === 'Kayıp Kargo' || missingContactInfo){
+      const isLostCargoStillOpen = o.saleType === 'Kayıp Kargo' && !isLostCargoFullyResolved(o);
+      if(isLostCargoStillOpen || missingContactInfo){
         tr.style.background = '#fff3e0';
         tr.style.borderLeft = '4px solid var(--rust)';
       }
