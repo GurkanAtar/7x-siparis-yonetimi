@@ -108,7 +108,7 @@
   <div class="tabs">
     <div class="tab active" data-tab="siparismerkezi">Sipariş Merkezi</div>
     <div class="tab" data-tab="overview">Genel bakış</div>
-    <div class="tab" data-tab="channels">Satış Kanalı Kayıt</div>
+    <div class="tab" data-tab="channels">Satış Kanalı ve Marka Kayıt</div>
     <div class="tab" data-tab="setrecord">Halı Set ve Ölçü Kayıt</div>
     <div class="tab" data-tab="log">İşlem kayıtları</div>
     <div class="tab" data-tab="reports">Raporlar</div>
@@ -135,8 +135,12 @@
       <h2>Müşteri Veritabanı</h2>
       <p class="muted" style="margin-top:-6px">Instagram, Trendyol ve Hepsiburada'daki müşterileri isim, telefon veya adrese göre arayın — kısmi eşleşme de çalışır (örn. sadece adı, sadece soyadı, veya adresin bir kısmı).</p>
       <div class="entry-subtabs">
-        <div class="entry-subtab active" data-mode="kurumsal" id="cdbModeKurumsal">Kurumsal müşteriler</div>
-        <div class="entry-subtab" data-mode="bayi" id="cdbModeBayi">Bayi müşterileri</div>
+        <div class="entry-subtab active" data-mode="ig-kurumsal">Instagram Kurumsal</div>
+        <div class="entry-subtab" data-mode="ig-bayi">Instagram Bayileri</div>
+        <div class="entry-subtab" data-mode="trendyol-kurumsal">Trendyol Kurumsal</div>
+        <div class="entry-subtab" data-mode="trendyol-bayi">Trendyol Bayileri</div>
+        <div class="entry-subtab" data-mode="hepsiburada-kurumsal">Hepsiburada Kurumsal</div>
+        <div class="entry-subtab" data-mode="hepsiburada-bayi">Hepsiburada Bayileri</div>
       </div>
       <input id="cdbSearch" placeholder="İsim, soyisim, telefon veya adres..." style="margin-top:10px;">
       <div id="cdbResults" style="margin-top:14px;"></div>
@@ -568,7 +572,9 @@
           </select>
         </div>
         <div id="newChanCityWrap" style="display:none"><label>Şehir</label><input id="newChanCity" placeholder="örn. Bursa"></div>
+        <div id="newChanMarkaWrap" style="display:none"><label>Marka</label><input id="newChanMarka" placeholder="örn. Qatalina"></div>
       </div>
+      <p class="muted" id="newChanMarkaNote" style="display:none;margin-top:-4px;">Instagram bayilerinde marka doğrudan kaynaktan gelmez — burada bir kere kaydedin, bayi adını sonradan değiştirseniz bile marka bağlantısı korunur.</p>
       <button id="addChannel">Kanal ekle</button>
       <div id="channelTags" style="margin-top:14px"></div>
     </div>
@@ -1940,7 +1946,7 @@ document.getElementById('musteriDbBtn').onclick = ()=>{
   document.getElementById('musteriDbPanel').style.display = 'block';
   renderCustomerDbResults();
 };
-let cdbMode = 'kurumsal';
+let cdbMode = 'ig-kurumsal';
 document.querySelectorAll('.entry-subtab[data-mode]').forEach(b=>{
   b.onclick = ()=>{
     document.querySelectorAll('.entry-subtab[data-mode]').forEach(x=>x.classList.remove('active'));
@@ -1951,15 +1957,16 @@ document.querySelectorAll('.entry-subtab[data-mode]').forEach(b=>{
 });
 document.getElementById('cdbSearch').addEventListener('input', renderCustomerDbResults);
 
-// Only Instagram/Trendyol/Hepsiburada belong in this database, split into
-// kurumsal (7X Group's own direct channels) vs bayi (dealers reselling on
-// these platforms) — Sıcak Satış and İhracat are deliberately out of scope.
+// Each channel is fully separate here — Instagram Kurumsal, Instagram
+// Bayileri, Trendyol Kurumsal, Trendyol Bayileri, Hepsiburada Kurumsal,
+// Hepsiburada Bayileri — never mixed together. Sıcak Satış and İhracat stay
+// out of scope entirely, as before.
 function customerDbOrders(){
+  const [cat, kind] = cdbMode.split('-'); // e.g. 'ig'/'kurumsal', 'trendyol'/'bayi'
   return state.orders.filter(o=>{
-    const cat = channelCategoryForNumbering(o.channel);
-    if(cat!=='ig' && cat!=='trendyol' && cat!=='hepsiburada') return false;
+    if(channelCategoryForNumbering(o.channel) !== cat) return false;
     const isBayi = channelType(o.channel).endsWith('bayi');
-    return cdbMode==='bayi' ? isBayi : !isBayi;
+    return kind==='bayi' ? isBayi : !isBayi;
   });
 }
 let cdbCustomerList = [];
@@ -1975,14 +1982,14 @@ function renderCustomerDbResults(){
       || foldTurkishForSearch(o.phone).includes(term)
       || foldTurkishForSearch(o.address).includes(term);
   });
-  // Grouped into distinct customers by name+phone — the best available
-  // identity key here, since there's no real customer ID in this system.
-  // Two different people who happen to share a name still show as separate
-  // results as long as their phone differs.
+  // Grouped into distinct customers by name+phone+channel — including the
+  // channel means the same person buying through two different accounts or
+  // dealers shows as two separate entries, each clearly labeled with which
+  // one it came through, rather than being silently merged together.
   const groups = new Map();
   matches.forEach(o=>{
-    const key = normText(o.customerName) + '::' + normText(o.phone);
-    if(!groups.has(key)) groups.set(key, { name:o.customerName, phone:o.phone, address:o.address, orders:[] });
+    const key = normText(o.customerName) + '::' + normText(o.phone) + '::' + normText(o.channel);
+    if(!groups.has(key)) groups.set(key, { name:o.customerName, phone:o.phone, address:o.address, channel:o.channel, orders:[] });
     const g = groups.get(key);
     g.orders.push(o);
     // Keep the most recently placed order's address as the representative
@@ -2006,7 +2013,8 @@ function renderCustomerDbRows(){
     const row = `
     <div style="display:flex;justify-content:space-between;align-items:flex-start;padding:10px 0;border-top:1px solid var(--line);gap:12px;">
       <div>
-        <strong>${g.name||'(isimsiz)'}</strong> <span class="muted">${g.phone?('— '+g.phone):''}</span><br>
+        <strong>${g.name||'(isimsiz)'}</strong> <span class="muted">${g.phone?('— '+g.phone):''}</span>
+        <span class="badge-chan" style="margin-left:6px;">${g.channel||''}</span><br>
         <span class="muted" style="font-size:12px;">${g.address||''}</span>
       </div>
       <div style="text-align:right;white-space:nowrap;">
@@ -2034,12 +2042,13 @@ function buildCustomerDbDetailHtml(customer){
   const rows = sorted.map(o=>{
     const items = o.items.map(i=>`${i.size} ×${i.qty}`).join(', ');
     const priceCell = o.price ? formatTL(priceToNumber(o.price))+' TL' : '-';
-    return `<tr><td>${o.date||'-'}</td><td><span class="badge-chan">${o.channel}</span></td><td>${items}</td><td>${priceCell}</td></tr>`;
+    const brand = getOrderBrand(o) || '-';
+    return `<tr><td>${o.date||'-'}</td><td><span class="badge-chan">${o.channel}</span></td><td>${brand}</td><td>${items}</td><td>${priceCell}</td></tr>`;
   }).join('');
   return `
     <div style="background:var(--paper);border-radius:8px;padding:10px 14px;margin:4px 0 10px;">
       <p class="muted" style="margin:0 0 8px;">${sorted.length} sipariş — Satın Alma Geçmişi</p>
-      <table><thead><tr><th>Tarih</th><th>Kanal</th><th>Kalemler</th><th>Tutar</th></tr></thead><tbody>${rows}</tbody></table>
+      <table><thead><tr><th>Tarih</th><th>Kanal</th><th>Marka</th><th>Kalemler</th><th>Tutar</th></tr></thead><tbody>${rows}</tbody></table>
     </div>`;
 }
 
@@ -3097,6 +3106,23 @@ function renderReport(){
 
     <h3 style="font-family:'Fraunces',serif;font-size:15px;margin:20px 0 8px;">Tabana göre</h3>
     <table><thead><tr><th>Taban</th><th>Halı sayısı</th><th>Sipariş edilen m²</th><th>Üretilen m²</th></tr></thead><tbody>${tabanRows}</tbody></table>
+
+    <h3 style="font-family:'Fraunces',serif;font-size:15px;margin:20px 0 8px;">Markalara göre</h3>
+    <p class="muted" style="margin-top:-4px">Kurumsal ve bayi kanalları birlikte sayılır — aynı marka birden fazla kanaldan satılıyorsa tek satırda toplanır.</p>
+    <table><thead><tr><th>Marka</th><th>Sipariş sayısı</th><th>Halı sayısı</th><th>m²</th><th>Toplam Tutar</th></tr></thead><tbody>${(()=>{
+      const byBrand = {};
+      matchingOrders.forEach(o=>{
+        const brand = getOrderBrand(o) || '(markasız)';
+        byBrand[brand] = byBrand[brand] || { orders:0, carpets:0, m2:0, tutar:0 };
+        byBrand[brand].orders += 1;
+        byBrand[brand].carpets += countCarpets(o.items);
+        o.items.forEach(item=>{ byBrand[brand].m2 += sizeToM2(item.size)*item.qty; });
+        byBrand[brand].tutar += priceToNumber(o.price);
+      });
+      return Object.entries(byBrand).sort((a,b)=>b[1].tutar-a[1].tutar).map(([brand,s])=>
+        `<tr><td>${brand}</td><td>${s.orders}</td><td>${s.carpets}</td><td>${s.m2.toFixed(2)}</td><td>${formatTL(s.tutar)}</td></tr>`
+      ).join('');
+    })()}</tbody></table>
 
     <h3 style="font-family:'Fraunces',serif;font-size:15px;margin:20px 0 8px;">Halı listesi</h3>
     <table>
@@ -4605,43 +4631,44 @@ document.getElementById('tyFileInput').onchange = async (e)=>{
       );
       return;
     }
+    // The single Trendyol account this whole upload belongs to — Trendyol's
+    // real export never labels this per-row (a raw export always comes from
+    // exactly one seller account), so it's read once from the field above
+    // the upload button instead of being guessed from the file's own data.
+    const uploadChannel = document.getElementById('tyUploadChannel').value.trim();
+    if(!uploadChannel){
+      showUploadError(
+        {status:'tyUploadStatus', preview:'tyUploadPreview', input:'tyFileInput', inputName:'tyFileInputName'},
+        'Önce "Satış Kanalı (bu yüklemenin ait olduğu Trendyol hesabı)" alanını doldurun — bu yüklemedeki tüm siparişler bu hesaba kaydedilecek.'
+      );
+      return;
+    }
     const { grid, headers, headerRow } = found;
     const idxBarkod  = tyCol(headers, 'Barkod');
     const idxDate    = tyCol(headers, 'Sipariş Tarihi', 'Siparis Tarihi');
     const idxBuyer   = tyCol(headers, 'Alıcı', 'Alici');
     const idxProduct = tyCol(headers, 'Ürün Adı', 'Urun Adi');
     const idxQty     = tyCol(headers, 'Adet');
-    // The shop column and the amount column can BOTH carry the header "Satış
-    // kanalı" in some exports (the amount column is mislabeled). Disambiguate by
-    // content rather than trusting the header: the shop column is the one whose
-    // values look like channel names (contain letters / the TY- prefix), the
-    // amount column is purely numeric. Scan a few data rows to decide.
-    let idxShop = -1, idxAmount = -1;
-    const candidateShop = [];
-    const candidateAmount = [];
-    for(let c=0;c<headers.length;c++){
-      if([idxBarkod, idxDate, idxBuyer, idxProduct, idxQty].includes(c)) continue;
-      let numeric=0, textual=0;
-      for(let r=headerRow+1; r<Math.min(headerRow+15, grid.length); r++){
-        const v = (grid[r][c]!==undefined?grid[r][c]:'').toString().trim();
-        if(!v) continue;
-        if(/^[\d.,]+$/.test(v)) numeric++;
-        else textual++;
+    const idxAdres   = tyCol(headers, 'Teslimat Adresi', 'Teslimat Adresi');
+    const idxMarka   = tyCol(headers, 'Marka');
+    // Real Trendyol export header names, tried first — falls back to a
+    // purely-numeric-column scan only for an export that renamed this
+    // column to something unrecognized.
+    let idxAmount = tyCol(headers, 'Satış Tutarı', 'Satis Tutari', 'Faturalanacak Tutar');
+    if(idxAmount===-1){
+      const skip = [idxBarkod, idxDate, idxBuyer, idxProduct, idxQty, idxAdres];
+      for(let c=0;c<headers.length;c++){
+        if(skip.includes(c)) continue;
+        let numeric=0, textual=0;
+        for(let r=headerRow+1; r<Math.min(headerRow+15, grid.length); r++){
+          const v = (grid[r][c]!==undefined?grid[r][c]:'').toString().trim();
+          if(!v) continue;
+          if(/^[\d.,]+$/.test(v)) numeric++;
+          else textual++;
+        }
+        if(numeric>0 && numeric>=textual){ idxAmount = c; break; }
       }
-      if(textual>numeric) candidateShop.push(c);
-      else if(numeric>0) candidateAmount.push(c);
     }
-    // Prefer a shop column that actually looks like TY- channel values; else the
-    // first textual column found.
-    idxShop = candidateShop.find(c=>{
-      for(let r=headerRow+1; r<Math.min(headerRow+15, grid.length); r++){
-        const v = (grid[r][c]!==undefined?grid[r][c]:'').toString().trim();
-        if(/ty-/i.test(v)) return true;
-      }
-      return false;
-    });
-    if(idxShop===undefined) idxShop = candidateShop.length ? candidateShop[candidateShop.length-1] : -1;
-    idxAmount = candidateAmount.length ? candidateAmount[0] : -1;
 
     if(idxBuyer===-1 || idxProduct===-1){
       showUploadError(
@@ -4664,13 +4691,14 @@ document.getElementById('tyFileInput').onchange = async (e)=>{
       const { dateStr, iso } = parseTrendyolDateTime(idxDate>-1 ? row[idxDate] : '');
       const qty = parseInt(cell(idxQty))||1;
       const amount = cell(idxAmount);
-      const rawShop = cell(idxShop);
-      const shop = findMatchingChannelName(rawShop);
+      const address = cell(idxAdres);
+      const brand = cell(idxMarka);
+      const shop = uploadChannel;
       const { sizes, isPaspasSet } = extractTrendyolSize(product);
       const shape = extractTrendyolShape(product);
       const fringe = extractTrendyolFringe(product);
       lines.push({
-        sheetRow: r+1, buyer, product, qty, amount, rawShop, shop, sizes, isPaspasSet, shape, fringe,
+        sheetRow: r+1, buyer, product, qty, amount, address, brand, shop, sizes, isPaspasSet, shape, fringe,
         dateStr, iso, barkod: cell(idxBarkod),
       });
     }
@@ -4683,30 +4711,6 @@ document.getElementById('tyFileInput').onchange = async (e)=>{
     // rather than silently contributing nothing, so the gap stays visible
     // and fixable via Düzenle rather than the row just vanishing.
 
-    // ---- Guard: consecutive same-buyer rows must share ONE shop ------------
-    // Merging groups an order from consecutive rows with the same buyer name.
-    // A single order coming from two different shops is effectively impossible
-    // in Trendyol's data, so if it ever happens it signals a corrupted or
-    // mis-sorted sheet — block the whole upload and name the offending
-    // customer(s) rather than silently splitting or mis-merging the order.
-    const shopConflicts = [];
-    for(let i=1;i<lines.length;i++){
-      const prev = lines[i-1], cur = lines[i];
-      // Only a meaningful conflict when BOTH rows actually have a buyer name —
-      // two rows that both happen to be missing one aren't "the same
-      // customer" just because they're both blank.
-      if(prev.buyer && cur.buyer && normText(prev.buyer) === normText(cur.buyer) && prev.shop !== cur.shop){
-        shopConflicts.push(`${cur.buyer}: satır ${prev.sheetRow} "${prev.shop||'—'}" ile satır ${cur.sheetRow} "${cur.shop||'—'}" farklı satış kanallarında görünüyor`);
-      }
-    }
-    if(shopConflicts.length){
-      showTrendyolProblems(
-        `<strong style="color:var(--rust)">⚠️ Yükleme yapılamadı — aynı müşterinin ardışık satırları farklı satış kanallarında.</strong> Bir sipariş tek bir mağazaya ait olmalı; lütfen kontrol edip düzeltin:`,
-        shopConflicts
-      );
-      return;
-    }
-
     // ---- Group consecutive same-buyer lines into orders -------------------
     const orders = [];
     let current = null;
@@ -4716,8 +4720,7 @@ document.getElementById('tyFileInput').onchange = async (e)=>{
       // own order instead, so an accidental match between two unrelated
       // blank names can't happen.
       const sameAsCurrent = current && l.buyer
-        && normText(current._buyer) === normText(l.buyer)
-        && current.channel === l.shop;
+        && normText(current._buyer) === normText(l.buyer);
       // A line with no resolvable size still needs ONE item to actually
       // exist and be visible — an empty size string, clearly flagged in the
       // preview below, rather than the line silently contributing nothing.
@@ -4740,7 +4743,7 @@ document.getElementById('tyFileInput').onchange = async (e)=>{
           channel: l.shop,
           customerName: l.buyer,
           _buyer: l.buyer,
-          phone:'', address:'',
+          phone:'', address: l.address||'', brand: l.brand||'',
           note:'',
           source:'upload',
           sourceFile: file.name,
@@ -5287,6 +5290,33 @@ const NUMBERING_PREFIX = { ig:'IG-', sicaksatis:'SS-', ihracat:'EXP-', hepsibura
 // counting it forever regardless of this.
 function isLostCargoFullyResolved(o){
   return o.saleType==='Kayıp Kargo' && o.items.length>0 && o.items.every(i=>i.status==='lostcargo-found' || i.status==='produced');
+}
+// Fixed brand mapping for Instagram's own corporate accounts — these never
+// need registering since the mapping itself IS the registration. A 5th
+// kurumsal account added later would need its own line here (or can be
+// given a marka via the registry the same way bayi entries are, which takes
+// priority over this fallback if ever set).
+const IG_KURUMSAL_BRAND_MAP = {
+  '7xhome': '7X',
+  'qatalina': 'Qatalina',
+  'bursa toptan': 'Bursa Toptan',
+  'carpetra home': 'Carpetra',
+};
+// The single source of truth for "what brand does this order belong to",
+// used by Müşteri Veritabanı and the new Raporlar brand breakdown alike —
+// so the two can never disagree. Trendyol/Hepsiburada orders carry their own
+// brand captured directly from the upload file (see order.brand); Instagram
+// orders resolve it from the channel registry (an explicit marka overrides
+// everything, including the kurumsal fallback map).
+function getOrderBrand(order){
+  const cat = channelCategoryForNumbering(order.channel);
+  if(cat==='trendyol' || cat==='hepsiburada') return order.brand || '';
+  if(cat==='ig'){
+    const chan = state.channels.find(c=>c.name===order.channel);
+    if(chan && chan.marka) return chan.marka;
+    return IG_KURUMSAL_BRAND_MAP[normText(order.channel)] || '';
+  }
+  return '';
 }
 function orderHasMissingContactWarning(o){
   const isInstagram = channelCategoryForNumbering(o.channel) === 'ig';
@@ -7111,7 +7141,8 @@ function renderChannels(){
   const filtered = state.channels.filter(c=>c.type===filterType);
   document.getElementById('channelTags').innerHTML = filtered.length ? filtered.map(c=>{
     const idx = state.channels.indexOf(c);
-    return `<span class="tag">${c.name} <button class="ghost small del-channel" data-idx="${idx}" style="margin-left:6px">×</button></span>`;
+    const markaNote = c.marka ? ` <span class="muted">(Marka: ${c.marka})</span>` : '';
+    return `<span class="tag">${c.name}${markaNote} <button class="ghost small del-channel" data-idx="${idx}" style="margin-left:6px">×</button></span>`;
   }).join('') : `<p class="muted">"${filterType}" türünde henüz kanal yok.</p>`;
   document.querySelectorAll('.del-channel').forEach(b=>{
     b.onclick = async ()=>{
@@ -7141,8 +7172,16 @@ function renderChannels(){
 }
 
 document.getElementById('newChanType').addEventListener('change', ()=>{
-  document.getElementById('newChanCityWrap').style.display =
-    document.getElementById('newChanType').value === 'Sıcak Satış bayi' ? '' : 'none';
+  const type = document.getElementById('newChanType').value;
+  document.getElementById('newChanCityWrap').style.display = type === 'Sıcak Satış bayi' ? '' : 'none';
+  // Marka is only ever manually registered for Instagram bayi — Instagram
+  // kurumsal already has a known fixed brand mapping, and Trendyol/
+  // Hepsiburada (both kurumsal and bayi) get their brand straight from the
+  // upload file itself, so asking for it here would just be redundant/wrong
+  // for those types.
+  const showMarka = type === 'Instagram bayi';
+  document.getElementById('newChanMarkaWrap').style.display = showMarka ? '' : 'none';
+  document.getElementById('newChanMarkaNote').style.display = showMarka ? '' : 'none';
   renderChannels();
 });
 document.getElementById('addChannel').onclick = ()=>{
@@ -7150,15 +7189,19 @@ document.getElementById('addChannel').onclick = ()=>{
   if(!name) return;
   const type = document.getElementById('newChanType').value;
   const city = document.getElementById('newChanCity').value.trim();
+  const marka = document.getElementById('newChanMarka').value.trim();
   // Sıcak Satış dealers are identified by name AND city — folded into one string
   // here so it flows through everywhere a channel is just referenced by name
   // (order entry, Excel SATIŞ KANALI, Genel Bakış, Raporlar) with no other
   // changes needed.
   if(city) name = `${name} — ${city}`;
-  state.channels.push({name, type});
-  logActivity(`Kanal eklendi: "${name}" (${type})`);
+  const chan = { name, type };
+  if(type==='Instagram bayi' && marka) chan.marka = marka;
+  state.channels.push(chan);
+  logActivity(`Kanal eklendi: "${name}" (${type})${chan.marka ? ` — Marka: "${chan.marka}"` : ''}`);
   document.getElementById('newChanName').value='';
   document.getElementById('newChanCity').value='';
+  document.getElementById('newChanMarka').value='';
   saveState(); render();
 };
 
