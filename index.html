@@ -122,12 +122,25 @@
       <div class="entry-subtab" data-sub="hepsiburada">Hepsiburada</div>
       <div class="entry-subtab" data-sub="sicaksatis">Sıcak Satış</div>
       <div class="entry-subtab" data-sub="ihracat">İhracat</div>
+      <div class="entry-subtab" id="musteriDbBtn">Müşteri Veritabanı</div>
     </div>
     <div class="entry-subtabs" id="stageSelector" style="margin-top:6px;">
       <div class="entry-subtab active" data-stage="entry">Sipariş girişi</div>
       <div class="entry-subtab" data-stage="queue">Baskı öncesi</div>
       <div class="entry-subtab" data-stage="sort" id="stageBtn-sort">Ayırma &amp; etiketler</div>
       <div class="entry-subtab" data-stage="production">Üretim</div>
+    </div>
+
+    <div id="musteriDbPanel" class="card" style="display:none;">
+      <h2>Müşteri Veritabanı</h2>
+      <p class="muted" style="margin-top:-6px">Instagram, Trendyol ve Hepsiburada'daki müşterileri isim, telefon veya adrese göre arayın — kısmi eşleşme de çalışır (örn. sadece adı, sadece soyadı, veya adresin bir kısmı).</p>
+      <div class="entry-subtabs">
+        <div class="entry-subtab active" data-mode="kurumsal" id="cdbModeKurumsal">Kurumsal müşteriler</div>
+        <div class="entry-subtab" data-mode="bayi" id="cdbModeBayi">Bayi müşterileri</div>
+      </div>
+      <input id="cdbSearch" placeholder="İsim, soyisim, telefon veya adres..." style="margin-top:10px;">
+      <div id="cdbResults" style="margin-top:14px;"></div>
+      <div id="cdbDetail"></div>
     </div>
 
   <div id="entry" class="stage-panel active">
@@ -558,6 +571,15 @@
       </div>
       <button id="addChannel">Kanal ekle</button>
       <div id="channelTags" style="margin-top:14px"></div>
+    </div>
+    <div class="card">
+      <h2>Kanalları birleştir</h2>
+      <p class="muted" style="margin-top:-6px">Yanlışlıkla iki ayrı kanal olarak kaydedilmiş aynı bayiyi tek kanal altında birleştirir — birleştirilen kanala ait tüm geçmiş siparişler otomatik olarak seçilen kanala taşınır, birleştirilen kanal kaldırılır. Sadece "Tür" filtresinde şu an seçili olan türdeki kanallar arasında birleştirme yapılabilir.</p>
+      <div class="row row3">
+        <div><label>Birleştirilecek kanal (kaldırılacak)</label><select id="mergeChanFrom"></select></div>
+        <div><label>Bu kanalla birleştirilsin (kalacak)</label><select id="mergeChanTo"></select></div>
+        <div style="display:flex;align-items:flex-end;"><button id="mergeChanBtn">Birleştir</button></div>
+      </div>
     </div>
   </div>
 
@@ -1850,6 +1872,12 @@ function renderCurrentStage(){
 
 document.querySelectorAll('.entry-subtab[data-sub]').forEach(t=>{
   t.onclick = ()=>{
+    // Coming back from Müşteri Veritabanı (which isn't a currentEntryMode at
+    // all — it's an independent view layered on top) — restore everything
+    // it hid, so a normal channel looks exactly like it did before.
+    document.getElementById('musteriDbBtn').classList.remove('active');
+    document.getElementById('musteriDbPanel').style.display = 'none';
+    document.getElementById('stageSelector').style.display = '';
     document.querySelectorAll('.entry-subtab[data-sub]').forEach(x=>x.classList.remove('active'));
     document.querySelectorAll('.entry-sub-panel[id^="entrySub-"]').forEach(x=>x.classList.remove('active'));
     t.classList.add('active');
@@ -1882,6 +1910,106 @@ document.querySelectorAll('.entry-subtab[data-sub]').forEach(t=>{
     toggleLostCargoLookup();
   };
 });
+
+// Müşteri Veritabanı — an independent view, not one of the normal channel
+// modes (currentEntryMode never becomes "musteridb") — so none of the
+// category-based logic elsewhere (numbering, stage tabs, entry forms) needs
+// to know it exists. Clicking it just hides the normal channel content and
+// shows this instead; clicking any real channel button (above) restores it.
+document.getElementById('musteriDbBtn').onclick = ()=>{
+  document.querySelectorAll('.entry-subtab[data-sub]').forEach(x=>x.classList.remove('active'));
+  document.getElementById('musteriDbBtn').classList.add('active');
+  document.getElementById('stageSelector').style.display = 'none';
+  ['entry','queue','sort','production'].forEach(id=>document.getElementById(id).classList.remove('active'));
+  document.getElementById('sharedItemsCard').style.display = 'none';
+  document.getElementById('lostCargoLookupCard').style.display = 'none';
+  document.getElementById('musteriDbPanel').style.display = 'block';
+  renderCustomerDbResults();
+};
+let cdbMode = 'kurumsal';
+document.querySelectorAll('.entry-subtab[data-mode]').forEach(b=>{
+  b.onclick = ()=>{
+    document.querySelectorAll('.entry-subtab[data-mode]').forEach(x=>x.classList.remove('active'));
+    b.classList.add('active');
+    cdbMode = b.dataset.mode;
+    renderCustomerDbResults();
+  };
+});
+document.getElementById('cdbSearch').addEventListener('input', renderCustomerDbResults);
+
+// Only Instagram/Trendyol/Hepsiburada belong in this database, split into
+// kurumsal (7X Group's own direct channels) vs bayi (dealers reselling on
+// these platforms) — Sıcak Satış and İhracat are deliberately out of scope.
+function customerDbOrders(){
+  return state.orders.filter(o=>{
+    const cat = channelCategoryForNumbering(o.channel);
+    if(cat!=='ig' && cat!=='trendyol' && cat!=='hepsiburada') return false;
+    const isBayi = channelType(o.channel).endsWith('bayi');
+    return cdbMode==='bayi' ? isBayi : !isBayi;
+  });
+}
+function renderCustomerDbResults(){
+  const container = document.getElementById('cdbResults');
+  document.getElementById('cdbDetail').innerHTML = '';
+  const term = normText(document.getElementById('cdbSearch').value);
+  if(!term){ container.innerHTML = '<p class="muted">Aramak için isim, telefon veya adres yazın.</p>'; return; }
+  const matches = customerDbOrders().filter(o=>{
+    return normText(o.customerName).includes(term)
+      || normText(o.phone).includes(term)
+      || normText(o.address).includes(term);
+  });
+  // Grouped into distinct customers by name+phone — the best available
+  // identity key here, since there's no real customer ID in this system.
+  // Two different people who happen to share a name still show as separate
+  // results as long as their phone differs.
+  const groups = new Map();
+  matches.forEach(o=>{
+    const key = normText(o.customerName) + '::' + normText(o.phone);
+    if(!groups.has(key)) groups.set(key, { name:o.customerName, phone:o.phone, address:o.address, orders:[] });
+    const g = groups.get(key);
+    g.orders.push(o);
+    // Keep the most recently placed order's address as the representative
+    // one shown in the result row — an address can change over time, so the
+    // latest on file is more useful than the very first ever seen.
+    const gLatest = orderPlacedAt(g.orders[0]);
+    const oPlaced = orderPlacedAt(o);
+    if(o.address && (!g.address || (oPlaced && gLatest && oPlaced>gLatest))) g.address = o.address;
+  });
+  const list = [...groups.values()];
+  if(!list.length){ container.innerHTML = '<p class="muted">Eşleşen müşteri bulunamadı.</p>'; return; }
+  container.innerHTML = list.map((g,idx)=>`
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;padding:10px 0;border-top:1px solid var(--line);gap:12px;">
+      <div>
+        <strong>${g.name||'(isimsiz)'}</strong> <span class="muted">${g.phone?('— '+g.phone):''}</span><br>
+        <span class="muted" style="font-size:12px;">${g.address||''}</span>
+      </div>
+      <div style="text-align:right;white-space:nowrap;">
+        <span class="muted">${g.orders.length} sipariş</span>
+        <button class="ghost small cdb-view" data-idx="${idx}" style="margin-left:8px;">Geçmişi gör</button>
+      </div>
+    </div>`).join('');
+  container.querySelectorAll('.cdb-view').forEach(b=>{
+    b.onclick = ()=>renderCustomerDbDetail(list[parseInt(b.dataset.idx)]);
+  });
+}
+function renderCustomerDbDetail(customer){
+  const el = document.getElementById('cdbDetail');
+  const sorted = customer.orders.slice().sort((a,b)=>{
+    const at = orderPlacedAt(a) ? orderPlacedAt(a).getTime() : 0;
+    const bt = orderPlacedAt(b) ? orderPlacedAt(b).getTime() : 0;
+    return bt - at;
+  });
+  const rows = sorted.map(o=>{
+    const items = o.items.map(i=>`${i.size} ×${i.qty}`).join(', ');
+    const priceCell = o.price ? formatTL(priceToNumber(o.price))+' TL' : '-';
+    return `<tr><td>${o.date||'-'}</td><td><span class="badge-chan">${o.channel}</span></td><td>${items}</td><td>${priceCell}</td></tr>`;
+  }).join('');
+  el.innerHTML = `
+    <h3 style="font-family:'Fraunces',serif;font-size:15px;margin:18px 0 8px;">${customer.name||'(isimsiz)'} — Satın Alma Geçmişi</h3>
+    <p class="muted" style="margin-top:-4px">${customer.phone||'telefon yok'}${customer.address ? ' — '+customer.address : ''} · ${sorted.length} sipariş</p>
+    <table><thead><tr><th>Tarih</th><th>Kanal</th><th>Kalemler</th><th>Tutar</th></tr></thead><tbody>${rows}</tbody></table>`;
+}
+
 
 // Stage selector (Sipariş girişi / Baskı öncesi / Ayırma & etiketler /
 // Üretim) — switches which of the four operational views is visible within
@@ -6967,6 +7095,16 @@ function renderChannels(){
       saveState(); render();
     };
   });
+  // Same type-filtered list as the tags above, feeding the merge dropdowns —
+  // merging only ever makes sense within one type (e.g. two Instagram bayi
+  // entries that turned out to be the same dealer), never across types.
+  const mergeOptHtml = filtered.length
+    ? filtered.map(c=>`<option value="${c.name}">${c.name}</option>`).join('')
+    : `<option value="">"${filterType}" türünde henüz kanal yok.</option>`;
+  const mergeFromEl = document.getElementById('mergeChanFrom');
+  const mergeToEl = document.getElementById('mergeChanTo');
+  if(mergeFromEl) mergeFromEl.innerHTML = mergeOptHtml;
+  if(mergeToEl) mergeToEl.innerHTML = mergeOptHtml;
 }
 
 document.getElementById('newChanType').addEventListener('change', ()=>{
@@ -6988,6 +7126,23 @@ document.getElementById('addChannel').onclick = ()=>{
   logActivity(`Kanal eklendi: "${name}" (${type})`);
   document.getElementById('newChanName').value='';
   document.getElementById('newChanCity').value='';
+  saveState(); render();
+};
+
+document.getElementById('mergeChanBtn').onclick = async ()=>{
+  const fromName = document.getElementById('mergeChanFrom').value;
+  const toName = document.getElementById('mergeChanTo').value;
+  if(!fromName || !toName) return;
+  if(fromName === toName){ showMessage('Aynı kanalı kendisiyle birleştiremezsiniz — farklı iki kanal seçin.'); return; }
+  // Every order currently filed under the channel being removed gets moved
+  // over to the surviving channel's name — this is what actually combines
+  // their sales history into one, not just the registry entry itself.
+  const affectedOrders = state.orders.filter(o=>o.channel===fromName);
+  const auth = await requireAdmin(`"${fromName}" kanalını "${toName}" ile birleştirme (${affectedOrders.length} sipariş "${toName}" altına taşınacak, "${fromName}" kanalı kaldırılacak)`);
+  if(!auth) return;
+  affectedOrders.forEach(o=>{ o.channel = toName; });
+  state.channels = state.channels.filter(c=>c.name!==fromName);
+  logActivity(`Kanal birleştirildi: "${fromName}" → "${toName}" (${affectedOrders.length} sipariş taşındı, "${fromName}" kaldırıldı)`, auth==='pin' ? 'Admin' : undefined);
   saveState(); render();
 };
 
