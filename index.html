@@ -140,7 +140,7 @@
         <div class="filerow">
           <label for="fileInput" style="cursor:pointer;display:inline-flex;align-items:center;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;font-size:13px;color:#000;background:#f0f0f0;border:1px solid #767676;border-radius:3px;padding:2px 10px;">Dosya seç</label>
           <input type="file" id="fileInput" accept=".xlsx,.xls" style="display:none;">
-          <span class="muted" id="fileInputName">Henüz yüklenen dosya yok</span>
+          <span class="muted" id="fileInputName">Yeni dosya seçilmedi</span>
           <span class="muted" id="uploadStatus"></span>
         </div>
         <div id="uploadPreview"></div>
@@ -200,7 +200,7 @@
         <div class="filerow">
           <label for="tyFileInput" style="cursor:pointer;display:inline-flex;align-items:center;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;font-size:13px;color:#000;background:#f0f0f0;border:1px solid #767676;border-radius:3px;padding:2px 10px;">Dosya seç</label>
           <input type="file" id="tyFileInput" accept=".xlsx,.xls" style="display:none;">
-          <span class="muted" id="tyFileInputName">Henüz yüklenen dosya yok</span>
+          <span class="muted" id="tyFileInputName">Yeni dosya seçilmedi</span>
           <span class="muted" id="tyUploadStatus"></span>
         </div>
         <div id="tyUploadPreview"></div>
@@ -215,7 +215,7 @@
         <div class="filerow">
           <label for="tyCatalogInput" style="cursor:pointer;display:inline-flex;align-items:center;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;font-size:13px;color:#000;background:#f0f0f0;border:1px solid #767676;border-radius:3px;padding:2px 10px;">Dosya seç</label>
           <input type="file" id="tyCatalogInput" accept=".xlsx,.xls" style="display:none;">
-          <span class="muted" id="tyCatalogInputName">Henüz yüklenen dosya yok</span>
+          <span class="muted" id="tyCatalogInputName">Yeni dosya seçilmedi</span>
           <span class="muted" id="tyCatalogStatus"></span>
           <button type="button" class="ghost small" id="tyCatalogClear" style="margin-left:auto;">Kataloğu temizle</button>
         </div>
@@ -1116,7 +1116,7 @@ function showUploadError(ids, message){
   statusEl.innerHTML = `${message} <button class="ghost small" id="${dismissId}" style="margin-left:8px;">Kapat</button>`;
   if(previewEl) previewEl.innerHTML = '';
   document.getElementById(ids.input).value = '';
-  if(ids.inputName) document.getElementById(ids.inputName).textContent = 'Henüz yüklenen dosya yok';
+  if(ids.inputName) document.getElementById(ids.inputName).textContent = 'Yeni dosya seçilmedi';
   document.getElementById(dismissId).onclick = ()=>{
     statusEl.innerHTML = '';
     if(previewEl) previewEl.innerHTML = '';
@@ -4641,7 +4641,7 @@ function showTrendyolProblems(headerHtml, problemsList){
     </div>`;
   pendingTrendyolUpload = null;
   document.getElementById('tyFileInput').value = '';
-  document.getElementById('tyFileInputName').textContent = 'Henüz yüklenen dosya yok';
+  document.getElementById('tyFileInputName').textContent = 'Yeni dosya seçilmedi';
   document.getElementById('tyProblemsDismiss').onclick = ()=>{
     statusEl.innerHTML = '';
     previewEl.innerHTML = '';
@@ -4738,7 +4738,7 @@ function renderTrendyolPreview(){
     pendingTrendyolUpload = null;
     document.getElementById('tyUploadStatus').textContent = 'Kaydedildi.';
     document.getElementById('tyFileInput').value = '';
-    document.getElementById('tyFileInputName').textContent = 'Henüz yüklenen dosya yok';
+    document.getElementById('tyFileInputName').textContent = 'Yeni dosya seçilmedi';
     box.innerHTML='';
     saveState(); render();
   };
@@ -4746,7 +4746,7 @@ function renderTrendyolPreview(){
     pendingTrendyolUpload = null;
     document.getElementById('tyUploadStatus').textContent = 'Vazgeçildi.';
     document.getElementById('tyFileInput').value = '';
-    document.getElementById('tyFileInputName').textContent = 'Henüz yüklenen dosya yok';
+    document.getElementById('tyFileInputName').textContent = 'Yeni dosya seçilmedi';
     box.innerHTML='';
   };
 }
@@ -4959,7 +4959,7 @@ function renderUploadPreview(){
     pendingUpload = null;
     document.getElementById('uploadStatus').textContent = 'Kaydedildi.';
     document.getElementById('fileInput').value = '';
-    document.getElementById('fileInputName').textContent = 'Henüz yüklenen dosya yok';
+    document.getElementById('fileInputName').textContent = 'Yeni dosya seçilmedi';
     box.innerHTML='';
     saveState(); render();
   };
@@ -4967,11 +4967,34 @@ function renderUploadPreview(){
     pendingUpload = null;
     document.getElementById('uploadStatus').textContent = 'Vazgeçildi.';
     document.getElementById('fileInput').value = '';
-    document.getElementById('fileInputName').textContent = 'Henüz yüklenen dosya yok';
+    document.getElementById('fileInputName').textContent = 'Yeni dosya seçilmedi';
     box.innerHTML='';
   };
 }
 
+// Shared by both Instagram and Trendyol's own upload-history tables — only
+// the most recent files show by default (after a few months there can
+// easily be 50+ entries), with a "Daha fazla göster" link to reveal more,
+// same pattern as the Dosya filter dropdown elsewhere in the app.
+function buildUploadLogTableHtml(batches, showKey, delClass){
+  const allSorted = batches.slice().sort((a,b)=>new Date(b.savedAt)-new Date(a.savedAt));
+  const showCount = fileListShowCount[showKey] || 10;
+  const visible = allSorted.slice(0, showCount);
+  const moreCount = allSorted.length - visible.length;
+  const rows = visible.map(b=>`<tr><td>${b.fileName}</td><td class="muted">${b.sheetName}</td><td class="ts">${new Date(b.savedAt).toLocaleString('tr-TR')}</td><td>${b.orderCount}</td><td><button class="ghost small ${delClass}" data-id="${b.id}">Sil</button></td></tr>`).join('');
+  const moreRow = moreCount>0 ? `<tr><td colspan="5"><span class="show-more-uploadlog" data-key="${showKey}" style="cursor:pointer;color:var(--indigo);font-weight:600;">Daha fazla göster (+${Math.min(10,moreCount)}, ${moreCount} kaldı)</span></td></tr>` : '';
+  return `<div style="margin-top:14px"><label>Yükleme geçmişi</label>
+    <table><thead><tr><th>Dosya</th><th>Sayfa</th><th>Kaydedildi</th><th>Siparişler</th><th></th></tr></thead><tbody>${rows}${moreRow}</tbody></table></div>`;
+}
+function wireUploadLogShowMore(el, showKey, rerenderFn){
+  const moreEl = el.querySelector('.show-more-uploadlog');
+  if(moreEl){
+    moreEl.onclick = ()=>{
+      fileListShowCount[showKey] = (fileListShowCount[showKey] || 10) + 10;
+      rerenderFn();
+    };
+  }
+}
 function renderUploadLog(){
   const el = document.getElementById('uploadLog');
   if(!el) return;
@@ -4980,10 +5003,7 @@ function renderUploadLog(){
   // uploaded there doesn't also show up in the Instagram upload history.
   const batches = state.uploadBatches.filter(b=>b.source!=='trendyol');
   if(!batches.length){ el.innerHTML = ''; return; }
-  const rows = batches.slice().sort((a,b)=>new Date(b.savedAt)-new Date(a.savedAt))
-    .map(b=>`<tr><td>${b.fileName}</td><td class="muted">${b.sheetName}</td><td class="ts">${new Date(b.savedAt).toLocaleString('tr-TR')}</td><td>${b.orderCount}</td><td><button class="ghost small del-batch" data-id="${b.id}">Sil</button></td></tr>`).join('');
-  el.innerHTML = `<div style="margin-top:14px"><label>Yükleme geçmişi</label>
-    <table><thead><tr><th>Dosya</th><th>Sayfa</th><th>Kaydedildi</th><th>Siparişler</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>`;
+  el.innerHTML = buildUploadLogTableHtml(batches, 'uploadLog', 'del-batch');
   el.querySelectorAll('.del-batch').forEach(b=>{
     b.onclick = async ()=>{
       const batch = state.uploadBatches.find(x=>x.id===b.dataset.id);
@@ -4997,6 +5017,7 @@ function renderUploadLog(){
       saveState(); render();
     };
   });
+  wireUploadLogShowMore(el, 'uploadLog', renderUploadLog);
 }
 
 // Same table, but for Trendyol's own upload history — kept in its own
@@ -5007,10 +5028,7 @@ function renderTrendyolUploadLog(){
   if(!el) return;
   const batches = state.uploadBatches.filter(b=>b.source==='trendyol');
   if(!batches.length){ el.innerHTML = ''; return; }
-  const rows = batches.slice().sort((a,b)=>new Date(b.savedAt)-new Date(a.savedAt))
-    .map(b=>`<tr><td>${b.fileName}</td><td class="muted">${b.sheetName}</td><td class="ts">${new Date(b.savedAt).toLocaleString('tr-TR')}</td><td>${b.orderCount}</td><td><button class="ghost small del-ty-batch" data-id="${b.id}">Sil</button></td></tr>`).join('');
-  el.innerHTML = `<div style="margin-top:14px"><label>Yükleme geçmişi</label>
-    <table><thead><tr><th>Dosya</th><th>Sayfa</th><th>Kaydedildi</th><th>Siparişler</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>`;
+  el.innerHTML = buildUploadLogTableHtml(batches, 'tyUploadLog', 'del-ty-batch');
   el.querySelectorAll('.del-ty-batch').forEach(b=>{
     b.onclick = async ()=>{
       const batch = state.uploadBatches.find(x=>x.id===b.dataset.id);
@@ -5024,6 +5042,7 @@ function renderTrendyolUploadLog(){
       saveState(); render();
     };
   });
+  wireUploadLogShowMore(el, 'tyUploadLog', renderTrendyolUploadLog);
 }
 
 function orderStatus(o){
