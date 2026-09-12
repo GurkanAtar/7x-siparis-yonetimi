@@ -1663,6 +1663,19 @@ function clusterAndMergeOrders(orders){
     const head = group.find(o=>priceToNumber(o.price)>0) || group[0];
     const absorbed = group.filter(o=>o.id!==head.id);
     if(!absorbed.length) return;
+    // Which row happens to carry the price is irrelevant to which row carries
+    // the customer's phone/address/etc — those can land on any row of a
+    // multi-row order (first, second, third...), and a blank on the "head"
+    // row must NOT be treated as genuinely missing if another row in this
+    // same group has it. So before merging items, backfill every one of
+    // these order-level fields onto head from whichever row in the group
+    // (head included) actually has a non-blank value — the full order is
+    // judged on the combined total, not on whichever single row became head.
+    ['phone','address','cargoStatus','note','saleType','collectOverride','prepaidAmount'].forEach(field=>{
+      if(head[field] && String(head[field]).trim()) return;
+      const source = group.find(o=>o[field] && String(o[field]).trim());
+      if(source) head[field] = source[field];
+    });
     absorbed.forEach(o=>{
       head.items.push(...o.items);
       mergedAway.add(o.id);
@@ -4497,16 +4510,24 @@ function renderTrendyolPreview(){
     <div style="background:#fff3e0;border-left:4px solid var(--rust);padding:10px 12px;margin-bottom:10px;border-radius:6px;">
       <strong style="color:var(--rust);">⚠ ${missingList.length} sipariş eksik bilgi içeriyor — kaydetmeden önce inceleyin:</strong>
       <ul style="margin:6px 0 0 18px;padding:0;">${missingList.map(m=>`<li>${m}</li>`).join('')}</ul>
-      <label style="display:block;margin-top:8px;font-weight:600;">
+    </div>` : '';
+  const saveRowHtml = hasIncomplete ? `
+    <div style="display:flex;align-items:center;gap:12px;margin-top:10px;flex-wrap:wrap;">
+      <label style="display:flex;align-items:center;gap:6px;font-weight:600;margin:0;">
         <input type="checkbox" id="tyAllowIncompleteUpload"> Eksik bilgiye rağmen kaydet
       </label>
-    </div>` : '';
+      <button id="tySaveUpload" disabled>${pendingTrendyolUpload.orders.length} sipariş kaydet</button>
+      <button class="ghost" id="tyDiscardUpload">Vazgeç</button>
+    </div>` : `
+    <div style="display:flex;align-items:center;gap:12px;margin-top:10px;">
+      <button id="tySaveUpload">${pendingTrendyolUpload.orders.length} sipariş kaydet</button>
+      <button class="ghost" id="tyDiscardUpload">Vazgeç</button>
+    </div>`;
   box.innerHTML = `
     <div class="preview-box">
       ${warningHtml}
       <table><thead><tr><th>Tarih</th><th>Müşteri</th><th>Satış Kanalı</th><th>Kalemler</th><th>Tutar</th></tr></thead><tbody>${rows}</tbody></table>
-      <button id="tySaveUpload" style="margin-top:10px" ${hasIncomplete ? 'disabled' : ''}>${pendingTrendyolUpload.orders.length} sipariş kaydet</button>
-      <button class="ghost" id="tyDiscardUpload" style="margin-top:10px">Vazgeç</button>
+      ${saveRowHtml}
     </div>`;
   if(hasIncomplete){
     document.getElementById('tyAllowIncompleteUpload').addEventListener('change', (e)=>{
@@ -4692,16 +4713,28 @@ function renderUploadPreview(){
     <div style="background:#fff3e0;border-left:4px solid var(--rust);padding:10px 12px;margin-bottom:10px;border-radius:6px;">
       <strong style="color:var(--rust);">⚠ ${missingList.length} sipariş eksik bilgi içeriyor — kaydetmeden önce inceleyin:</strong>
       <ul style="margin:6px 0 0 18px;padding:0;">${missingList.map(m=>`<li>${m}</li>`).join('')}</ul>
-      <label style="display:block;margin-top:8px;font-weight:600;">
+    </div>` : '';
+  // The checkbox and the Save button sit right next to each other, in the
+  // same row, directly below the table — not split apart by the whole
+  // preview table, which made it easy to miss which control unlocked which
+  // button.
+  const saveRowHtml = hasIncomplete ? `
+    <div style="display:flex;align-items:center;gap:12px;margin-top:10px;flex-wrap:wrap;">
+      <label style="display:flex;align-items:center;gap:6px;font-weight:600;margin:0;">
         <input type="checkbox" id="allowIncompleteUpload"> Eksik bilgiye rağmen kaydet
       </label>
-    </div>` : '';
+      <button id="saveUpload" disabled>${pendingUpload.orders.length} sipariş kaydet</button>
+      <button class="ghost" id="discardUpload">Vazgeç</button>
+    </div>` : `
+    <div style="display:flex;align-items:center;gap:12px;margin-top:10px;">
+      <button id="saveUpload">${pendingUpload.orders.length} sipariş kaydet</button>
+      <button class="ghost" id="discardUpload">Vazgeç</button>
+    </div>`;
   box.innerHTML = `
     <div class="preview-box">
       ${warningHtml}
       <table><thead><tr><th>Tarih</th><th>Müşteri</th><th>Kalemler</th><th>Fiyat</th></tr></thead><tbody>${rows}</tbody></table>
-      <button id="saveUpload" style="margin-top:10px" ${hasIncomplete ? 'disabled' : ''}>${pendingUpload.orders.length} sipariş kaydet</button>
-      <button class="ghost" id="discardUpload" style="margin-top:10px">Vazgeç</button>
+      ${saveRowHtml}
     </div>`;
   if(hasIncomplete){
     document.getElementById('allowIncompleteUpload').addEventListener('change', (e)=>{
