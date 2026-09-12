@@ -1247,6 +1247,10 @@ function logActivity(action, byOverride){
 }
 
 async function loadState(){
+  // Set inside this function if any orphaned batch records get reconstructed
+  // below — used at the very end to trigger one save, persisting those
+  // reconstructed records for good instead of just patching them in memory.
+  let didReconcileBatches = false;
   // Loads orders AND upload batches individually from their own tables (one
   // row per order, one row per batch) — this is what lets Supabase's Row
   // Level Security actually enforce who can delete what, and what stops one
@@ -1313,6 +1317,43 @@ async function loadState(){
         if(belongsToTrendyol) b.source = 'trendyol';
       });
       state.activityLog = loaded.activityLog || [];
+      // Self-healing: some orders were uploaded before upload_batches existed
+      // as its own table, so their original batch record was lost to the
+      // earlier bug — but each order independently remembers its own
+      // sourceFile, which is enough to reconstruct a reasonable replacement
+      // batch record rather than leaving that history permanently blank.
+      // Grouped by batchId (not just sourceFile), so two separate uploads of
+      // a file with the same name are never merged into one reconstructed
+      // entry. Once reconstructed and saved, the batchId is no longer
+      // "orphaned" on future loads, so this never re-runs for the same one.
+      const knownBatchIds = new Set(state.uploadBatches.map(b=>b.id));
+      const orphanGroupsByBatchId = {};
+      state.orders.forEach(o=>{
+        if(!o.batchId || knownBatchIds.has(o.batchId) || !o.sourceFile) return;
+        orphanGroupsByBatchId[o.batchId] = orphanGroupsByBatchId[o.batchId] || [];
+        orphanGroupsByBatchId[o.batchId].push(o);
+      });
+      const orphanBatchIds = Object.keys(orphanGroupsByBatchId);
+      if(orphanBatchIds.length) didReconcileBatches = true;
+      orphanBatchIds.forEach(batchId=>{
+        const group = orphanGroupsByBatchId[batchId];
+        let earliest = null;
+        group.forEach(o=>{
+          const t = o.recordedAt ? new Date(o.recordedAt).getTime() : null;
+          if(t!==null && (earliest===null || t<earliest)) earliest = t;
+        });
+        const belongsToTrendyol = group.some(o=>/^TY-/.test(o.channel||''));
+        const rebuilt = {
+          id: batchId,
+          fileName: group[0].sourceFile,
+          sheetName: '(kurtarıldı)',
+          savedAt: earliest!==null ? new Date(earliest).toISOString() : new Date().toISOString(),
+          orderCount: group.length,
+        };
+        if(belongsToTrendyol) rebuilt.source = 'trendyol';
+        state.uploadBatches.push(rebuilt);
+        logActivity(`Yükleme kaydı kurtarıldı: "${rebuilt.fileName}" (${group.length} sipariş) — önceki bir hatadan dolayı kaybolmuştu`);
+      });
       state.setTemplates = loaded.setTemplates || [];
       state.commonSizes = (loaded.commonSizes && loaded.commonSizes.length) ? loaded.commonSizes : state.commonSizes;
       state.productCatalog = loaded.productCatalog || {};
@@ -1472,6 +1513,10 @@ async function loadState(){
   document.querySelectorAll('.entry-subtab[data-stage]').forEach(x=>x.classList.toggle('active', x.dataset.stage===currentStageMode));
   document.querySelectorAll('.stage-panel').forEach(x=>x.classList.toggle('active', x.id===currentStageMode));
   render();
+  // Persist any reconstructed batch records right away, so they're no longer
+  // "orphaned" the next time anyone loads the app — this only actually
+  // fires once per genuinely lost batch, ever.
+  if(didReconcileBatches) saveState();
 }
 let saveTimer = null;
 function stripImages(obj){
