@@ -1708,10 +1708,19 @@ function normalizeChannelKey(name){
   // İ/I needs handling explicitly first — standard lowercasing in Turkish
   // locale turns capital "I" into dotless "ı", not "i", so "HALI" and "Hali"
   // would otherwise NOT match even though they're clearly the same word.
+  // Stripping down to ONLY letters/digits (not just \s+ whitespace) is
+  // deliberate: plain regular spaces aren't the only way two copies of "the
+  // same" name end up different — a non-breaking space or a zero-width
+  // character from a copy-paste (WhatsApp, Excel, PDF) LOOKS identical but
+  // isn't whitespace by JS's \s definition, so it would have silently kept
+  // failing to match even after the first version of this fix. Dropping
+  // every non-alphanumeric character (spaces, dashes, underscores, any
+  // invisible unicode noise) reduces a name to its bare letter/digit
+  // "signature", which no formatting difference can throw off.
   return (name||'')
     .replace(/İ/g, 'i').replace(/I/g, 'i').replace(/ı/g, 'i')
     .toLowerCase()
-    .replace(/\s+/g,'');
+    .replace(/[^a-z0-9çğöşü]/g,'');
 }
 // Any place comparing a channel name typed by a person (an upload's Satış
 // Kanalı field, a registry entry) against another should use this instead
