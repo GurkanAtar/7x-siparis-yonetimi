@@ -1414,7 +1414,7 @@ async function loadState(){
         {name:'HB-7X GROUP', type:'Hepsiburada kurumsal'},
       ];
       mustHaveChannels.forEach(ch=>{
-        if(!state.channels.some(c=>c.name===ch.name)) state.channels.push(ch);
+        if(!state.channels.some(c=>channelNamesMatch(c.name,ch.name))) state.channels.push(ch);
       });
       // One-time catch-up: orders already in the system from before channel
       // auto-registration existed have channel names that were never actually
@@ -1435,7 +1435,7 @@ async function loadState(){
       const orphanGroups = {};
       state.orders.forEach(o=>{
         if(!o.channel || o.channel==='İhracat' || o.channel==='Sıcak Satış') return;
-        if(state.channels.some(c=>c.name===o.channel)) return;
+        if(state.channels.some(c=>channelNamesMatch(c.name,o.channel))) return;
         const key = normalizeChannelKey(o.channel);
         orphanGroups[key] = orphanGroups[key] || { canonicalName: o.channel, orders: [] };
         orphanGroups[key].orders.push(o);
@@ -1456,7 +1456,7 @@ async function loadState(){
         bursaChan.name = 'Bursa Toptan';
         let renamedOrders = 0;
         state.orders.forEach(o=>{
-          if(o.channel === oldName){ o.channel = 'Bursa Toptan'; renamedOrders++; }
+          if(channelNamesMatch(o.channel,oldName)){ o.channel = 'Bursa Toptan'; renamedOrders++; }
         });
         logActivity(`Kanal adı güncellendi: "${oldName}" → "Bursa Toptan" (${renamedOrders} sipariş güncellendi)`);
       }
@@ -1708,6 +1708,16 @@ function normalizeChannelKey(name){
     .replace(/İ/g, 'i').replace(/I/g, 'i').replace(/ı/g, 'i')
     .toLowerCase()
     .replace(/\s+/g,'');
+}
+// Any place comparing a channel name typed by a person (an upload's Satış
+// Kanalı field, a registry entry) against another should use this instead
+// of exact ===  — a single extra space or casing difference otherwise
+// silently creates a duplicate channel, or makes an order invisible to a
+// merge/count/lookup that should have included it. Exact === is still fine
+// for the app's own fixed internal constants ("İhracat", "Sıcak Satış"),
+// since those are never user-typed and always written identically.
+function channelNamesMatch(a, b){
+  return normalizeChannelKey(a) === normalizeChannelKey(b);
 }
 
 function findMatchingChannelName(rawName){
@@ -2370,7 +2380,13 @@ function assignTrendyolNumberIfNeeded(order){
 }
 
 function channelType(name){
-  const c = state.channels.find(x=>x.name===name);
+  // Matched by normalized key (case/whitespace-insensitive), not exact
+  // string equality — a channel registered as "TY-7X  GROUP" (double space,
+  // an easy typo) would otherwise never match an order saved as "TY-7X
+  // GROUP" (single space), silently falling through every category check
+  // below to the Instagram fallback — exactly the bug this fixes.
+  const key = normalizeChannelKey(name);
+  const c = state.channels.find(x=>normalizeChannelKey(x.name)===key);
   return c ? c.type : '';
 }
 function orderMatchesCategory(o, category){
@@ -4772,7 +4788,7 @@ document.getElementById('tyFileInput').onchange = async (e)=>{
     // ---- Preview ----------------------------------------------------------
     const unknownShops = {};
     orders.forEach(o=>{
-      if(o.channel && !state.channels.some(c=>c.name===o.channel)){
+      if(o.channel && !state.channels.some(c=>channelNamesMatch(c.name,o.channel))){
         unknownShops[normalizeChannelKey(o.channel)] = o.channel;
       }
     });
@@ -4881,7 +4897,7 @@ function renderTrendyolPreview(){
     // normalized key so different casings of the same new dealer register once.
     const newOrphanGroups = {};
     pendingTrendyolUpload.orders.forEach(o=>{
-      if(o.channel && !state.channels.some(c=>c.name===o.channel)){
+      if(o.channel && !state.channels.some(c=>channelNamesMatch(c.name,o.channel))){
         const key = normalizeChannelKey(o.channel);
         newOrphanGroups[key] = newOrphanGroups[key] || { canonicalName: o.channel, orders: [] };
         newOrphanGroups[key].orders.push(o);
@@ -5112,7 +5128,7 @@ function renderUploadPreview(){
     // canonical channel gets registered per real dealer, not one per casing.
     const newOrphanGroups = {};
     pendingUpload.orders.forEach(o=>{
-      if(o.channel && !state.channels.some(c=>c.name===o.channel)){
+      if(o.channel && !state.channels.some(c=>channelNamesMatch(c.name,o.channel))){
         const key = normalizeChannelKey(o.channel);
         newOrphanGroups[key] = newOrphanGroups[key] || { canonicalName: o.channel, orders: [] };
         newOrphanGroups[key].orders.push(o);
@@ -5317,7 +5333,7 @@ function getOrderBrand(order){
   const cat = channelCategoryForNumbering(order.channel);
   if(cat==='trendyol' || cat==='hepsiburada') return order.brand || '';
   if(cat==='ig'){
-    const chan = state.channels.find(c=>c.name===order.channel);
+    const chan = state.channels.find(c=>channelNamesMatch(c.name,order.channel));
     if(chan && chan.marka) return chan.marka;
     return IG_KURUMSAL_BRAND_MAP[normText(order.channel)] || '';
   }
@@ -7152,7 +7168,7 @@ function renderChannels(){
   document.querySelectorAll('.del-channel').forEach(b=>{
     b.onclick = async ()=>{
       const c = state.channels[parseInt(b.dataset.idx)];
-      const orderCount = state.orders.filter(o=>o.channel===c.name).length;
+      const orderCount = state.orders.filter(o=>channelNamesMatch(o.channel,c.name)).length;
       const countNote = orderCount ? ` (bu kanala ait ${orderCount} sipariş var — kanal silinir ama siparişler SİLİNMEZ, sadece bu ad artık kayıtlı bir kanal olarak görünmez)` : '';
       const auth = await requireAdmin(`"${c.name}" kanalını silme${countNote}`);
       if(!auth) return;
@@ -7167,8 +7183,17 @@ function renderChannels(){
   // Same type-filtered list as the tags above, feeding the merge dropdowns —
   // merging only ever makes sense within one type (e.g. two Instagram bayi
   // entries that turned out to be the same dealer), never across types.
+  // Dealer names in particular are the ones most likely to get accidentally
+  // duplicated (a plain typed name, easy to mistype or re-add slightly
+  // differently) — showing each one's order count, and its registered marka
+  // if it has one, makes it much easier to recognize "these two are
+  // probably the same dealer" at a glance, rather than judging by name alone.
   const mergeOptHtml = filtered.length
-    ? filtered.map(c=>`<option value="${c.name}">${c.name}</option>`).join('')
+    ? filtered.map(c=>{
+        const orderCount = state.orders.filter(o=>channelNamesMatch(o.channel,c.name)).length;
+        const markaNote = c.marka ? `, Marka: ${c.marka}` : '';
+        return `<option value="${c.name}">${c.name} (${orderCount} sipariş${markaNote})</option>`;
+      }).join('')
     : `<option value="">"${filterType}" türünde henüz kanal yok.</option>`;
   const mergeFromEl = document.getElementById('mergeChanFrom');
   const mergeToEl = document.getElementById('mergeChanTo');
@@ -7252,7 +7277,7 @@ document.getElementById('mergeChanBtn').onclick = async ()=>{
   // Every order currently filed under the channel being removed gets moved
   // over to the surviving channel's name — this is what actually combines
   // their sales history into one, not just the registry entry itself.
-  const affectedOrders = state.orders.filter(o=>o.channel===fromName);
+  const affectedOrders = state.orders.filter(o=>channelNamesMatch(o.channel,fromName));
   const auth = await requireAdmin(`"${fromName}" kanalını "${toName}" ile birleştirme (${affectedOrders.length} sipariş "${toName}" altına taşınacak, "${fromName}" kanalı kaldırılacak)`);
   if(!auth) return;
   affectedOrders.forEach(o=>{ o.channel = toName; });
