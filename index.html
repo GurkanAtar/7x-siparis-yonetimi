@@ -5188,21 +5188,31 @@ function renderOrders(){
       const tr = document.createElement('tr');
       // Same highlight as Baskı öncesi, and excluded from the running
       // subtotal/grand total below — not a real sale, so it shouldn't
-      // inflate either. A Kayıp Kargo order that's STILL missing phone/address
-      // (saved via the "eksik bilgiye rağmen kaydet" override, with no
-      // matching prior order found to auto-fill from) gets an extra text
-      // badge on top of the usual highlight — the amber tint alone doesn't
-      // distinguish a complete Kayıp Kargo case from one that still needs
-      // contact info chased down.
-      const missingContactInfo = (!o.phone || !o.phone.trim()) || (!o.address || !o.address.trim());
-      if(o.saleType === 'Kayıp Kargo'){
+      // inflate either. ANY Instagram order (not just Kayıp Kargo) that's
+      // still missing phone/address — saved via the "eksik bilgiye rağmen
+      // kaydet" override — gets the same highlight plus an explicit text
+      // badge, so an incomplete record never just quietly shows a blank
+      // dash with no visual flag at all. Scoped to Instagram specifically,
+      // since this same rendering path also serves Trendyol/Hepsiburada,
+      // which never collect phone/address at all — flagging those as
+      // "missing" would be constant, meaningless noise. A regular order
+      // still counts toward the totals even if incomplete (it's a real
+      // sale); only Kayıp Kargo is excluded from totals regardless.
+      const isInstagram = channelCategoryForNumbering(o.channel) === 'ig';
+      const missingContactInfo = isInstagram && ((!o.phone || !o.phone.trim()) || (!o.address || !o.address.trim()));
+      const isLostCargo = o.saleType === 'Kayıp Kargo';
+      if(isLostCargo){
         tr.style.background = '#fff3e0';
         tr.style.borderLeft = '4px solid var(--rust)';
       } else {
         orderM2Sum += groupM2;
         if(groupTotal!==null) orderTutarSum += groupTotal;
+        if(missingContactInfo){
+          tr.style.background = '#fff3e0';
+          tr.style.borderLeft = '4px solid var(--rust)';
+        }
       }
-      const missingContactBadge = (o.saleType==='Kayıp Kargo' && missingContactInfo)
+      const missingContactBadge = missingContactInfo
         ? ' <span class="pill" style="background:var(--rust);color:#fff;">İletişim bilgisi eksik</span>' : '';
       tr.innerHTML = `<td>${numCell}</td><td>${o.date||'-'}</td><td><span class="badge-chan">${o.channel}</span></td>
         <td>${o.customerName}${missingContactBadge}</td><td>${o.phone||'-'}</td><td>${o.address||'-'}</td>
@@ -5302,15 +5312,16 @@ function renderOrders(){
       const tr = document.createElement('tr');
       // Same highlight as Baskı öncesi — a Kayıp Kargo entry isn't a real
       // sale, so it needs to stand out here too rather than blending in with
-      // ordinary orders in this list. A Kayıp Kargo case still missing
-      // phone/address gets an extra text badge on top of the highlight —
-      // see the same logic in the rowspanned list above.
+      // ordinary orders in this list. ANY order missing phone/address gets
+      // the same highlight plus an explicit text badge too — not just
+      // Kayıp Kargo cases — so an incomplete record never just quietly
+      // shows a blank dash with no visual flag at all.
       const missingContactInfo = (!o.phone || !o.phone.trim()) || (!o.address || !o.address.trim());
-      if(o.saleType === 'Kayıp Kargo'){
+      if(o.saleType === 'Kayıp Kargo' || missingContactInfo){
         tr.style.background = '#fff3e0';
         tr.style.borderLeft = '4px solid var(--rust)';
       }
-      const missingContactBadge = (o.saleType==='Kayıp Kargo' && missingContactInfo)
+      const missingContactBadge = missingContactInfo
         ? ' <span class="pill" style="background:var(--rust);color:#fff;">İletişim bilgisi eksik</span>' : '';
       const isSet = group.length > 1;
       const sizeCell = isSet
