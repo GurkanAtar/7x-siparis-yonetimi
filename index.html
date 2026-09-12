@@ -1717,6 +1717,20 @@ function normText(s){
   // row versus another, even though it's clearly the same address to a person.
   return (s||'').trim().replace(/\s+/g,' ').toLocaleLowerCase('tr');
 }
+// Folds Turkish-specific letters to their plain-ASCII equivalent, ON TOP OF
+// normText — used only for Müşteri Veritabanı's search matching, not for
+// identity/grouping (which stays on the real accented text, so two
+// genuinely different customers never merge just because their folded
+// versions happen to coincide). This is specifically for when someone
+// searches typing "Yilmaz" or "Ayse" instead of "Yılmaz"/"Ayşe" — very
+// common when typing fast or on a non-Turkish keyboard, and a search that
+// only matched exact Turkish spelling would otherwise silently find nothing.
+function foldTurkishForSearch(s){
+  return normText(s)
+    .replace(/ı/g,'i').replace(/İ/g,'i')
+    .replace(/ğ/g,'g').replace(/ü/g,'u')
+    .replace(/ş/g,'s').replace(/ö/g,'o').replace(/ç/g,'c');
+}
 
 function normPhone(s){
   // Digits only, and leading 0 stripped — phone formatting ("0533 123 45 67" vs
@@ -1948,15 +1962,18 @@ function customerDbOrders(){
     return cdbMode==='bayi' ? isBayi : !isBayi;
   });
 }
+let cdbCustomerList = [];
+let cdbOpenIdx = null;
 function renderCustomerDbResults(){
   const container = document.getElementById('cdbResults');
   document.getElementById('cdbDetail').innerHTML = '';
-  const term = normText(document.getElementById('cdbSearch').value);
+  const term = foldTurkishForSearch(document.getElementById('cdbSearch').value);
+  cdbOpenIdx = null;
   if(!term){ container.innerHTML = '<p class="muted">Aramak için isim, telefon veya adres yazın.</p>'; return; }
   const matches = customerDbOrders().filter(o=>{
-    return normText(o.customerName).includes(term)
-      || normText(o.phone).includes(term)
-      || normText(o.address).includes(term);
+    return foldTurkishForSearch(o.customerName).includes(term)
+      || foldTurkishForSearch(o.phone).includes(term)
+      || foldTurkishForSearch(o.address).includes(term);
   });
   // Grouped into distinct customers by name+phone — the best available
   // identity key here, since there's no real customer ID in this system.
@@ -1975,9 +1992,18 @@ function renderCustomerDbResults(){
     const oPlaced = orderPlacedAt(o);
     if(o.address && (!g.address || (oPlaced && gLatest && oPlaced>gLatest))) g.address = o.address;
   });
-  const list = [...groups.values()];
-  if(!list.length){ container.innerHTML = '<p class="muted">Eşleşen müşteri bulunamadı.</p>'; return; }
-  container.innerHTML = list.map((g,idx)=>`
+  cdbCustomerList = [...groups.values()];
+  if(!cdbCustomerList.length){ container.innerHTML = '<p class="muted">Eşleşen müşteri bulunamadı.</p>'; return; }
+  renderCustomerDbRows();
+}
+// Renders the row list with the purchase history (if any) expanded inline
+// directly under whichever customer's "Geçmişi gör" was clicked — rather
+// than in one shared spot at the very bottom of the whole results list,
+// which put it far away from the row it actually belonged to.
+function renderCustomerDbRows(){
+  const container = document.getElementById('cdbResults');
+  container.innerHTML = cdbCustomerList.map((g,idx)=>{
+    const row = `
     <div style="display:flex;justify-content:space-between;align-items:flex-start;padding:10px 0;border-top:1px solid var(--line);gap:12px;">
       <div>
         <strong>${g.name||'(isimsiz)'}</strong> <span class="muted">${g.phone?('— '+g.phone):''}</span><br>
@@ -1985,15 +2011,21 @@ function renderCustomerDbResults(){
       </div>
       <div style="text-align:right;white-space:nowrap;">
         <span class="muted">${g.orders.length} sipariş</span>
-        <button class="ghost small cdb-view" data-idx="${idx}" style="margin-left:8px;">Geçmişi gör</button>
+        <button class="ghost small cdb-view" data-idx="${idx}" style="margin-left:8px;">${cdbOpenIdx===idx ? 'Gizle' : 'Geçmişi gör'}</button>
       </div>
-    </div>`).join('');
+    </div>`;
+    const detail = cdbOpenIdx===idx ? buildCustomerDbDetailHtml(g) : '';
+    return row + detail;
+  }).join('');
   container.querySelectorAll('.cdb-view').forEach(b=>{
-    b.onclick = ()=>renderCustomerDbDetail(list[parseInt(b.dataset.idx)]);
+    b.onclick = ()=>{
+      const idx = parseInt(b.dataset.idx);
+      cdbOpenIdx = (cdbOpenIdx===idx) ? null : idx;
+      renderCustomerDbRows();
+    };
   });
 }
-function renderCustomerDbDetail(customer){
-  const el = document.getElementById('cdbDetail');
+function buildCustomerDbDetailHtml(customer){
   const sorted = customer.orders.slice().sort((a,b)=>{
     const at = orderPlacedAt(a) ? orderPlacedAt(a).getTime() : 0;
     const bt = orderPlacedAt(b) ? orderPlacedAt(b).getTime() : 0;
@@ -2004,10 +2036,11 @@ function renderCustomerDbDetail(customer){
     const priceCell = o.price ? formatTL(priceToNumber(o.price))+' TL' : '-';
     return `<tr><td>${o.date||'-'}</td><td><span class="badge-chan">${o.channel}</span></td><td>${items}</td><td>${priceCell}</td></tr>`;
   }).join('');
-  el.innerHTML = `
-    <h3 style="font-family:'Fraunces',serif;font-size:15px;margin:18px 0 8px;">${customer.name||'(isimsiz)'} — Satın Alma Geçmişi</h3>
-    <p class="muted" style="margin-top:-4px">${customer.phone||'telefon yok'}${customer.address ? ' — '+customer.address : ''} · ${sorted.length} sipariş</p>
-    <table><thead><tr><th>Tarih</th><th>Kanal</th><th>Kalemler</th><th>Tutar</th></tr></thead><tbody>${rows}</tbody></table>`;
+  return `
+    <div style="background:var(--paper);border-radius:8px;padding:10px 14px;margin:4px 0 10px;">
+      <p class="muted" style="margin:0 0 8px;">${sorted.length} sipariş — Satın Alma Geçmişi</p>
+      <table><thead><tr><th>Tarih</th><th>Kanal</th><th>Kalemler</th><th>Tutar</th></tr></thead><tbody>${rows}</tbody></table>
+    </div>`;
 }
 
 
