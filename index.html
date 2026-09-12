@@ -2403,20 +2403,15 @@ function channelType(name){
   return c ? c.type : '';
 }
 function orderMatchesCategory(o, category){
-  if(category==='ihracat') return o.channel==='İhracat';
-  if(category==='sicaksatis') return o.channel==='Sıcak Satış';
-  if(category==='trendyol') return channelType(o.channel).startsWith('Trendyol');
-  if(category==='hepsiburada') return channelType(o.channel).startsWith('Hepsiburada');
-  if(category==='ig'){
-    // Instagram is the safe default/fallback bucket, not an exact type match —
-    // an order whose channel isn't registered with the expected type for
-    // whatever reason (a gap in auto-registration, older data, anything else)
-    // must still show up somewhere rather than silently vanishing from every
-    // list. Only genuinely OTHER categories (Sıcak Satış, İhracat, Trendyol,
-    // Hepsiburada) get excluded from Instagram — everything else belongs here.
-    return o.channel!=='Sıcak Satış' && o.channel!=='İhracat'
-      && !channelType(o.channel).startsWith('Trendyol')
-      && !channelType(o.channel).startsWith('Hepsiburada');
+  // Delegates to the ONE category resolver rather than repeating the same
+  // type checks a second time. Previously this function and
+  // channelCategoryForNumbering each decided "which channel family is this"
+  // with their own copy of the logic, so they could disagree about the same
+  // order — which is how an order could appear correctly in the Trendyol
+  // list (this function) while the missing-phone warning simultaneously
+  // treated it as Instagram (that function). One resolver, one answer.
+  if(['ihracat','sicaksatis','trendyol','hepsiburada','ig'].includes(category)){
+    return channelCategoryForNumbering(o.channel) === category;
   }
   return true;
 }
@@ -5367,11 +5362,31 @@ function orderHasMissingContactWarning(o){
   const isInstagram = channelCategoryForNumbering(o.channel) === 'ig';
   return isInstagram && ((!o.phone || !o.phone.trim()) || (!o.address || !o.address.trim()));
 }
+
 function channelCategoryForNumbering(channelName){
   if(channelName==='İhracat') return 'ihracat';
   if(channelName==='Sıcak Satış') return 'sicaksatis';
   if(channelType(channelName).startsWith('Trendyol')) return 'trendyol';
   if(channelType(channelName).startsWith('Hepsiburada')) return 'hepsiburada';
+  // Second, INDEPENDENT signal that needs no registry entry at all: every
+  // Trendyol channel is named "TY-..." and every Hepsiburada one "HB-..."
+  // (TY-7X GROUP, TY-CARPETRA, TY-KESSY KERIM, HB-7X GROUP...). The checks
+  // above only work if the channel is currently in state.channels AND its
+  // type string is intact — if the registry hasn't loaded yet, the entry was
+  // deleted or renamed, or the type was ever saved wrong, they all fail and
+  // the order used to land in the 'ig' fallback below. That mattered far more
+  // than "which bucket" suggests: Instagram is the ONLY category that warns
+  // about a missing phone, so a Trendyol order misread as Instagram got
+  // flagged "İletişim bilgisi eksik" even though Trendyol never supplies a
+  // phone number at all. Reading the name prefix directly means the correct
+  // category survives an empty or broken registry.
+  // Matched on the raw name with the dash required ("TY-..." / "HB-..."), not
+  // on a stripped key: a bare "ty"/"hb" prefix test would wrongly claim an
+  // ordinary Instagram dealer called "Tyler" or "HB Home". Leading spaces are
+  // tolerated since those are invisible and easy to paste in by accident.
+  const raw = (channelName||'').trim();
+  if(/^TY-/i.test(raw)) return 'trendyol';
+  if(/^HB-/i.test(raw)) return 'hepsiburada';
   // Instagram is the fallback bucket here too, same reasoning as
   // orderMatchesCategory — an order whose channel type doesn't cleanly match
   // any of the other categories still needs a number, not to be silently
