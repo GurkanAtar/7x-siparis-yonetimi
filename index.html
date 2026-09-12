@@ -5353,6 +5353,17 @@ function getOrderBrand(order){
   return '';
 }
 function orderHasMissingContactWarning(o){
+  // Checked FIRST and directly, bypassing channel-name matching entirely:
+  // every Trendyol upload tags its own batch as source:'trendyol' the
+  // moment it's saved, so this is a plain, explicit fact recorded at
+  // upload time — not something inferred by matching o.channel against the
+  // channel registry. Trendyol never provides a phone number by platform
+  // policy, so a missing phone on one of its orders is normal, not a gap,
+  // regardless of anything about the channel name.
+  if(o.batchId){
+    const batch = state.uploadBatches.find(b=>b.id===o.batchId);
+    if(batch && batch.source==='trendyol') return false;
+  }
   const isInstagram = channelCategoryForNumbering(o.channel) === 'ig';
   return isInstagram && ((!o.phone || !o.phone.trim()) || (!o.address || !o.address.trim()));
 }
