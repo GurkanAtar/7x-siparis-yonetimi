@@ -690,6 +690,11 @@ let activeGrants = [];       // rows from delete_grants that haven't expired
 // successful load/save — used by saveState() to work out which orders are
 // new (insert), changed (update), or missing (an actual delete to send).
 let lastSyncedOrderIds = new Set();
+// Same idea, for upload_batches — each upload's record is its own row too,
+// completely independent of the shared app_state blob. This is what
+// prevents one stale browser session's save from silently wiping out every
+// upload's history at once, the way it did before this table existed.
+let lastSyncedBatchIds = new Set();
 
 async function fetchProfileAndGrants(){
   const { data: prof } = await sb.from('profiles').select('*').eq('id', currentUser.id).maybeSingle();
@@ -1242,16 +1247,22 @@ function logActivity(action, byOverride){
 }
 
 async function loadState(){
-  // Loads orders individually from the `orders` table (one row per order —
-  // this is what lets Supabase's Row Level Security actually enforce who can
-  // delete what) and everything else shared (channels, catalog, templates,
-  // sizes, activity log, upload history) from the single `app_state` row.
-  let orderRows = null, appRow = null, lastErr = null;
+  // Loads orders AND upload batches individually from their own tables (one
+  // row per order, one row per batch) — this is what lets Supabase's Row
+  // Level Security actually enforce who can delete what, and what stops one
+  // stale browser session's save from silently overwriting another's data.
+  // Everything else shared (channels, catalog, templates, sizes, activity
+  // log) still comes from the single `app_state` row — lower-risk data
+  // where that isn't a real problem.
+  let orderRows = null, batchRows = null, appRow = null, lastErr = null;
   for(let attempt=0; attempt<3; attempt++){
     try{
       const ordersRes = await sb.from('orders').select('*');
       if(ordersRes.error) throw ordersRes.error;
       orderRows = ordersRes.data;
+      const batchesRes = await sb.from('upload_batches').select('*');
+      if(batchesRes.error) throw batchesRes.error;
+      batchRows = batchesRes.data;
       const appRes = await sb.from('app_state').select('data').eq('id','global').maybeSingle();
       if(appRes.error) throw appRes.error;
       appRow = appRes.data;
@@ -1289,7 +1300,8 @@ async function loadState(){
       // re-normalizes every already-saved item once, so existing orders merge
       // back into the same group they always should have been in.
       state.orders.forEach(o=>{ o.items.forEach(i=>{ if(i.taban) i.taban = normalizeTaban(i.taban); }); });
-      state.uploadBatches = loaded.uploadBatches || [];
+      state.uploadBatches = (batchRows||[]).map(r=>({ ...(r.data||{}), id: r.id }));
+      lastSyncedBatchIds = new Set(state.uploadBatches.map(b=>b.id));
       // A batch saved before the Trendyol upload history was split into its
       // own tab has no "source" tag, so it would otherwise still show up in
       // the Instagram upload history table. Tag any such batch retroactively
@@ -1509,8 +1521,31 @@ function saveState(){
         render();
       }
 
+      // Same per-row sync as orders, for upload_batches — its own table now,
+      // never sharing a row with anything else, so a stale browser session
+      // can't ever wipe out every upload's history in one write again.
+      const currentBatchIds = new Set(state.uploadBatches.map(b=>b.id));
+      const newBatches = state.uploadBatches.filter(b=>!lastSyncedBatchIds.has(b.id));
+      const existingBatches = state.uploadBatches.filter(b=>lastSyncedBatchIds.has(b.id));
+      const removedBatchIds = [...lastSyncedBatchIds].filter(id=>!currentBatchIds.has(id));
+
+      if(newBatches.length){
+        const rows = newBatches.map(b=>({ id:b.id, data:stripImages(b), created_by:currentUser.id }));
+        const { error } = await sb.from('upload_batches').insert(rows);
+        if(error) throw error;
+      }
+      if(existingBatches.length){
+        const rows = existingBatches.map(b=>({ id:b.id, data:stripImages(b) }));
+        const { error } = await sb.from('upload_batches').upsert(rows, { onConflict:'id' });
+        if(error) throw error;
+      }
+      for(const id of removedBatchIds){
+        const { error } = await sb.from('upload_batches').delete().eq('id', id);
+        if(error) console.error('batch delete rejected', id, error);
+      }
+      lastSyncedBatchIds = new Set(state.uploadBatches.map(b=>b.id));
+
       const rest = {
-        uploadBatches: state.uploadBatches,
         activityLog: state.activityLog,
         setTemplates: state.setTemplates,
         commonSizes: state.commonSizes,
