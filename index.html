@@ -579,6 +579,11 @@
       <div id="channelTags" style="margin-top:14px"></div>
     </div>
     <div class="card">
+      <h2>Marka Kaydı — Instagram bayileri</h2>
+      <p class="muted" style="margin-top:-6px">Her Instagram bayisinin hangi markayı sattığını burada görüp düzenleyin — bayinin adını daha sonra değiştirseniz bile marka bağlantısı korunur. Boş bırakılan bir bayi, Raporlar'da "Marka adı yok" olarak görünür.</p>
+      <div id="markaRegistryList"></div>
+    </div>
+    <div class="card">
       <h2>Kanalları birleştir</h2>
       <p class="muted" style="margin-top:-6px">Yanlışlıkla iki ayrı kanal olarak kaydedilmiş aynı bayiyi tek kanal altında birleştirir — birleştirilen kanala ait tüm geçmiş siparişler otomatik olarak seçilen kanala taşınır, birleştirilen kanal kaldırılır. Sadece "Tür" filtresinde şu an seçili olan türdeki kanallar arasında birleştirme yapılabilir.</p>
       <div class="row row3">
@@ -2042,7 +2047,7 @@ function buildCustomerDbDetailHtml(customer){
   const rows = sorted.map(o=>{
     const items = o.items.map(i=>`${i.size} ×${i.qty}`).join(', ');
     const priceCell = o.price ? formatTL(priceToNumber(o.price))+' TL' : '-';
-    const brand = getOrderBrand(o) || '-';
+    const brand = getOrderBrand(o) || 'Marka adı yok';
     return `<tr><td>${o.date||'-'}</td><td><span class="badge-chan">${o.channel}</span></td><td>${brand}</td><td>${items}</td><td>${priceCell}</td></tr>`;
   }).join('');
   return `
@@ -3112,7 +3117,7 @@ function renderReport(){
     <table><thead><tr><th>Marka</th><th>Sipariş sayısı</th><th>Halı sayısı</th><th>m²</th><th>Toplam Tutar</th></tr></thead><tbody>${(()=>{
       const byBrand = {};
       matchingOrders.forEach(o=>{
-        const brand = getOrderBrand(o) || '(markasız)';
+        const brand = getOrderBrand(o) || 'Marka adı yok';
         byBrand[brand] = byBrand[brand] || { orders:0, carpets:0, m2:0, tutar:0 };
         byBrand[brand].orders += 1;
         byBrand[brand].carpets += countCarpets(o.items);
@@ -7169,6 +7174,40 @@ function renderChannels(){
   const mergeToEl = document.getElementById('mergeChanTo');
   if(mergeFromEl) mergeFromEl.innerHTML = mergeOptHtml;
   if(mergeToEl) mergeToEl.innerHTML = mergeOptHtml;
+  renderMarkaRegistry();
+}
+
+// Every Instagram bayi, always shown here regardless of the type filter
+// above (that filter only affects the add/merge lists) — so a dealer added
+// weeks ago with no marka ever registered still shows up with an empty
+// input, clearly asking to be filled in, rather than just vanishing from
+// view once its "moment of creation" has passed.
+function renderMarkaRegistry(){
+  const el = document.getElementById('markaRegistryList');
+  if(!el) return;
+  const bayiler = state.channels.filter(c=>c.type==='Instagram bayi');
+  if(!bayiler.length){ el.innerHTML = '<p class="muted">Henüz Instagram bayisi yok.</p>'; return; }
+  el.innerHTML = bayiler.map(c=>{
+    const idx = state.channels.indexOf(c);
+    return `
+    <div class="row" style="grid-template-columns:1fr 1fr auto;display:grid;gap:8px;align-items:center;margin-bottom:8px;">
+      <span>${c.name}</span>
+      <input class="marka-registry-input" data-idx="${idx}" placeholder="Marka adı (boş = kayıtlı değil)" value="${c.marka||''}">
+      <button class="ghost small marka-registry-save" data-idx="${idx}">Kaydet</button>
+    </div>`;
+  }).join('');
+  el.querySelectorAll('.marka-registry-save').forEach(b=>{
+    b.onclick = ()=>{
+      const idx = parseInt(b.dataset.idx);
+      const chan = state.channels[idx];
+      const input = el.querySelector(`.marka-registry-input[data-idx="${idx}"]`);
+      const val = input.value.trim();
+      const old = chan.marka;
+      if(val) chan.marka = val; else delete chan.marka;
+      logActivity(`Marka güncellendi: "${chan.name}" → ${val ? `"${val}"` : '(kaldırıldı)'}${old ? ` (önceki: "${old}")` : ''}`);
+      saveState(); render();
+    };
+  });
 }
 
 document.getElementById('newChanType').addEventListener('change', ()=>{
