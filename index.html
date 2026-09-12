@@ -25,6 +25,8 @@
   .tab.active{color:var(--indigo);border-bottom-color:var(--indigo);}
   .panel{display:none;}
   .panel.active{display:block;}
+  .stage-panel{display:none;}
+  .stage-panel.active{display:block;}
   .entry-subtabs{display:flex;gap:6px;margin-bottom:16px;flex-wrap:wrap;}
   .entry-subtab{padding:7px 14px;font-size:13px;font-weight:500;cursor:pointer;color:var(--ink-soft);background:var(--paper);border:1px solid var(--line);border-radius:20px;user-select:none;}
   .entry-subtab.active{color:#fff;background:var(--indigo);border-color:var(--indigo);}
@@ -103,10 +105,7 @@
   <div class="card" id="operatorBar" style="padding:12px 16px;"></div>
 
   <div class="tabs">
-    <div class="tab active" data-tab="entry">Sipariş girişi</div>
-    <div class="tab" data-tab="queue">Baskı öncesi</div>
-    <div class="tab" data-tab="sort">Ayırma &amp; etiketler</div>
-    <div class="tab" data-tab="production">Üretim</div>
+    <div class="tab active" data-tab="siparismerkezi">Sipariş Merkezi</div>
     <div class="tab" data-tab="overview">Genel bakış</div>
     <div class="tab" data-tab="channels">Satış Kanalı Kayıt</div>
     <div class="tab" data-tab="setrecord">Halı Set ve Ölçü Kayıt</div>
@@ -115,7 +114,7 @@
     <div class="tab" data-tab="auth">PIN'ler &amp; Yetkilendirme</div>
   </div>
 
-  <div id="entry" class="panel active">
+  <div id="siparismerkezi" class="panel active">
     <div class="entry-subtabs">
       <div class="entry-subtab active" data-sub="ig">Instagram</div>
       <div class="entry-subtab" data-sub="trendyol">Trendyol</div>
@@ -123,6 +122,14 @@
       <div class="entry-subtab" data-sub="sicaksatis">Sıcak Satış</div>
       <div class="entry-subtab" data-sub="ihracat">İhracat</div>
     </div>
+    <div class="entry-subtabs" id="stageSelector" style="margin-top:6px;">
+      <div class="entry-subtab active" data-stage="entry">Sipariş girişi</div>
+      <div class="entry-subtab" data-stage="queue">Baskı öncesi</div>
+      <div class="entry-subtab" data-stage="sort" id="stageBtn-sort">Ayırma &amp; etiketler</div>
+      <div class="entry-subtab" data-stage="production">Üretim</div>
+    </div>
+
+  <div id="entry" class="stage-panel active">
 
     <div id="entrySub-ig" class="entry-sub-panel active">
       <div class="card">
@@ -139,15 +146,18 @@
         <div id="uploadLog"></div>
       </div>
 
-      <div class="card">
+      <div class="card" id="manualEntryCard-ig">
         <h2>Siparişi manuel ekle</h2>
         <div class="row row3">
           <div><label>Satış Kanalı</label><input id="mChannel" placeholder="Kayıtlı bir hesap seçin veya yeni bir bayi adı yazın" list="mChannelSuggestions">
             <datalist id="mChannelSuggestions"></datalist>
           </div>
-          <div><label>Müşteri adı</label><input id="mName" placeholder="İsim Soyisim"></div>
+          <div><label>Müşteri adı</label><input id="mName" placeholder="İsim Soyisim" list="mNameSuggestions">
+            <datalist id="mNameSuggestions"></datalist>
+          </div>
           <div><label>Telefon</label><input id="mPhone" placeholder="05xx xxx xx xx"></div>
         </div>
+        <div class="muted" id="mAutofillNote" style="display:none;color:var(--rust);font-weight:600;margin-top:-8px;margin-bottom:8px;">⚠ Telefon/Adres bu isimdeki önceki bir siparişten otomatik dolduruldu — farklı bir kişi olabilir, lütfen kontrol edin.</div>
         <div class="row row3">
           <div><label>Sipariş tarihi</label><input type="date" id="mOrderDate"></div>
           <div><label>Adres</label><input id="mAddress" placeholder="Adres"></div>
@@ -157,6 +167,7 @@
           <div><label>Sipariş Türü</label>
             <select id="mSaleType">
               <option value="">Satış</option>
+              <option value="Kayıp Kargo">Kayıp Kargo — Yeniden Üretim (önce sahada arayın)</option>
               <option value="Ücretsiz Yeniden Gönderim">Ücretsiz Yeniden Gönderim (tutar 0 olmalı)</option>
               <option value="Ücretli Yeniden Gönderim">Ücretli Yeniden Gönderim</option>
               <option value="Eksik Gönderim Telafisi">Eksik Gönderim Telafisi</option>
@@ -204,11 +215,12 @@
           <input type="file" id="tyCatalogInput" accept=".xlsx,.xls" style="display:none;">
           <span class="muted" id="tyCatalogInputName">Henüz yüklenen dosya yok</span>
           <span class="muted" id="tyCatalogStatus"></span>
+          <button type="button" class="ghost small" id="tyCatalogClear" style="margin-left:auto;">Kataloğu temizle</button>
         </div>
         <div id="tyCatalogInfo" class="muted" style="margin-top:8px;"></div>
       </div>
 
-      <div class="card">
+      <div class="card" id="manualEntryCard-trendyol">
         <h2>Siparişi manuel ekle</h2>
         <p class="muted" style="margin-top:-6px">Trendyol'da teslimat ve ödeme tamamen Trendyol'un kendi sistemi ve etiketleri üzerinden yürüdüğünden, burada telefon/adres/tutar/peşinat gibi alanlar yok — sadece kod ve baskı-üretim akışı için gereken bilgiler var.</p>
         <div class="row row3">
@@ -230,7 +242,7 @@
     </div>
 
     <div id="entrySub-sicaksatis" class="entry-sub-panel">
-      <div class="card">
+      <div class="card" id="manualEntryCard-sicaksatis">
         <h2>Sıcak Satış siparişi ekle</h2>
         <div class="row row2">
           <div><label>Müşteri adı</label><input id="ssName" placeholder="İsim Soyisim veya şirket adı" list="ssNameSuggestions">
@@ -250,6 +262,7 @@
           <div><label>Sipariş Türü</label>
             <select id="ssSaleType">
               <option value="">Satış</option>
+              <option value="Kayıp Kargo">Kayıp Kargo — Yeniden Üretim (önce sahada arayın)</option>
               <option value="Ücretsiz Yeniden Gönderim">Ücretsiz Yeniden Gönderim (tutar 0 olmalı)</option>
               <option value="Ücretli Yeniden Gönderim">Ücretli Yeniden Gönderim</option>
               <option value="Eksik Gönderim Telafisi">Eksik Gönderim Telafisi</option>
@@ -267,7 +280,7 @@
     </div>
 
     <div id="entrySub-ihracat" class="entry-sub-panel">
-      <div class="card">
+      <div class="card" id="manualEntryCard-ihracat">
         <h2>İhracat siparişi ekle</h2>
         <div class="row row2">
           <div><label>Müşteri adı</label><input id="exName" placeholder="Kişi veya şirket adı" list="exNameSuggestions">
@@ -302,6 +315,12 @@
       </div>
     </div>
 
+    <div class="card" id="lostCargoLookupCard" style="display:none;">
+      <label style="margin-bottom:8px">Kayıp Kargo — önceki siparişten bul (son 30 gün, aynı kanal)</label>
+      <p class="muted" style="margin-top:-4px">Müşteri adı veya sipariş numarası (örn. IG-105) ile arayın. Bulunan ürünü veya tüm siparişi seçerek ölçü/taban/fotoğraf bilgilerini yeniden yazmadan buraya getirebilirsiniz.</p>
+      <input id="lostCargoSearch" placeholder="İsim veya sipariş numarası..." style="margin-bottom:8px;">
+      <div id="lostCargoResults"></div>
+    </div>
     <div class="card" id="sharedItemsCard">
       <div class="items-block" id="itemsBlock">
         <label style="margin-bottom:8px">Halı kalemleri</label>
@@ -374,14 +393,14 @@
         </div>
       </div>
       <table id="ihracatOrdersTable">
-        <thead><tr><th>Sipariş tarihi</th><th>Müşteri</th><th>Telefon</th><th>Şehir</th><th>Ülke</th><th>Ölçü</th><th>Taban</th><th>Saçak</th><th>Şekil</th><th>Para Birimi</th><th>Döviz Tutarı</th><th>Kur</th><th>Toplam m²</th><th>Toplam Tutar (TL)</th><th>Süre</th><th></th></tr></thead>
+        <thead><tr><th>Sipariş tarihi</th><th>Müşteri</th><th>Telefon</th><th>Şehir</th><th>Ülke</th><th>Ölçü</th><th>Taban</th><th>Saçak</th><th>Şekil</th><th>Halı sayısı</th><th>Para Birimi</th><th>Sipariş Döviz Tutarı</th><th>Kur</th><th>Toplam m²</th><th>Toplam Tutar (Döviz)</th><th>Toplam Tutar (TL)</th><th>Süre</th><th></th></tr></thead>
         <tbody></tbody>
       </table>
       <div class="empty" id="ihracatOrdersEmpty" style="display:none">Henüz ihracat siparişi yok.</div>
     </div>
   </div>
 
-  <div id="queue" class="panel">
+  <div id="queue" class="stage-panel">
     <div class="card">
       <h2>Baskı departmanı — kod sırası <button class="ghost small print-btn" data-print="queue" style="margin-left:8px;font-weight:normal;font-family:'Inter',sans-serif;font-size:12px;">Listeyi yazdır</button> <button class="ghost small excel-btn" data-excel="queue" style="font-weight:normal;font-family:'Inter',sans-serif;font-size:12px;">Excel'e aktar</button></h2>
       <p class="muted" style="margin-top:-6px">Bu listenin tek amacı: tasarımı görüp baskı operatörünün bilmesi gereken kodu girmek.</p>
@@ -404,14 +423,14 @@
         </div>
       </div>
       <table>
-        <thead><tr><th>Sipariş #</th><th>Sipariş tarihi</th><th>Satış Kanalı</th><th>Müşteri</th><th>Telefon</th><th>Adres</th><th>Ölçü</th><th>Toplam Tutar</th><th>Peşinat</th><th>Bakiye</th><th>Süre</th><th>Görsel</th><th>Kod</th><th></th></tr></thead>
+        <thead><tr><th>Sipariş #</th><th>Sipariş tarihi</th><th>Satış Kanalı</th><th>Müşteri</th><th id="thQueuePhone">Telefon</th><th id="thQueueAdres">Adres</th><th id="thQueueCarpetCount" style="display:none;">Halı Sayısı</th><th>Ölçü</th><th>Toplam Tutar</th><th>Peşinat</th><th>Bakiye</th><th>Süre</th><th>Görsel</th><th>Kod</th><th></th></tr></thead>
         <tbody id="queueBody"></tbody>
       </table>
       <div class="empty" id="queueEmpty" style="display:none">Kod bekleyen yok. Her şey tamam.</div>
     </div>
   </div>
 
-  <div id="sort" class="panel">
+  <div id="sort" class="stage-panel">
     <div class="card">
       <div class="toolbar">
         <h2 style="margin:0">Ayırma &amp; etiketler</h2>
@@ -442,12 +461,7 @@
     </div>
   </div>
 
-  <div id="production" class="panel">
-    <div class="entry-subtabs">
-      <div class="entry-subtab active" data-prodsub="main">Üretim</div>
-      <div class="entry-subtab" data-prodsub="ihracat">İhracat Üretimi</div>
-    </div>
-
+  <div id="production" class="stage-panel">
     <div id="prodSub-main" class="entry-sub-panel active">
     <div class="card">
       <h2>Üretim <button class="ghost small print-btn" data-print="production" style="margin-left:8px;font-weight:normal;font-family:'Inter',sans-serif;font-size:12px;">Listeyi yazdır</button> <button class="ghost small excel-btn" data-excel="production" style="font-weight:normal;font-family:'Inter',sans-serif;font-size:12px;">Excel'e aktar</button></h2>
@@ -484,6 +498,7 @@
     </div>
     </div>
   </div>
+  </div>
 
   <div id="overview" class="panel">
     <div class="card" style="padding:14px 16px;">
@@ -503,6 +518,11 @@
     <div class="card">
       <h2>Tabana göre</h2>
       <table><thead><tr><th>Taban</th><th>Halı sayısı</th><th>Kodlandı</th><th>Basıldı</th><th>Üretildi</th></tr></thead><tbody id="tabanStatsBody"></tbody></table>
+    </div>
+    <div class="card" id="lostCargoOverviewCard" style="display:none;">
+      <h2>Kayıp Kargo</h2>
+      <p class="muted" style="margin-top:-6px">Yukarıdaki sayılara dahil değildir — bunlar gerçek yeni satış değil.</p>
+      <div class="stat-grid" id="lostCargoStatGrid"></div>
     </div>
     </div>
   </div>
@@ -676,19 +696,38 @@ function showMessage(text){
 // px and the usable height of one printed page in px, returns page groups
 // (each an array of item indices). An item taller than a whole page still
 // gets its own page rather than looping forever trying to make it fit.
-function chunkItemsIntoPages(heights, pageHeightPx){
+function chunkItemsIntoPages(heights, pageHeightPx, groupIds){
   const pages = [];
   let current = [];
   let currentHeight = 0;
-  heights.forEach((h, idx) => {
-    if(current.length && currentHeight + h > pageHeightPx){
+  let i = 0;
+  while(i < heights.length){
+    // Collect this whole rowspan group (a multi-row order's first row plus
+    // its continuation rows) as one unit — groupIds is undefined/null for
+    // non-table content (cards, headings), where each item is its own
+    // one-item "group" and this behaves exactly as before.
+    let groupEnd = i + 1;
+    if(groupIds){
+      while(groupEnd < heights.length && groupIds[groupEnd] === groupIds[i]) groupEnd++;
+    }
+    let groupHeight = 0;
+    for(let j=i;j<groupEnd;j++) groupHeight += heights[j];
+    // If this group doesn't fit in what's left of the current page, start a
+    // fresh page BEFORE the group begins — never mid-group, which is exactly
+    // what let a continuation row land on its own page with no header
+    // context to align its cells against. A group taller than a whole empty
+    // page is placed on its own page anyway (nothing else to do — it simply
+    // overflows that one page, same as any other oversized single item
+    // already would have).
+    if(current.length && currentHeight + groupHeight > pageHeightPx){
       pages.push(current);
       current = [];
       currentHeight = 0;
     }
-    current.push(idx);
-    currentHeight += h;
-  });
+    for(let j=i;j<groupEnd;j++) current.push(j);
+    currentHeight += groupHeight;
+    i = groupEnd;
+  }
   if(current.length) pages.push(current);
   return pages;
 }
@@ -706,10 +745,28 @@ function extractPrintFlow(el, inheritedHeader){
       const thead = child.querySelector(':scope > thead');
       const theadHtml = thead ? thead.outerHTML : '';
       const tbody = child.querySelector(':scope > tbody') || child;
+      // Detects a rowspanned order's rows so they can be kept together across
+      // a page break — a multi-row order's FIRST row carries rowspan="N" on
+      // most of its cells (customer, phone, totals, etc.), while its next
+      // N-1 rows only have the couple of cells that vary per item (size,
+      // photo). If a page break falls between those rows, the continuation
+      // row's few cells render starting from column 1 on the new page with
+      // no header context to align against, landing visibly in the wrong
+      // columns — exactly the bug this group tracking prevents.
+      let remainingInGroup = 0;
+      let groupId = 0;
       Array.from(tbody.children).filter(r=>r.tagName==='TR').forEach(tr=>{
+        if(remainingInGroup <= 0){
+          groupId++;
+          const cells = Array.from(tr.children);
+          const maxRowspan = cells.reduce((m,td)=>Math.max(m, parseInt(td.getAttribute('rowspan'))||1), 1);
+          remainingInGroup = maxRowspan;
+        }
+        remainingInGroup--;
         items.push({
           type:'row', html: tr.outerHTML, groupHeader: 'table:'+(child.className||'')+':'+theadHtml,
           wrapOpen: `<table class="${child.className||''}">${theadHtml}<tbody>`, wrapClose: `</tbody></table>`,
+          rowGroupId: 'table'+(child.className||'')+':'+groupId,
         });
       });
     } else if(child.tagName === 'UL' || child.tagName === 'OL'){
@@ -910,7 +967,7 @@ function openPrintPreview(sourceEl, title, subtitleHtml){
     const rects = nodes.map(n=> n ? n.getBoundingClientRect() : {top:0, height:0});
     const heights = rects.map((r, i)=> i < rects.length-1 ? (rects[i+1].top - r.top) : r.height);
 
-    const pageGroups = chunkItemsIntoPages(heights, usableBodyPx);
+    const pageGroups = chunkItemsIntoPages(heights, usableBodyPx, flow.map(item=>item.rowGroupId));
     const pagesHtml = buildPrintPagesHtml(flow, pageGroups, title, subtitleHtml);
     win.document.getElementById('pages').innerHTML = pagesHtml;
     win.document.getElementById('pageInfo').textContent = `${pageGroups.length} sayfa`;
@@ -926,6 +983,17 @@ function openPrintPreview(sourceEl, title, subtitleHtml){
 // message with no way back except uploading a different file, which silently
 // discarded the failed attempt instead of letting the person see it, act on
 // it, and close it deliberately.
+// Blocks re-uploading a file whose NAME already appears in the upload
+// history — regardless of whether its actual contents happen to differ from
+// the earlier upload. A repeated filename usually means someone re-selected
+// an already-processed export by mistake, which would create duplicate
+// orders; rejecting by name alone (rather than trying to compare contents)
+// catches that mistake immediately, before any parsing happens, and forces a
+// deliberate rename if the file genuinely is new data.
+function isDuplicateFilename(fileName){
+  const norm = (fileName||'').trim().toLocaleLowerCase('tr');
+  return state.uploadBatches.some(b => (b.fileName||'').trim().toLocaleLowerCase('tr') === norm);
+}
 function showUploadError(ids, message){
   const statusEl = document.getElementById(ids.status);
   const previewEl = ids.preview ? document.getElementById(ids.preview) : null;
@@ -973,7 +1041,7 @@ let state = { orders: [], uploadBatches: [], activityLog: [], setTemplates: [], 
   {name:'qatalina', type:'Instagram kurumsal'},
   {name:'7xhome', type:'Instagram kurumsal'},
   {name:'Carpetra Home', type:'Instagram kurumsal'},
-  {name:'BursaToptanHali', type:'Instagram kurumsal'},
+  {name:'Bursa Toptan', type:'Instagram kurumsal'},
   {name:'TY-7X GROUP', type:'Trendyol kurumsal'},
   {name:'TY-CARPETRA', type:'Trendyol kurumsal'},
   {name:'HB-7X GROUP', type:'Hepsiburada kurumsal'}
@@ -981,6 +1049,27 @@ let state = { orders: [], uploadBatches: [], activityLog: [], setTemplates: [], 
 let itemLineCount = 0;
 let itemImages = {}; // lineId -> [dataURL]
 let editingOrderId = null;
+// Tracks which single Baskı öncesi row is currently in "Düzenle" (edit) mode
+// for its code — null means none. Keyed by the same oid::ids string used for
+// data-oid/data-ids, so it identifies one specific row/group, not a whole
+// order (an order can have several coded items, only one being corrected at
+// a time).
+let queueEditingKey = null;
+// Tracks which Kayıp Kargo rows have had "Üretilecek" clicked — until then,
+// a pending Kayıp Kargo item shows the found/needs-production choice instead
+// of a code input; clicking "Üretilecek" reveals the normal code input +
+// Onayla for that one row specifically. Cleared whenever the item actually
+// resolves (either path), so it never lingers for an item that's done.
+let lostCargoRevealedKeys = new Set();
+// Same idea as queueEditingKey, but for Üretim's "Düzenle" → "Tekrar üretildi
+// olarak işaretle" flow on an already-produced item (e.g. a QC failure means
+// it needs remaking and re-confirming).
+let productionEditingKey = null;
+// Same idea again, for İhracat Üretimi's own code correction — İhracat items
+// skip Baskı öncesi's "Onaylandı + Düzenle" state entirely (coding sends them
+// straight to 'sorted', bypassing Ayırma), so a code typo caught after
+// confirming has nowhere else to be fixed except here.
+let exportCodeEditingKey = null;
 let editWasAdminAuthorized = null; // null, 'temp', or 'pin'
 let pendingUpload = null; // { fileName, sheetName, orders: [] }
 let operatorName = '';
@@ -1108,6 +1197,14 @@ async function loadState(){
       state.commonSizes = (loaded.commonSizes && loaded.commonSizes.length) ? loaded.commonSizes : state.commonSizes;
       state.productCatalog = loaded.productCatalog || {};
       state.tempGrants = loaded.tempGrants || {};
+      // Which channel and which of the four operational stages (Sipariş
+      // girişi / Baskı öncesi / Ayırma & etiketler / Üretim) was last open —
+      // restored below so re-entering the app picks up exactly where you
+      // left off instead of always resetting to Instagram / Sipariş girişi.
+      currentEntryMode = loaded.currentEntryMode || 'ig';
+      currentStageMode = loaded.currentStageMode || 'entry';
+      state.currentEntryMode = currentEntryMode;
+      state.currentStageMode = currentStageMode;
       if(loaded.channels && loaded.channels.length) state.channels = loaded.channels;
       // One-time backfill, run AFTER loading the real saved channels (not before —
       // applying it to the temporary default array first, then overwriting with
@@ -1155,6 +1252,49 @@ async function loadState(){
         group.orders.forEach(o=>{ o.channel = group.canonicalName; });
         logActivity(`Mevcut siparişlerden kanal otomatik eklendi: "${group.canonicalName}" (Instagram bayi)`);
       });
+      // "BursaToptanHali" renamed to "Bursa Toptan" — same account, just a
+      // clearer display name. Renames the existing channel registry entry
+      // AND every order already saved under the old name, so the change is
+      // complete everywhere it's recorded, not just for new orders going
+      // forward.
+      const bursaChan = state.channels.find(c=>normalizeChannelKey(c.name)===normalizeChannelKey('BursaToptanHali'));
+      if(bursaChan && bursaChan.name !== 'Bursa Toptan'){
+        const oldName = bursaChan.name;
+        bursaChan.name = 'Bursa Toptan';
+        let renamedOrders = 0;
+        state.orders.forEach(o=>{
+          if(o.channel === oldName){ o.channel = 'Bursa Toptan'; renamedOrders++; }
+        });
+        logActivity(`Kanal adı güncellendi: "${oldName}" → "Bursa Toptan" (${renamedOrders} sipariş güncellendi)`);
+      }
+      // Same catch-up, but for Sıcak Satış/İhracat customers — these register
+      // themselves as their own "bayi" channel at save time (a separate name-
+      // based entry, distinct from order.channel itself, which always stays
+      // the fixed "Sıcak Satış"/"İhracat" string). Any order saved before that
+      // auto-registration existed — or before it correctly covered İhracat,
+      // which was missing entirely until now — never got that channel entry
+      // created, so it's silently absent from Satış Kanalı Kayıt despite the
+      // order itself being right there in the system. Grouped by normalized
+      // name the same way as above, so several orders for the same customer
+      // (in slightly different casing) only ever register one canonical entry.
+      ['Sıcak Satış','İhracat'].forEach(chan=>{
+        const bayiType = chan + ' bayi';
+        const custGroups = {};
+        state.orders.forEach(o=>{
+          if(o.channel !== chan || !o.customerName) return;
+          const location = chan==='İhracat' ? [o.city, o.country].filter(Boolean).join(', ') : o.city;
+          const fullName = location ? `${o.customerName} — ${location}` : o.customerName;
+          const key = normalizeChannelKey(fullName);
+          custGroups[key] = custGroups[key] || fullName;
+        });
+        Object.values(custGroups).forEach(fullName=>{
+          const alreadyRegistered = state.channels.some(c=>normalizeChannelKey(c.name)===normalizeChannelKey(fullName));
+          if(!alreadyRegistered){
+            state.channels.push({name: fullName, type: bayiType});
+            logActivity(`Mevcut siparişlerden kanal otomatik eklendi: "${fullName}" (${bayiType})`);
+          }
+        });
+      });
       // One-time retroactive merge: uploads processed with the OLD parser (before
       // the same-order-multiple-rows fix) split one order's extra items into
       // separate order records, since each continuation row had no price of its
@@ -1193,6 +1333,25 @@ async function loadState(){
       '⚠️ Kayıtlı veriler okunamadı (bozuk veri) — bu ekranda gördüğünüz veri eksik olabilir. Lütfen bana bildirin.';
     document.getElementById('saveErrorBanner').style.display = 'block';
   }
+  // Apply the restored channel + stage selection to the UI itself — the HTML
+  // defaults to Instagram / Sipariş girişi being active, so anything
+  // different needs the matching buttons and panels switched over here,
+  // once (not via .click(), which would re-trigger saves/renders that are
+  // about to happen anyway via the render() call right below).
+  document.querySelectorAll('.entry-subtab[data-sub]').forEach(x=>x.classList.toggle('active', x.dataset.sub===currentEntryMode));
+  document.querySelectorAll('.entry-sub-panel[id^="entrySub-"]').forEach(x=>x.classList.toggle('active', x.id==='entrySub-'+currentEntryMode));
+  document.getElementById('sharedItemsCard').style.display = entryModesWithForm[currentEntryMode] ? '' : 'none';
+  document.getElementById('igOrdersListCard').style.display = currentEntryMode==='ihracat' ? 'none' : '';
+  document.getElementById('ihracatOrdersListCard').style.display = currentEntryMode==='ihracat' ? '' : 'none';
+  document.getElementById('stageBtn-sort').style.display = currentEntryMode==='ihracat' ? 'none' : '';
+  document.getElementById('prodSub-main').classList.toggle('active', currentEntryMode!=='ihracat');
+  document.getElementById('prodSub-ihracat').classList.toggle('active', currentEntryMode==='ihracat');
+  // İhracat has no Ayırma stage — if that combination was somehow saved
+  // (e.g. switched away from mid-session on an older version), fall back to
+  // Baskı öncesi rather than restoring into a stage that no longer applies.
+  if(currentEntryMode==='ihracat' && currentStageMode==='sort') currentStageMode = 'queue';
+  document.querySelectorAll('.entry-subtab[data-stage]').forEach(x=>x.classList.toggle('active', x.dataset.stage===currentStageMode));
+  document.querySelectorAll('.stage-panel').forEach(x=>x.classList.toggle('active', x.id===currentStageMode));
   render();
 }
 let saveTimer = null;
@@ -1202,16 +1361,34 @@ function saveState(){
   // storage.set calls that can collide and fail.
   clearTimeout(saveTimer);
   saveTimer = setTimeout(async ()=>{
+    let light;
     try{
       // Design-photo base64 data is kept in memory for this session only — it's excluded
       // from what gets persisted, since embedding several photos in one saved record
       // exceeds the storage size limit and causes save failures. Order/status data
       // always persists normally.
-      const light = JSON.stringify(state, (key, value) => key==='images' ? undefined : value);
+      light = JSON.stringify(state, (key, value) => key==='images' ? undefined : value);
       await window.storage.set('oc-state', light);
       document.getElementById('saveErrorBanner').style.display = 'none';
     }catch(e){
       console.error('storage failed', e);
+      // Surface the actual error (e.g. QuotaExceededError) and the size of what
+      // was being saved directly in the banner — a generic "connection or
+      // storage issue" message gives no way to tell a quota problem (fixable by
+      // trimming stored data) apart from anything else, without opening dev tools.
+      const sizeKB = light ? (light.length/1024).toFixed(0) : '?';
+      // Per-category breakdown — same exclusion (images) applied per key as the
+      // real save does, so these numbers add up to match the total above. This
+      // is what actually tells us WHAT to trim, not just that something's too big.
+      const breakdown = ['orders','uploadBatches','activityLog','productCatalog','channels','setTemplates','users']
+        .map(k=>{
+          try{
+            const s = JSON.stringify(state[k], (key, value) => key==='images' ? undefined : value);
+            return `${k}: ${(s.length/1024).toFixed(0)}KB`;
+          }catch(e2){ return `${k}: ?`; }
+        }).join(', ');
+      document.getElementById('saveErrorBannerText').textContent =
+        `⚠️ Son değişiklik kaydedilemedi — bağlantı veya depolama sorunu olabilir. Verileriniz kaybolmuş olabilir. Sayfayı kapatmadan/yenilemeden önce bağlantınızı kontrol edip tekrar deneyin. (Teknik detay: ${e.name||'Error'}: ${e.message||e} — toplam: ${sizeKB} KB — dağılım: ${breakdown})`;
       document.getElementById('saveErrorBanner').style.display = 'block';
     }
   }, 400);
@@ -1233,6 +1410,33 @@ function normalizeTaban(raw){
   if(key.includes('deri')) return 'Deri Taban';
   if(key.includes('dokuma')) return 'Dokuma';
   return (raw||'').toString().trim() || 'Dot Taban';
+}
+// Same case/spacing-insensitive matching as normalizeTaban — an Excel
+// SİPARİŞ TÜRÜ cell is free-typed by hand, and Kayıp Kargo's highlight,
+// warning, and "searched the floor?" confirmation gate in Baskı öncesi all
+// depend on an EXACT match against this value. Without normalizing here,
+// something as small as "KAYIP KARGO" or "kayıp kargo" instead of "Kayıp
+// Kargo" would silently fail to trigger any of that — the whole safety
+// mechanism defeated by a casing difference nobody would even notice.
+function normalizeSaleType(raw){
+  const key = (raw||'')
+    .replace(/İ/g, 'i').replace(/I/g, 'i').replace(/ı/g, 'i')
+    .replace(/Ç/g,'c').replace(/ç/g,'c').replace(/Ş/g,'s').replace(/ş/g,'s')
+    .replace(/Ö/g,'o').replace(/ö/g,'o').replace(/Ü/g,'u').replace(/ü/g,'u').replace(/Ğ/g,'g').replace(/ğ/g,'g')
+    .toLowerCase()
+    .replace(/\s+/g,'');
+  if(!key) return '';
+  if(key.includes('kayip') && key.includes('kargo')) return 'Kayıp Kargo';
+  if(key.includes('ucretsiz') && (key.includes('yeniden')||key.includes('gonderim'))) return 'Ücretsiz Yeniden Gönderim';
+  if(key.includes('ucretli') && (key.includes('yeniden')||key.includes('gonderim'))) return 'Ücretli Yeniden Gönderim';
+  if(key.includes('eksik')) return 'Eksik Gönderim Telafisi';
+  if(key.includes('degisim')) return 'Değişim';
+  if(key.includes('hediye')) return 'Hediye';
+  // Anything unrecognized (including "Satış"/blank, the default) is passed
+  // through as originally typed rather than forced into one of the known
+  // options — this only ever snaps a RECOGNIZED variant to its canonical
+  // spelling, never invents a category that wasn't actually there.
+  return (raw||'').toString().trim();
 }
 function normalizeChannelKey(name){
   // Case- and spacing-insensitive comparison key, so "7xhome" and "7X HOME" (or
@@ -1283,6 +1487,12 @@ function ordersLikelySameCustomer(a, b){
   // one of the two must actually agree.
   if(normText(a.customerName) !== normText(b.customerName)) return false;
   if(a.date !== b.date || a.channel !== b.channel) return false;
+  // Sipariş Türü must also agree (both blank/"Satış" counts as agreeing with
+  // each other) — a Kayıp Kargo replacement and an ordinary sale are
+  // fundamentally different kinds of order even when the same customer
+  // placed both the same day, and merging them would silently mislabel
+  // whichever row got absorbed as something it was never marked as.
+  if((a.saleType||'') !== (b.saleType||'')) return false;
   const addrOk = !a.address || !b.address || normText(a.address)===normText(b.address);
   const phoneOk = !a.phone || !b.phone || normPhone(a.phone)===normPhone(b.phone);
   return addrOk || phoneOk;
@@ -1342,8 +1552,24 @@ document.querySelectorAll('.tab').forEach(t=>{
 });
 
 // entry sub-tabs (Instagram / Trendyol / Hepsiburada / Sıcak Satış / İhracat)
-let currentEntryMode = 'ig'; // which sub-tab's fields the shared save button reads from
+// — now the shared channel selector for all four operational stages (Sipariş
+// girişi, Baskı öncesi, Ayırma & etiketler, Üretim), not just order entry.
+let currentEntryMode = 'ig'; // which channel's data every stage below is scoped to
+let currentStageMode = 'entry'; // which of the four stages is currently shown
 const entryModesWithForm = {ig:true, ihracat:true, sicaksatis:true, trendyol:true}; // hepsiburada is still a placeholder
+
+// Re-renders whichever of the four stages is currently on screen — called any
+// time the channel changes, so switching from Instagram to Sıcak Satış while
+// looking at Baskı öncesi immediately shows Sıcak Satış's own queue, not a
+// stale Instagram one.
+function renderCurrentStage(){
+  if(currentStageMode==='entry') renderOrders();
+  else if(currentStageMode==='queue') renderQueue();
+  else if(currentStageMode==='sort') renderSort();
+  else if(currentStageMode==='production') renderProduction();
+  wireImageLightbox();
+}
+
 document.querySelectorAll('.entry-subtab[data-sub]').forEach(t=>{
   t.onclick = ()=>{
     document.querySelectorAll('.entry-subtab[data-sub]').forEach(x=>x.classList.remove('active'));
@@ -1354,22 +1580,45 @@ document.querySelectorAll('.entry-subtab[data-sub]').forEach(t=>{
     document.getElementById('sharedItemsCard').style.display = entryModesWithForm[currentEntryMode] ? '' : 'none';
     document.getElementById('igOrdersListCard').style.display = currentEntryMode==='ihracat' ? 'none' : '';
     document.getElementById('ihracatOrdersListCard').style.display = currentEntryMode==='ihracat' ? '' : 'none';
-    renderOrders();
+    // İhracat skips Ayırma & etiketler entirely (coding sends it straight to
+    // production tracking) — hide that stage button rather than leaving a
+    // tab that always shows "nothing here" for this channel. If Ayırma
+    // happened to be the active stage when switching to İhracat, fall back
+    // to Baskı öncesi instead of showing an empty, inapplicable page.
+    const sortBtn = document.getElementById('stageBtn-sort');
+    sortBtn.style.display = currentEntryMode==='ihracat' ? 'none' : '';
+    // Üretim shows one or the other, never both — İhracat's production
+    // tracking (target quantity, progress over days) has nothing in common
+    // with the normal one-click "Üretildi" flow every other channel uses,
+    // so showing both at once under, say, Instagram was just confusing
+    // clutter for a box that would always be empty there anyway.
+    document.getElementById('prodSub-main').classList.toggle('active', currentEntryMode!=='ihracat');
+    document.getElementById('prodSub-ihracat').classList.toggle('active', currentEntryMode==='ihracat');
+    if(currentEntryMode==='ihracat' && currentStageMode==='sort'){
+      document.querySelector('.entry-subtab[data-stage="queue"]').click();
+      return; // that click already re-renders and saves state
+    }
+    state.currentEntryMode = currentEntryMode;
+    saveState();
+    renderCurrentStage();
+    toggleLostCargoLookup();
   };
 });
 
-// Üretim's own sub-tabs — separates the main production view (Instagram,
-// Trendyol, Hepsiburada, Sıcak Satış) from İhracat Üretimi, which only
-// applies to İhracat orders and works completely differently (progress
-// tracked against a target quantity, not one-click-done). Keeping them on
-// one shared page mixed everything together even though most people only
-// ever need one or the other at a time.
-document.querySelectorAll('.entry-subtab[data-prodsub]').forEach(t=>{
+// Stage selector (Sipariş girişi / Baskı öncesi / Ayırma & etiketler /
+// Üretim) — switches which of the four operational views is visible within
+// Sipariş Merkezi, all scoped to whichever channel is currently selected
+// above.
+document.querySelectorAll('.entry-subtab[data-stage]').forEach(t=>{
   t.onclick = ()=>{
-    document.querySelectorAll('.entry-subtab[data-prodsub]').forEach(x=>x.classList.remove('active'));
-    document.querySelectorAll('.entry-sub-panel[id^="prodSub-"]').forEach(x=>x.classList.remove('active'));
+    document.querySelectorAll('.entry-subtab[data-stage]').forEach(x=>x.classList.remove('active'));
+    document.querySelectorAll('.stage-panel').forEach(x=>x.classList.remove('active'));
     t.classList.add('active');
-    document.getElementById('prodSub-'+t.dataset.prodsub).classList.add('active');
+    currentStageMode = t.dataset.stage;
+    document.getElementById(currentStageMode).classList.add('active');
+    state.currentStageMode = currentStageMode;
+    saveState();
+    renderCurrentStage();
   };
 });
 
@@ -1473,37 +1722,68 @@ function exportSectionToExcel(key){
     }
     if(ti>0) aoa.push([]);
     if(heading) aoa.push([heading]);
+    // Tracks, per column position, how many MORE rows are still covered by an
+    // active rowspan from an earlier row — colspan is handled the same way
+    // this already did (inserting blank cells to keep columns aligned), but
+    // rowspan had no equivalent handling at all: a continuation row (fewer
+    // actual <td> cells, relying on an earlier row's rowspan for the rest)
+    // would have every one of its real cells written starting at column 1,
+    // landing them under the wrong header for every multi-item order, not
+    // just ones that happened to cross a print page boundary.
+    const rowspanCarry = [];
     table.querySelectorAll('tr').forEach(tr=>{
-      const cells = Array.from(tr.children).map(td=>{
+      const expanded = [];
+      let col = 0;
+      let cellIdx = 0;
+      // Skip any cell CSS-hidden via style.display — this table's real column
+      // count can differ by channel (Baskı öncesi shows either Telefon/Adres
+      // OR Halı Sayısı depending which channel is selected, toggling the
+      // unused one's <th> to display:none rather than removing it from the
+      // DOM). Excel export doesn't understand CSS visibility on its own, so a
+      // hidden header cell was still being written out as a real column,
+      // permanently misaligning every column after it against cells that
+      // ARE actually present.
+      const tds = Array.from(tr.children).filter(td=>td.style.display!=='none');
+      while(cellIdx < tds.length || (rowspanCarry[col]||0) > 0){
+        if((rowspanCarry[col]||0) > 0){
+          expanded.push('');
+          rowspanCarry[col] = rowspanCarry[col] - 1;
+          col++;
+          continue;
+        }
+        const td = tds[cellIdx];
         const txt = cellText(td);
+        let val;
         // Convert to a real number ONLY when the text is unambiguously numeric,
         // so Excel can sum/sort it. Deliberately conservative: dates
         // (02.09.2026), phone numbers (0555...), and anything with letters or
         // a currency suffix stay as text, because guessing wrong here silently
         // corrupts the export — a date parsed as a number becomes 2092026, and
         // a phone number loses its leading zero.
-        if(!/\d/.test(txt)) return txt;
-        if(/^0\d/.test(txt)) return txt;             // leading zero → phone/ID, keep as text
-        if(/^\d{1,2}\.\d{1,2}\.\d{4}$/.test(txt)) return txt; // dd.mm.yyyy date
+        if(!/\d/.test(txt)) val = txt;
+        else if(/^0\d/.test(txt)) val = txt;             // leading zero → phone/ID, keep as text
+        else if(/^\d{1,2}\.\d{1,2}\.\d{4}$/.test(txt)) val = txt; // dd.mm.yyyy date
         // m² values are always rendered by .toFixed(2), i.e. exactly two
         // decimal places after a period — unambiguous against a dd.mm.yyyy
         // date (which has two dots and a 4-digit year), so safe to convert.
-        if(/^-?\d+\.\d{2}$/.test(txt)) return Number(txt);
+        else if(/^-?\d+\.\d{2}$/.test(txt)) val = Number(txt);
         // Plain integer, or Turkish decimal (comma), or thousands-grouped
         // integer (1.234 / 1.234.567).
-        if(/^-?\d+$/.test(txt)) return Number(txt);
-        if(/^-?\d{1,3}(\.\d{3})+$/.test(txt)) return Number(txt.replace(/\./g,''));
-        if(/^-?\d+,\d+$/.test(txt)) return Number(txt.replace(',','.'));
-        if(/^-?\d{1,3}(\.\d{3})+,\d+$/.test(txt)) return Number(txt.replace(/\./g,'').replace(',','.'));
-        return txt;
-      });
-      // Preserve colspan gaps so columns stay aligned across rows.
-      const expanded = [];
-      Array.from(tr.children).forEach((td, i)=>{
-        expanded.push(cells[i]);
-        const span = parseInt(td.getAttribute('colspan')||'1', 10);
-        for(let k=1;k<span;k++) expanded.push('');
-      });
+        else if(/^-?\d+$/.test(txt)) val = Number(txt);
+        else if(/^-?\d{1,3}(\.\d{3})+$/.test(txt)) val = Number(txt.replace(/\./g,''));
+        else if(/^-?\d+,\d+$/.test(txt)) val = Number(txt.replace(',','.'));
+        else if(/^-?\d{1,3}(\.\d{3})+,\d+$/.test(txt)) val = Number(txt.replace(/\./g,'').replace(',','.'));
+        else val = txt;
+        expanded.push(val);
+        const rowspan = parseInt(td.getAttribute('rowspan')||'1', 10);
+        const colspan = parseInt(td.getAttribute('colspan')||'1', 10);
+        for(let k=0;k<colspan;k++){
+          if(k>0) expanded.push('');
+          if(rowspan>1) rowspanCarry[col+k] = rowspan - 1;
+        }
+        col += colspan;
+        cellIdx++;
+      }
       aoa.push(expanded);
     });
   });
@@ -1788,6 +2068,23 @@ function channelOptions(){
   if(mChannelList){
     mChannelList.innerHTML = igChannels.map(c=>`<option value="${c.name}">`).join('');
   }
+  // Every distinct Instagram customer name that's ordered before — so typing
+  // (or picking) a repeat customer's name can auto-fill their phone and
+  // address from their most recent order, instead of retyping the same
+  // details every time they order again.
+  const mNameList = document.getElementById('mNameSuggestions');
+  if(mNameList){
+    const seenNames = new Set();
+    const igCustomerNames = [];
+    state.orders.forEach(o=>{
+      if(channelCategoryForNumbering(o.channel)!=='ig' || !o.customerName) return;
+      const key = normalizeChannelKey(o.customerName);
+      if(seenNames.has(key)) return;
+      seenNames.add(key);
+      igCustomerNames.push(o.customerName);
+    });
+    mNameList.innerHTML = igCustomerNames.map(n=>`<option value="${n}">`).join('');
+  }
   const tyChannelList = document.getElementById('tyChannelSuggestions');
   if(tyChannelList){
     const tyChannels = state.channels.filter(c=>c.type==='Trendyol kurumsal' || c.type==='Trendyol bayi');
@@ -1810,6 +2107,180 @@ function channelOptions(){
     repSel.innerHTML = '<option value="">Tüm kanallar</option>' + state.channels.map(c=>`<option value="${c.name}">${c.name}</option>`).join('');
     repSel.value = current;
   }
+}
+
+// A repeat Instagram customer's phone and address auto-fill from their most
+// recent previous order the moment their name matches one exactly (typed by
+// hand or picked from the mNameSuggestions list) — only into whichever of the
+// two fields is still empty, so it never overwrites something already typed
+// for this order specifically. Since two different customers can share the
+// same name, this is flagged clearly rather than filled in silently — a
+// highlighted border on the affected fields plus an explicit warning, both
+// cleared the moment the operator actually edits either field themselves
+// (at that point the warning has done its job, whether they kept the
+// filled-in value or typed a different one).
+document.getElementById('mName').addEventListener('input', ()=>{
+  const typed = document.getElementById('mName').value.trim();
+  const phoneEl = document.getElementById('mPhone');
+  const addrEl = document.getElementById('mAddress');
+  const note = document.getElementById('mAutofillNote');
+  if(!typed){ note.style.display = 'none'; return; }
+  // Last matching order (not the first) — a returning customer's phone or
+  // address may have changed since their earliest order, so their most
+  // recent one is the more trustworthy source to fill in from.
+  const match = state.orders.slice().reverse().find(o=>channelCategoryForNumbering(o.channel)==='ig' && normalizeChannelKey(o.customerName||'')===normalizeChannelKey(typed));
+  if(!match){ note.style.display = 'none'; return; }
+  let filledAny = false;
+  if(phoneEl && !phoneEl.value.trim() && match.phone){ phoneEl.value = match.phone; phoneEl.style.borderColor = 'var(--rust)'; filledAny = true; }
+  if(addrEl && !addrEl.value.trim() && match.address){ addrEl.value = match.address; addrEl.style.borderColor = 'var(--rust)'; filledAny = true; }
+  note.style.display = filledAny ? 'block' : 'none';
+});
+['mPhone','mAddress'].forEach(id=>{
+  document.getElementById(id).addEventListener('input', ()=>{
+    document.getElementById(id).style.borderColor = '';
+    // Only hide the note once NEITHER field is still showing the highlighted
+    // "just auto-filled" border — editing one shouldn't hide a warning that
+    // still applies to the other.
+    if(!document.getElementById('mPhone').style.borderColor && !document.getElementById('mAddress').style.borderColor){
+      document.getElementById('mAutofillNote').style.display = 'none';
+    }
+  });
+});
+
+// Kayıp Kargo lookup — lets a replacement entry be built from an existing
+// order/item instead of retyping size/taban/fringe/photo from scratch. Shown
+// only while Sipariş Türü is actually set to Kayıp Kargo, for whichever
+// channel form (IG or Sıcak Satış) is currently active.
+function lostCargoSaleTypeEl(){
+  return currentEntryMode==='sicaksatis' ? document.getElementById('ssSaleType') : document.getElementById('mSaleType');
+}
+function lostCargoNameEl(){
+  return currentEntryMode==='sicaksatis' ? document.getElementById('ssName') : document.getElementById('mName');
+}
+function toggleLostCargoLookup(){
+  const el = lostCargoSaleTypeEl();
+  const card = document.getElementById('lostCargoLookupCard');
+  const show = el && el.value === 'Kayıp Kargo' && (currentEntryMode==='ig' || currentEntryMode==='sicaksatis');
+  card.style.display = show ? 'block' : 'none';
+  if(show) renderLostCargoResults();
+}
+['mSaleType','ssSaleType'].forEach(id=>{
+  document.getElementById(id).addEventListener('change', toggleLostCargoLookup);
+});
+document.getElementById('lostCargoSearch').addEventListener('input', ()=>renderLostCargoResults());
+
+// Every individual item (never pre-grouped by set — an operator may need to
+// pull just ONE piece of a multi-piece set, since it's often only that one
+// piece that went missing, failed QC, or was never produced, not the whole
+// set) from the last 30 days, same channel category as whichever form is
+// currently open, matching the typed name or the item's own assigned number.
+function searchLostCargoCandidates(query){
+  const q = query.trim().toLowerCase();
+  if(!q) return [];
+  const cutoff = Date.now() - 30*24*60*60*1000;
+  const itemNumbers = computeItemNumbers();
+  const results = [];
+  state.orders.forEach(o=>{
+    if(channelCategoryForNumbering(o.channel) !== currentEntryMode) return;
+    const placedAt = orderPlacedAt(o);
+    if(!placedAt || placedAt.getTime() < cutoff) return;
+    const nameMatches = (o.customerName||'').toLowerCase().includes(q);
+    o.items.forEach(item=>{
+      const groupKey = o.id + '::' + (item.setLabel || item.id);
+      const group = item.setLabel ? o.items.filter(i=>i.setLabel===item.setLabel) : [item];
+      const number = itemNumbers[groupKey] || '';
+      const numberMatches = number && number.toLowerCase().includes(q);
+      if(!nameMatches && !numberMatches) return;
+      results.push({order:o, item, number, group});
+    });
+  });
+  return results;
+}
+
+function renderLostCargoResults(){
+  const query = document.getElementById('lostCargoSearch').value;
+  const container = document.getElementById('lostCargoResults');
+  const candidates = searchLostCargoCandidates(query);
+  if(!query.trim()){ container.innerHTML = ''; return; }
+  if(!candidates.length){ container.innerHTML = '<p class="muted">Son 30 günde eşleşen sipariş bulunamadı.</p>'; return; }
+  // A sipariş number is NOT unique across 30 days — each channel's numbering
+  // resets every calendar day, so "IG-105" recurs roughly weekly (once per
+  // matching day-of-week) and can easily belong to 3-4 completely different
+  // carpets within one month. If the typed query exactly matches a number
+  // (not just a name search that happens to contain digits) and more than
+  // one DISTINCT item carries that exact number, this is flagged clearly —
+  // picking the wrong one here means cloning the wrong carpet's specs into
+  // the replacement.
+  const exactNumberMatches = candidates.filter(c=>c.number && c.number.toLowerCase() === query.trim().toLowerCase());
+  const distinctItemsForExactNumber = new Set(exactNumberMatches.map(c=>c.item.id));
+  const ambiguousWarning = distinctItemsForExactNumber.size > 1
+    ? `<p style="color:var(--rust);font-weight:600;">⚠ "${query.trim()}" numarası son 30 günde birden fazla farklı üründe kullanılmış (numaralar her gün sıfırlanır). Doğru ürünü SEÇERKEN KODLANMA TARİHİNE bakarak emin olun.</p>`
+    : '';
+  // Grouped by order for display, so "Tüm siparişi ekle" has an obvious home
+  // next to the individual items it covers, without duplicating the customer
+  // name/date header per item.
+  const byOrder = new Map();
+  candidates.forEach(c=>{
+    if(!byOrder.has(c.order.id)) byOrder.set(c.order.id, {order:c.order, items:[]});
+    byOrder.get(c.order.id).items.push(c);
+  });
+  container.innerHTML = ambiguousWarning + [...byOrder.values()].map(({order, items})=>`
+    <div style="border:1px solid var(--line);border-radius:8px;padding:10px;margin-bottom:8px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px;">
+        <div><strong>${order.customerName}</strong> <span class="muted">— sipariş tarihi ${order.date||'-'}</span></div>
+        <button type="button" class="ghost small lost-cargo-add-order" data-oid="${order.id}">Tüm siparişi ekle (${items.length} ürün)</button>
+      </div>
+      ${items.map(c=>{
+        // The number is tied to when the item was CODED, not when the order
+        // was placed — those can be different days, and the coded date is
+        // what actually determines which "IG-105" this is, so it's shown
+        // right next to the number rather than relying on the order date above.
+        const codedDateStr = c.item.codedAt ? new Date(c.item.codedAt).toLocaleDateString('tr-TR', {timeZone:'Europe/Istanbul'}) : null;
+        return `
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:4px 0;border-top:1px solid var(--line);margin-top:4px;">
+          <span>${c.number ? `<strong>${c.number}</strong>${codedDateStr ? ` <span class="muted">(kodlanma: ${codedDateStr})</span>` : ''} — ` : ''}${c.item.size}${c.item.setLabel ? ` <span class="muted">(${displaySetLabel(c.item.setLabel)})</span>` : ''} — ${c.item.taban||'Dot Taban'}</span>
+          <button type="button" class="ghost small lost-cargo-add-item" data-oid="${order.id}" data-iid="${c.item.id}">Bu ürünü ekle</button>
+        </div>
+      `;}).join('')}
+    </div>
+  `).join('');
+  container.querySelectorAll('.lost-cargo-add-item').forEach(b=>{
+    b.onclick = ()=>{
+      const order = state.orders.find(o=>o.id===b.dataset.oid);
+      const item = order.items.find(i=>i.id===b.dataset.iid);
+      cloneLostCargoItem(order, [item]);
+    };
+  });
+  container.querySelectorAll('.lost-cargo-add-order').forEach(b=>{
+    b.onclick = ()=>{
+      const order = state.orders.find(o=>o.id===b.dataset.oid);
+      cloneLostCargoItem(order, order.items);
+    };
+  });
+}
+
+// Clones the picked item(s) into the current entry form's Halı kalemleri —
+// size/taban/fringe/shape/photo carried over so none of it needs retyping,
+// but deliberately WITHOUT code/status/setLabel, since this is a fresh
+// production run that needs its own coding and doesn't need to preserve the
+// original's set grouping (a replacement pulled for one lost piece isn't
+// part of a set anymore). Also fills in the customer name if it's still
+// empty, and links back to the source order for traceability.
+// Tracks which original order a Kayıp Kargo replacement was cloned from, for
+// traceability once the new order is actually saved.
+let lostCargoOriginalOrderId = null;
+function cloneLostCargoItem(sourceOrder, items){
+  const nameEl = lostCargoNameEl();
+  if(nameEl && !nameEl.value.trim()){
+    nameEl.value = sourceOrder.customerName;
+    nameEl.dispatchEvent(new Event('input'));
+  }
+  items.forEach(item=>{
+    addItemLine({ size:item.size, qty:item.qty, taban:item.taban, fringe:item.fringe,
+      shape:item.shape, images:item.images, pricePerM2:item.pricePerM2 });
+  });
+  lostCargoOriginalOrderId = sourceOrder.id;
+  logActivity(`Kayıp Kargo: "${sourceOrder.customerName}" siparişinden (${sourceOrder.date||'-'}) ${items.length} ürün yeniden üretim için kopyalandı`);
 }
 
 function countCarpets(items){
@@ -1939,6 +2410,7 @@ function renderReport(){
   const to = toVal ? (()=>{ const [y,m,d]=toVal.split('-').map(Number); return new Date(y,m-1,d,23,59,59,999); })() : null;
 
   const matchingOrders = state.orders.filter(o=>{
+    if(o.saleType==='Kayıp Kargo') return false; // never a real sale — tracked separately below instead
     if(chanFilter && o.channel !== chanFilter) return false;
     if(!from && !to) return true; // no date filter set — every order qualifies, no need to even parse its date
     const d = parseDMY(o.date);
@@ -1947,10 +2419,50 @@ function renderReport(){
     if(to && d > to) return false;
     return true;
   });
+  // Same date/channel window, but ONLY Kayıp Kargo orders — reported in its
+  // own section further down rather than folded into the real sales figures
+  // above, exactly why they were excluded from matchingOrders in the first
+  // place.
+  const matchingLostCargoOrders = state.orders.filter(o=>{
+    if(o.saleType!=='Kayıp Kargo') return false;
+    if(chanFilter && o.channel !== chanFilter) return false;
+    if(!from && !to) return true;
+    const d = parseDMY(o.date);
+    if(!d) return false;
+    if(from && d < from) return false;
+    if(to && d > to) return false;
+    return true;
+  });
 
   const el = document.getElementById('reportResults');
-  if(!matchingOrders.length){
+  // A period/channel with only Kayıp Kargo cases and zero real orders still
+  // has something worth showing (the Kayıp Kargo section itself) — so this
+  // only bails out completely when BOTH are empty.
+  if(!matchingOrders.length && !matchingLostCargoOrders.length){
     el.innerHTML = '<div class="empty">Bu döneme/kanala uyan sipariş yok.</div>';
+    return;
+  }
+  // Counted per-CARPET like every other stat in this report — a single
+  // Kayıp Kargo order can mix items across different resolutions (some
+  // found, some genuinely reproduced), so this can't be summarized at the
+  // order level the way the main stats above are.
+  let lostCargoAwaiting=0, lostCargoFound=0, lostCargoReproducing=0;
+  matchingLostCargoOrders.forEach(o=>{
+    lostCargoAwaiting += countCarpets(o.items.filter(i=>i.status==='pending'));
+    lostCargoFound += countCarpets(o.items.filter(i=>i.status==='lostcargo-found'));
+    lostCargoReproducing += countCarpets(o.items.filter(i=>i.status==='coded'||i.status==='sorted'||i.status==='produced'));
+  });
+  const lostCargoSectionHtml = matchingLostCargoOrders.length ? `
+    <h3 style="font-family:'Fraunces',serif;font-size:15px;margin:20px 0 8px;">Kayıp Kargo</h3>
+    <p class="muted" style="margin-top:-4px">Yukarıdaki sayılara dahil değildir — bunlar gerçek yeni satış değil.</p>
+    <div class="stat-grid">
+      <div class="stat"><div class="n">${matchingLostCargoOrders.length}</div><div class="l">Vaka</div></div>
+      <div class="stat"><div class="n">${lostCargoAwaiting}</div><div class="l">Karar bekliyor</div></div>
+      <div class="stat"><div class="n">${lostCargoFound}</div><div class="l">Sahada bulundu</div></div>
+      <div class="stat"><div class="n">${lostCargoReproducing}</div><div class="l">Yeniden üretiliyor/üretildi</div></div>
+    </div>` : '';
+  if(!matchingOrders.length){
+    el.innerHTML = '<div class="empty">Bu döneme/kanala uyan gerçek sipariş yok.</div>' + lostCargoSectionHtml;
     return;
   }
 
@@ -2147,7 +2659,8 @@ function renderReport(){
           return `<tr><td class="ts">${itemNumbers[numKey]||'—'}</td><td>${o.date}</td><td><span class="badge-chan">${o.channel}</span></td><td>${o.customerName}</td><td>${sizeText}</td><td>${adet}</td><td>${m2Total.toFixed(2)}</td><td>${bundle[0].taban}</td><td>${pill(bundle[0].status==='sorted'?'in production':bundle[0].status)}</td></tr>`;
         }).join('');
       })()}</tbody>
-    </table>`;
+    </table>
+    ${lostCargoSectionHtml}`;
 }
 document.getElementById('runReport').onclick = renderReport;
 ['repFrom','repTo','repChannel'].forEach(id=>{
@@ -2160,6 +2673,13 @@ function addItemLine(vals){
   const div = document.createElement('div');
   div.className = 'item-line';
   div.dataset.id = id;
+  // Carried through silently when rebuilding an existing item into this form
+  // (editing an order) — not a field the operator fills in themselves, but
+  // without preserving it, saving ANY edit to a Trendyol item — even just
+  // fixing its size or taban — would permanently sever its connection to the
+  // catalog photo matched by this barkod, since the saved item array is
+  // rebuilt from this form's fields on every save, new entry or edit alike.
+  if(vals.barkod) div.dataset.barkod = vals.barkod;
   const showPriceM2Field = currentEntryMode === 'ihracat' || currentEntryMode === 'sicaksatis';
   div.innerHTML = `
     <div class="item-line-row item-line-row1">
@@ -2694,9 +3214,14 @@ document.getElementById('saveOrder').onclick = async ()=>{
   }
   // At least one of Fotoğraf or Kod is required per item — a carpet with
   // neither can't actually be identified or coded once it reaches Baskı
-  // öncesi, so this is caught here rather than discovered later.
+  // öncesi, so this is caught here rather than discovered later. A Trendyol
+  // item whose photo comes from the product catalog (matched by barkod,
+  // never a manually-uploaded file) still counts as having a photo — it
+  // genuinely does, just not one stored in itemImages, which only tracks
+  // manual uploads.
   const missingPhotoOrCode = allSingleRows.filter(l=>{
-    const hasPhoto = itemImages[l.dataset.id] && itemImages[l.dataset.id].length;
+    const hasPhoto = (itemImages[l.dataset.id] && itemImages[l.dataset.id].length) ||
+      (l.dataset.barkod && state.productCatalog[l.dataset.barkod]);
     const hasCode = l.querySelector('.il-code').value.trim();
     return !hasPhoto && !hasCode;
   });
@@ -2738,6 +3263,12 @@ document.getElementById('saveOrder').onclick = async ()=>{
   const singleItems = allSingleRows.map(l=>{
     const code = l.querySelector('.il-code').value.trim();
     const priceInput = l.querySelector('.il-pricem2');
+    // A Kayıp Kargo item always starts 'pending' regardless of whether a code
+    // was already typed at entry — otherwise typing the code here (rather
+    // than leaving it for Baskı öncesi) would skip the item straight to
+    // "coded" and silently bypass the whole point of this Sipariş Türü: the
+    // explicit "searched the floor and didn't find it" confirmation gate.
+    const isLostCargoEntry = (currentEntryMode==='ig' || currentEntryMode==='sicaksatis') && lostCargoSaleTypeEl().value === 'Kayıp Kargo';
     return {
       id: uid(),
       size: l.querySelector('.il-size').value.trim(),
@@ -2746,7 +3277,8 @@ document.getElementById('saveOrder').onclick = async ()=>{
       fringe: l.querySelector('.il-fringe').value,
       shape: l.querySelector('.il-shape').value,
       pricePerM2: priceInput ? priceInput.value.trim() : '',
-      code, status: code ? 'coded' : 'pending', images: itemImages[l.dataset.id] || []
+      code, status: (code && !isLostCargoEntry) ? 'coded' : 'pending', images: itemImages[l.dataset.id] || [],
+      barkod: l.dataset.barkod || '',
     };
   });
 
@@ -2759,6 +3291,7 @@ document.getElementById('saveOrder').onclick = async ()=>{
     const priceInput = block.querySelector('.set-pricem2');
     const pricePerM2 = priceInput ? priceInput.value.trim() : '';
     const images = itemImages[setId] || [];
+    const isLostCargoEntry = (currentEntryMode==='ig' || currentEntryMode==='sicaksatis') && lostCargoSaleTypeEl().value === 'Kayıp Kargo';
     return [...block.querySelectorAll('.set-piece')].map(p=>({
       id: uid(),
       size: p.querySelector('.sp-size').value.trim(),
@@ -2768,7 +3301,7 @@ document.getElementById('saveOrder').onclick = async ()=>{
       shape: p.querySelector('.sp-shape').value,
       pricePerM2, // shared across the whole set, applied to its combined m² — not per piece
       setLabel,
-      code, status: code ? 'coded' : 'pending', images
+      code, status: (code && !isLostCargoEntry) ? 'coded' : 'pending', images
     }));
   });
 
@@ -2873,13 +3406,18 @@ document.getElementById('saveOrder').onclick = async ()=>{
     if(phoneResult.corrected) phoneInput.value = phoneResult.value;
   }
 
-  // Ücretsiz Yeniden Gönderim seçiliyse tutar 0 olmak zorunda.
-  const priceFieldEl = document.getElementById(f.priceFieldId);
-  priceFieldEl.style.borderColor = '';
-  if(f.saleType === 'Ücretsiz Yeniden Gönderim' && priceNum !== 0){
-    priceFieldEl.style.borderColor = 'var(--rust)';
-    showMessage('"Ücretsiz Yeniden Gönderim" seçildiğinde Toplam Tutar 0 olmalı. Lütfen düzeltin.');
-    return;
+  // Ücretsiz Yeniden Gönderim seçiliyse tutar 0 olmak zorunda — only applies to
+  // channels that actually have a saleType/price concept at all (Trendyol has
+  // neither, so priceFieldId is deliberately empty there and this whole check
+  // is skipped rather than touching a field that doesn't exist).
+  const priceFieldEl = f.priceFieldId ? document.getElementById(f.priceFieldId) : null;
+  if(priceFieldEl){
+    priceFieldEl.style.borderColor = '';
+    if(f.saleType === 'Ücretsiz Yeniden Gönderim' && priceNum !== 0){
+      priceFieldEl.style.borderColor = 'var(--rust)';
+      showMessage('"Ücretsiz Yeniden Gönderim" seçildiğinde Toplam Tutar 0 olmalı. Lütfen düzeltin.');
+      return;
+    }
   }
 
   // Order date comes from the picker (defaults to today, editable for backlog entries).
@@ -2916,16 +3454,27 @@ document.getElementById('saveOrder').onclick = async ()=>{
       existing.customerName = f.name;
       existing.phone = f.phone;
       existing.address = f.address;
-      existing.price = f.price;
+      // Trendyol's manual-entry form has no price/prepaid/currency fields at
+      // all — payment there is handled entirely by Trendyol's own system, so
+      // f.price etc. are always deliberately empty strings, not a genuine
+      // "clear this out" from the operator. Overwriting existing.price with
+      // that emptiness on every edit — even one only touching a carpet's
+      // size or şekil — silently wiped out whatever price the original Excel
+      // upload had set. Skipped here so Trendyol edits leave the
+      // upload-derived price untouched; every other channel still updates
+      // these fields normally, since their forms genuinely collect them.
+      if(currentEntryMode !== 'trendyol'){
+        existing.price = f.price;
+        existing.prepaidAmount = f.prepaidAmount;
+        existing.currency = f.currency;
+        existing.foreignAmount = f.foreignAmount;
+        existing.exchangeRate = f.exchangeRate;
+      }
       existing.date = orderDateStr;
       existing.note = f.note;
       existing.saleType = f.saleType;
-      existing.prepaidAmount = f.prepaidAmount;
       existing.city = f.city;
       existing.country = f.country;
-      existing.currency = f.currency;
-      existing.foreignAmount = f.foreignAmount;
-      existing.exchangeRate = f.exchangeRate;
       existing.items = items;
       existing.lastEditedAt = new Date().toISOString();
       existing.lastEditedBy = editWasAdminAuthorized==='pin' ? 'Admin' : (operatorName || 'Bilinmeyen');
@@ -2947,6 +3496,10 @@ document.getElementById('saveOrder').onclick = async ()=>{
       cargoStatus: '',
       note: f.note,
       saleType: f.saleType,
+      // Only meaningful for a Kayıp Kargo entry built via the lookup — traces
+      // this replacement back to the order it was cloned from. null for any
+      // ordinary order, or a Kayıp Kargo entry typed by hand instead.
+      originalOrderId: f.saleType==='Kayıp Kargo' ? lostCargoOriginalOrderId : null,
       prepaidAmount: f.prepaidAmount,
       city: f.city,
       country: f.country,
@@ -2973,6 +3526,18 @@ document.getElementById('saveOrder').onclick = async ()=>{
       if(!alreadyRegistered){
         state.channels.push({name: fullName, type:'Sıcak Satış bayi'});
         logActivity(`Sıcak Satış müşterisi otomatik kanal olarak eklendi: "${fullName}"`);
+      }
+    }
+    // Same idea for İhracat — city and country both help disambiguate an
+    // international buyer where a domestic Sıcak Satış customer only really
+    // needs the city.
+    if(currentEntryMode==='ihracat'){
+      const location = [f.city, f.country].filter(Boolean).join(', ');
+      const fullName = location ? `${f.name} — ${location}` : f.name;
+      const alreadyRegistered = state.channels.some(c=>normalizeChannelKey(c.name)===normalizeChannelKey(fullName));
+      if(!alreadyRegistered){
+        state.channels.push({name: fullName, type:'İhracat bayi'});
+        logActivity(`İhracat müşterisi otomatik kanal olarak eklendi: "${fullName}"`);
       }
     }
     // Same idea for a newly-typed Instagram channel name — matching how a new
@@ -3006,6 +3571,8 @@ document.getElementById('saveOrder').onclick = async ()=>{
     document.getElementById('tyOrderDate').value = toDateInputValue(new Date());
   } else {
     ['mName','mPhone','mAddress','mPrice','mNote','mPrepaid'].forEach(id=>document.getElementById(id).value=''); document.getElementById('mSaleType').value='';
+    ['mPhone','mAddress'].forEach(id=>document.getElementById(id).style.borderColor=''); document.getElementById('mAutofillNote').style.display='none';
+    lostCargoOriginalOrderId = null; document.getElementById('lostCargoLookupCard').style.display='none'; document.getElementById('lostCargoSearch').value=''; document.getElementById('lostCargoResults').innerHTML='';
     document.getElementById('mOrderDate').value = toDateInputValue(new Date());
     updateCollectPreview();
   }
@@ -3036,18 +3603,28 @@ async function startEditOrder(orderId){
     editWasAdminAuthorized = null;
   }
 
+  // Jump to Sipariş Merkezi → Sipariş girişi, on whichever channel this
+  // order belongs to — data-tab="entry" no longer exists since the channel-
+  // first restructure folded it into Sipariş Merkezi, so activating the old
+  // id here would throw and silently abort the rest of this function before
+  // the form ever got populated.
   document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));
   document.querySelectorAll('.panel').forEach(x=>x.classList.remove('active'));
-  document.querySelector('.tab[data-tab="entry"]').classList.add('active');
+  document.querySelector('.tab[data-tab="siparismerkezi"]').classList.add('active');
+  document.getElementById('siparismerkezi').classList.add('active');
+  document.querySelectorAll('.entry-subtab[data-stage]').forEach(x=>x.classList.remove('active'));
+  document.querySelectorAll('.stage-panel').forEach(x=>x.classList.remove('active'));
+  document.querySelector('.entry-subtab[data-stage="entry"]').classList.add('active');
   document.getElementById('entry').classList.add('active');
+  currentStageMode = 'entry';
 
-  // Which sub-tab this order belongs to: İhracat orders always store the fixed
-  // channel value "İhracat" (there's no per-buyer channel selection anymore),
-  // otherwise it's the Instagram form (the only other one with manual entry
-  // built so far).
+  // Which sub-tab this order belongs to — uses the same channel categorization
+  // as everywhere else in the app (numbering, grouping) rather than a separate
+  // ad-hoc check, which is exactly what previously left Trendyol orders
+  // falling through to the Instagram form with no explicit case for them at
+  // all — editing a Trendyol order silently landed on the wrong channel.
   const isExport = order.channel === 'İhracat';
-  const isSicakSatis = !isExport && order.channel === 'Sıcak Satış';
-  const targetSub = isExport ? 'ihracat' : (isSicakSatis ? 'sicaksatis' : 'ig');
+  const targetSub = channelCategoryForNumbering(order.channel);
   document.querySelectorAll('.entry-subtab[data-sub]').forEach(x=>x.classList.remove('active'));
   document.querySelectorAll('.entry-sub-panel[id^="entrySub-"]').forEach(x=>x.classList.remove('active'));
   document.querySelector(`.entry-subtab[data-sub="${targetSub}"]`).classList.add('active');
@@ -3056,6 +3633,15 @@ async function startEditOrder(orderId){
   document.getElementById('sharedItemsCard').style.display = '';
   document.getElementById('igOrdersListCard').style.display = isExport ? 'none' : '';
   document.getElementById('ihracatOrdersListCard').style.display = isExport ? '' : 'none';
+  // Same channel-switch side effects the real selector handler applies —
+  // duplicated here since editing an order jumps channels directly rather
+  // than going through that click handler.
+  document.getElementById('stageBtn-sort').style.display = currentEntryMode==='ihracat' ? 'none' : '';
+  document.getElementById('prodSub-main').classList.toggle('active', currentEntryMode!=='ihracat');
+  document.getElementById('prodSub-ihracat').classList.toggle('active', currentEntryMode==='ihracat');
+  state.currentEntryMode = currentEntryMode;
+  state.currentStageMode = currentStageMode;
+  saveState();
 
   const d = parseDMY(order.date);
   const dateVal = toDateInputValue(d || new Date());
@@ -3070,7 +3656,12 @@ async function startEditOrder(orderId){
     document.getElementById('exNote').value = order.note||'';
     document.getElementById('exOrderDate').value = dateVal;
     updateExchangeTL();
-  } else if(isSicakSatis){
+  } else if(targetSub==='trendyol'){
+    document.getElementById('tyChannel').value = order.channel;
+    document.getElementById('tyName').value = order.customerName;
+    document.getElementById('tyOrderDate').value = dateVal;
+    document.getElementById('tyNote').value = order.note||'';
+  } else if(targetSub==='sicaksatis'){
     document.getElementById('ssName').value = order.customerName;
     document.getElementById('ssPhone').value = order.phone||'';
     document.getElementById('ssCity').value = order.city||'';
@@ -3109,7 +3700,7 @@ async function startEditOrder(orderId){
       );
     } else {
       addItemLine({ size:item.size, qty:item.qty, taban:item.taban, fringe:item.fringe,
-        shape:item.shape, code:item.code, images:item.images, pricePerM2:item.pricePerM2 });
+        shape:item.shape, code:item.code, images:item.images, pricePerM2:item.pricePerM2, barkod:item.barkod });
     }
   });
   recalcItemTotals();
@@ -3117,7 +3708,13 @@ async function startEditOrder(orderId){
   editingOrderId = orderId;
   document.getElementById('saveOrder').textContent = 'Siparişi güncelle';
   document.getElementById('cancelEdit').style.display = 'inline-block';
-  window.scrollTo({top:0, behavior:'smooth'});
+  // Scroll straight to this channel's own manual-entry card, not the top of
+  // the entry stage — Instagram and Trendyol both have an Excel-upload card
+  // sitting above their manual-entry form, so scrolling to the stage's own
+  // top landed on the upload card instead of the now-populated, editable
+  // form, making it look like editing had done nothing at all.
+  const targetCard = document.getElementById('manualEntryCard-'+targetSub);
+  (targetCard || document.getElementById('entry')).scrollIntoView({behavior:'smooth', block:'start'});
 }
 
 document.getElementById('cancelEdit').onclick = ()=>{
@@ -3138,6 +3735,8 @@ document.getElementById('cancelEdit').onclick = ()=>{
     document.getElementById('tyOrderDate').value = toDateInputValue(new Date());
   } else {
     ['mName','mPhone','mAddress','mPrice','mNote','mPrepaid'].forEach(id=>document.getElementById(id).value=''); document.getElementById('mSaleType').value='';
+    ['mPhone','mAddress'].forEach(id=>document.getElementById(id).style.borderColor=''); document.getElementById('mAutofillNote').style.display='none';
+    lostCargoOriginalOrderId = null; document.getElementById('lostCargoLookupCard').style.display='none'; document.getElementById('lostCargoSearch').value=''; document.getElementById('lostCargoResults').innerHTML='';
     document.getElementById('mOrderDate').value = toDateInputValue(new Date());
     updateCollectPreview();
   }
@@ -3261,6 +3860,13 @@ document.getElementById('fileInput').onchange = async (e)=>{
   const file = e.target.files[0];
   if(!file) return;
   document.getElementById('fileInputName').textContent = file.name;
+  if(isDuplicateFilename(file.name)){
+    showUploadError(
+      {status:'uploadStatus', preview:'uploadPreview', input:'fileInput', inputName:'fileInputName'},
+      `⚠️ "${file.name}" adlı bir dosya daha önce yüklenmiş. Aynı isimli bir dosya tekrar yüklenemez — verinin farklı olduğundan eminseniz dosyayı farklı bir isimle kaydedip tekrar yükleyin.`
+    );
+    return;
+  }
   const buf = await file.arrayBuffer();
   try{
     const wb = XLSX.read(buf, {type:'array'});
@@ -3352,6 +3958,21 @@ document.getElementById('fileInput').onchange = async (e)=>{
         const looked = findSizesForName(explicitSetLabel);
         if(looked) sizeTokens = looked.slice();
       }
+      // Same bath-mat-set fallback the Trendyol side already has, but for
+      // sheets with no separate SET column at all — the whole set name (or
+      // just the bare word "PASPAS"/"BANYO") gets written directly into ÖLÇÜ
+      // instead, since there's nowhere else to put it. Tried only after both
+      // of the above have already failed to find a size: first the same
+      // fuzzy named-set lookup used above (catches "Banyo Paspas Seti" with a
+      // typo), then a plain keyword check (catches just "PASPAS" alone, which
+      // is too short/different in length for the fuzzy match above to safely
+      // catch without risking false positives on unrelated short entries).
+      const olcuRaw = get('ÖLÇÜ').toString().trim();
+      if(!sizeTokens.length && olcuRaw){
+        const looked = findSizesForName(olcuRaw);
+        if(looked) sizeTokens = looked.slice();
+        else if(normName(olcuRaw).includes('paspas') || normName(olcuRaw).includes('banyo')) sizeTokens = ['40x60','60x100'];
+      }
       if(!sizeTokens.length){
         if(explicitSetLabel) namedOnlySkipped++; // named but no sizes, and no known/saved match to resolve it
         continue;
@@ -3385,7 +4006,7 @@ document.getElementById('fileInput').onchange = async (e)=>{
           price: priceVal,
           cargoStatus: get('KARGO STATÜ').toString().trim(),
           note: get('NOT').toString().trim(),
-          saleType: get('SİPARİŞ TÜRÜ').toString().trim(),
+          saleType: normalizeSaleType(get('SİPARİŞ TÜRÜ').toString().trim()),
           collectOverride: get('BAKİYE').toString().trim(),
           prepaidAmount: normalizePrepaid(get('PEŞİNAT')),
           source: 'upload',
@@ -3564,6 +4185,13 @@ document.getElementById('tyFileInput').onchange = async (e)=>{
   const file = e.target.files[0];
   if(!file) return;
   document.getElementById('tyFileInputName').textContent = file.name;
+  if(isDuplicateFilename(file.name)){
+    showUploadError(
+      {status:'tyUploadStatus', preview:'tyUploadPreview', input:'tyFileInput', inputName:'tyFileInputName'},
+      `⚠️ "${file.name}" adlı bir dosya daha önce yüklenmiş. Aynı isimli bir dosya tekrar yüklenemez — verinin farklı olduğundan eminseniz dosyayı farklı bir isimle kaydedip tekrar yükleyin.`
+    );
+    return;
+  }
   const statusEl = document.getElementById('tyUploadStatus');
   const previewEl = document.getElementById('tyUploadPreview');
   const buf = await file.arrayBuffer();
@@ -3647,24 +4275,13 @@ document.getElementById('tyFileInput').onchange = async (e)=>{
       });
     }
 
-    // ---- Validate: every line must have a buyer, a size, and a shop -------
-    const problems = [];
-    lines.forEach(l=>{
-      const missing = [];
-      if(!l.buyer) missing.push('müşteri adı');
-      if(!l.sizes.length) missing.push('ölçü (ürün adında bulunamadı)');
-      if(!l.rawShop) missing.push('satış kanalı');
-      if(missing.length){
-        problems.push(`Satır ${l.sheetRow}${l.buyer?` (${l.buyer})`:''}${l.product?` — "${l.product.slice(0,45)}${l.product.length>45?'…':''}"`:''}: ${missing.join(', ')} eksik`);
-      }
-    });
-    if(problems.length){
-      showTrendyolProblems(
-        `<strong style="color:var(--rust)">⚠️ Yükleme yapılamadı — ${problems.length} satırda eksik bilgi var.</strong> Lütfen Excel dosyasını düzeltip tekrar yükleyin:`,
-        problems
-      );
-      return;
-    }
+    // ---- Missing müşteri adı / ölçü / satış kanalı no longer blocks the
+    // whole upload — these rows still get included (so nothing needs fixing
+    // in Excel just to get everything else in), flagged in the preview
+    // instead, matching the same warn-and-override pattern IG uses. A line
+    // with no resolvable size still gets ONE placeholder item (empty size)
+    // rather than silently contributing nothing, so the gap stays visible
+    // and fixable via Düzenle rather than the row just vanishing.
 
     // ---- Guard: consecutive same-buyer rows must share ONE shop ------------
     // Merging groups an order from consecutive rows with the same buyer name.
@@ -3675,7 +4292,10 @@ document.getElementById('tyFileInput').onchange = async (e)=>{
     const shopConflicts = [];
     for(let i=1;i<lines.length;i++){
       const prev = lines[i-1], cur = lines[i];
-      if(normText(prev.buyer) === normText(cur.buyer) && prev.shop !== cur.shop){
+      // Only a meaningful conflict when BOTH rows actually have a buyer name —
+      // two rows that both happen to be missing one aren't "the same
+      // customer" just because they're both blank.
+      if(prev.buyer && cur.buyer && normText(prev.buyer) === normText(cur.buyer) && prev.shop !== cur.shop){
         shopConflicts.push(`${cur.buyer}: satır ${prev.sheetRow} "${prev.shop||'—'}" ile satır ${cur.sheetRow} "${cur.shop||'—'}" farklı satış kanallarında görünüyor`);
       }
     }
@@ -3691,20 +4311,28 @@ document.getElementById('tyFileInput').onchange = async (e)=>{
     const orders = [];
     let current = null;
     lines.forEach(l=>{
-      const sameAsCurrent = current
+      // A buyer-less row never merges into a previous order (see the same
+      // reasoning as the shop-conflict guard above) — it always starts its
+      // own order instead, so an accidental match between two unrelated
+      // blank names can't happen.
+      const sameAsCurrent = current && l.buyer
         && normText(current._buyer) === normText(l.buyer)
         && current.channel === l.shop;
+      // A line with no resolvable size still needs ONE item to actually
+      // exist and be visible — an empty size string, clearly flagged in the
+      // preview below, rather than the line silently contributing nothing.
+      const itemSizes = l.sizes.length ? l.sizes : [''];
       if(sameAsCurrent){
         // another line of the same order
-        const setLabel = l.sizes.length>1 ? (l.isPaspasSet ? 'Banyo Paspas Seti' : `${l.sizes.length}'li set`) : '';
-        l.sizes.forEach(sz=>current.items.push({
+        const setLabel = itemSizes.length>1 ? (l.isPaspasSet ? 'Banyo Paspas Seti' : `${itemSizes.length}'li set`) : '';
+        itemSizes.forEach(sz=>current.items.push({
           id: uid(), size: sz, qty: l.qty, taban:'Dot Taban', fringe: l.fringe||'Saçaksız', shape: l.shape||'',
           setLabel, code:'', status:'pending', images: [], barkod: l.barkod||'',
         }));
         // Sum the amounts across the merged rows.
         current._amountSum += priceToNumber(l.amount) || 0;
       } else {
-        const setLabel = l.sizes.length>1 ? (l.isPaspasSet ? 'Banyo Paspas Seti' : `${l.sizes.length}'li set`) : '';
+        const setLabel = itemSizes.length>1 ? (l.isPaspasSet ? 'Banyo Paspas Seti' : `${itemSizes.length}'li set`) : '';
         current = {
           id: uid(),
           date: l.dateStr,
@@ -3717,7 +4345,7 @@ document.getElementById('tyFileInput').onchange = async (e)=>{
           source:'upload',
           sourceFile: file.name,
           _amountSum: priceToNumber(l.amount) || 0,
-          items: l.sizes.map(sz=>({
+          items: itemSizes.map(sz=>({
             id: uid(), size: sz, qty: l.qty, taban:'Dot Taban', fringe: l.fringe||'Saçaksız', shape: l.shape||'',
             setLabel, code:'', status:'pending', images: [], barkod: l.barkod||'',
           })),
@@ -3787,16 +4415,46 @@ function showTrendyolProblems(headerHtml, problemsList){
 function renderTrendyolPreview(){
   const box = document.getElementById('tyUploadPreview');
   if(!pendingTrendyolUpload || !pendingTrendyolUpload.orders.length){ box.innerHTML=''; renderTrendyolUploadLog(); return; }
+  // Required fields mirror what Trendyol's own manual entry form requires
+  // (Müşteri adı, Satış Kanalı) — Trendyol has no Telefon/Adres concept at
+  // all, since delivery and payment run entirely through Trendyol's own
+  // system, so those aren't checked here the way they are for IG. A line
+  // with no resolvable Ölçü is flagged the same way rather than silently
+  // skipped, since a placeholder item was created for it upstream instead
+  // of the row contributing nothing.
+  const missingList = [];
   const rows = pendingTrendyolUpload.orders.map(o=>{
-    const items = o.items.map(i=>`${i.size}${(i.qty||1)>1?' ×'+i.qty:''}`).join(', ');
-    return `<tr><td>${o.date||'-'}</td><td>${o.customerName}</td><td class="muted">${o.channel}</td><td>${items}</td><td>${o.price?o.price+' TL':'-'}</td></tr>`;
+    const missingFields = [];
+    if(!o.customerName || !o.customerName.trim()) missingFields.push('Müşteri adı');
+    if(!o.channel || !o.channel.trim()) missingFields.push('Satış Kanalı');
+    if(o.items.some(i=>!i.size)) missingFields.push('Ölçü');
+    const isIncomplete = missingFields.length>0;
+    if(isIncomplete) missingList.push(`${o.customerName||'(isimsiz)'} (${o.items.map(i=>i.size||'—').join(', ')}): ${missingFields.join(', ')} eksik`);
+    const rowStyle = isIncomplete ? ' style="background:#fff3e0;"' : '';
+    const items = o.items.map(i=>`${i.size||'—'}${(i.qty||1)>1?' ×'+i.qty:''}`).join(', ');
+    return `<tr${rowStyle}><td>${o.date||'-'}</td><td>${o.customerName}</td><td class="muted">${o.channel}</td><td>${items}</td><td>${o.price?o.price+' TL':'-'}</td></tr>`;
   }).join('');
+  const hasIncomplete = missingList.length>0;
+  const warningHtml = hasIncomplete ? `
+    <div style="background:#fff3e0;border-left:4px solid var(--rust);padding:10px 12px;margin-bottom:10px;border-radius:6px;">
+      <strong style="color:var(--rust);">⚠ ${missingList.length} sipariş eksik bilgi içeriyor — kaydetmeden önce inceleyin:</strong>
+      <ul style="margin:6px 0 0 18px;padding:0;">${missingList.map(m=>`<li>${m}</li>`).join('')}</ul>
+      <label style="display:block;margin-top:8px;font-weight:600;">
+        <input type="checkbox" id="tyAllowIncompleteUpload"> Eksik bilgiye rağmen kaydet
+      </label>
+    </div>` : '';
   box.innerHTML = `
     <div class="preview-box">
+      ${warningHtml}
       <table><thead><tr><th>Tarih</th><th>Müşteri</th><th>Satış Kanalı</th><th>Kalemler</th><th>Tutar</th></tr></thead><tbody>${rows}</tbody></table>
-      <button id="tySaveUpload" style="margin-top:10px">${pendingTrendyolUpload.orders.length} sipariş kaydet</button>
+      <button id="tySaveUpload" style="margin-top:10px" ${hasIncomplete ? 'disabled' : ''}>${pendingTrendyolUpload.orders.length} sipariş kaydet</button>
       <button class="ghost" id="tyDiscardUpload" style="margin-top:10px">Vazgeç</button>
     </div>`;
+  if(hasIncomplete){
+    document.getElementById('tyAllowIncompleteUpload').addEventListener('change', (e)=>{
+      document.getElementById('tySaveUpload').disabled = !e.target.checked;
+    });
+  }
   document.getElementById('tySaveUpload').onclick = ()=>{
     const now = new Date().toISOString();
     const batch = { id: uid(), fileName: pendingTrendyolUpload.fileName, sheetName: pendingTrendyolUpload.sheetName, savedAt: now, orderCount: pendingTrendyolUpload.orders.length, source: 'trendyol' };
@@ -3930,16 +4588,68 @@ function catalogImageFor(item){
   return state.productCatalog[item.barkod] || null;
 }
 
+// The catalog is purely additive (uploads only ever add or update barkod
+// entries, never remove any) — so over time, with no upload actually shrinking
+// it, it can become one of the largest single contributors to the total saved
+// state size. Shows the current count and an approximate storage footprint so
+// that's visible before it becomes a surprise in a quota error, and offers the
+// only way to actually shrink it, since nothing else in the app does.
+function renderCatalogInfo(){
+  const el = document.getElementById('tyCatalogInfo');
+  if(!el) return;
+  const entries = Object.keys(state.productCatalog||{});
+  if(!entries.length){ el.textContent = 'Katalogda henüz ürün görseli yok.'; return; }
+  const approxKB = (JSON.stringify(state.productCatalog).length/1024).toFixed(0);
+  el.textContent = `Katalogda ${entries.length} ürün görseli var (yaklaşık ${approxKB} KB depolama alanı kaplıyor).`;
+}
+document.getElementById('tyCatalogClear').onclick = async ()=>{
+  const entries = Object.keys(state.productCatalog||{});
+  if(!entries.length){ showMessage('Katalog zaten boş.'); return; }
+  const auth = await requireAdmin(`Ürün görsel kataloğunu temizleme (${entries.length} ürün silinecek)`);
+  if(!auth) return;
+  state.productCatalog = {};
+  logActivity(`Ürün görsel kataloğu temizlendi (${entries.length} ürün silindi).`, auth==='pin' ? 'Admin' : undefined);
+  saveState(); render();
+};
+
 function renderUploadPreview(){
   const box = document.getElementById('uploadPreview');
   if(!pendingUpload || !pendingUpload.orders.length){ box.innerHTML=''; renderUploadLog(); return; }
-  const rows = pendingUpload.orders.map(o=>`<tr><td>${o.date||'-'}</td><td>${o.customerName}</td><td>${o.items.map(i=>i.size+' ×'+i.qty).join(', ')}</td><td>${o.price||'-'}</td></tr>`).join('');
+  // Required fields mirror what manual entry already requires for this
+  // channel (Telefon, Adres) — an order missing either wouldn't pass manual
+  // entry's own validation, so it shouldn't silently pass just because it
+  // arrived through an upload instead.
+  const missingList = [];
+  const rows = pendingUpload.orders.map(o=>{
+    const missingFields = [];
+    if(!o.phone || !o.phone.trim()) missingFields.push('Telefon');
+    if(!o.address || !o.address.trim()) missingFields.push('Adres');
+    const isIncomplete = missingFields.length>0;
+    if(isIncomplete) missingList.push(`${o.customerName} (${o.items.map(i=>i.size).join(', ')}): ${missingFields.join(', ')} eksik`);
+    const rowStyle = isIncomplete ? ' style="background:#fff3e0;"' : '';
+    return `<tr${rowStyle}><td>${o.date||'-'}</td><td>${o.customerName}</td><td>${o.items.map(i=>i.size+' ×'+i.qty).join(', ')}</td><td>${o.price||'-'}</td></tr>`;
+  }).join('');
+  const hasIncomplete = missingList.length>0;
+  const warningHtml = hasIncomplete ? `
+    <div style="background:#fff3e0;border-left:4px solid var(--rust);padding:10px 12px;margin-bottom:10px;border-radius:6px;">
+      <strong style="color:var(--rust);">⚠ ${missingList.length} sipariş eksik bilgi içeriyor — kaydetmeden önce inceleyin:</strong>
+      <ul style="margin:6px 0 0 18px;padding:0;">${missingList.map(m=>`<li>${m}</li>`).join('')}</ul>
+      <label style="display:block;margin-top:8px;font-weight:600;">
+        <input type="checkbox" id="allowIncompleteUpload"> Eksik bilgiye rağmen kaydet
+      </label>
+    </div>` : '';
   box.innerHTML = `
     <div class="preview-box">
+      ${warningHtml}
       <table><thead><tr><th>Tarih</th><th>Müşteri</th><th>Kalemler</th><th>Fiyat</th></tr></thead><tbody>${rows}</tbody></table>
-      <button id="saveUpload" style="margin-top:10px">${pendingUpload.orders.length} sipariş kaydet</button>
+      <button id="saveUpload" style="margin-top:10px" ${hasIncomplete ? 'disabled' : ''}>${pendingUpload.orders.length} sipariş kaydet</button>
       <button class="ghost" id="discardUpload" style="margin-top:10px">Vazgeç</button>
     </div>`;
+  if(hasIncomplete){
+    document.getElementById('allowIncompleteUpload').addEventListener('change', (e)=>{
+      document.getElementById('saveUpload').disabled = !e.target.checked;
+    });
+  }
   document.getElementById('saveUpload').onclick = ()=>{
     const now = new Date().toISOString();
     const batch = { id: uid(), fileName: pendingUpload.fileName, sheetName: pendingUpload.sheetName, savedAt: now, orderCount: pendingUpload.orders.length };
@@ -4103,6 +4813,24 @@ function getAllItemGroups(){
   return result;
 }
 
+// Each channel category gets its own prefix and its own independent daily
+// count, resetting fresh every calendar day (day-digit 1=Mon...7=Sun, same as
+// before) — an İhracat order coded fourth that day is EXP-1{04} regardless of
+// how many Instagram orders were coded first, rather than competing for
+// position in one shared pool. Trendyol keeps its own separate permanent
+// 1001+ scheme untouched (handled entirely outside this map).
+const NUMBERING_PREFIX = { ig:'IG-', sicaksatis:'SS-', ihracat:'EXP-', hepsiburada:'HB-' };
+function channelCategoryForNumbering(channelName){
+  if(channelName==='İhracat') return 'ihracat';
+  if(channelName==='Sıcak Satış') return 'sicaksatis';
+  if(channelType(channelName).startsWith('Trendyol')) return 'trendyol';
+  if(channelType(channelName).startsWith('Hepsiburada')) return 'hepsiburada';
+  // Instagram is the fallback bucket here too, same reasoning as
+  // orderMatchesCategory — an order whose channel type doesn't cleanly match
+  // any of the other categories still needs a number, not to be silently
+  // skipped.
+  return 'ig';
+}
 function computeItemNumbers(){
   // A number belongs to an (order, coding day) pair — every group of that order
   // coded on the SAME calendar day shares ONE number, distinguished only by the
@@ -4123,13 +4851,20 @@ function computeItemNumbers(){
       orderDayBuckets[bucketKey].earliestCodedAt = g.group[0].codedAt;
     }
   });
-  const byDate = {};
+  // Grouped by (channel category, date) instead of just date — each category
+  // now fills its own independent daily sequence.
+  const byCategoryDate = {};
   Object.values(orderDayBuckets).forEach(bucket=>{
-    byDate[bucket.dateKey] = byDate[bucket.dateKey] || [];
-    byDate[bucket.dateKey].push(bucket);
+    const category = channelCategoryForNumbering(bucket.order.channel);
+    const key = category + '::' + bucket.dateKey;
+    byCategoryDate[key] = byCategoryDate[key] || [];
+    byCategoryDate[key].push(bucket);
   });
   const bucketNumbers = {};
-  Object.keys(byDate).forEach(dateKey=>{
+  Object.keys(byCategoryDate).forEach(key=>{
+    const sepIdx = key.indexOf('::');
+    const category = key.slice(0, sepIdx);
+    const dateKey = key.slice(sepIdx+2);
     // dateKey is already the correct Istanbul calendar date (see above) — day-of-
     // week only depends on the calendar date itself, so parsing that string with
     // a plain local Date constructor is safe here (no UTC/runtime-timezone
@@ -4137,12 +4872,9 @@ function computeItemNumbers(){
     const sampleDate = parseDMY(dateKey);
     const jsDay = sampleDate.getDay(); // Sun=0..Sat=6
     const dayDigit = jsDay===0 ? 7 : jsDay; // Mon=1..Sat=6, Sun=7
-    const sorted = byDate[dateKey].slice().sort((a,b)=>{
-      const pa = channelPriorityIndex(a.order.channel), pb = channelPriorityIndex(b.order.channel);
-      if(pa!==pb) return pa-pb;
-      return new Date(a.earliestCodedAt) - new Date(b.earliestCodedAt);
-    });
-    sorted.forEach((bucket,i)=>{ bucketNumbers[bucket.order.id+'::'+bucket.dateKey] = `${dayDigit}${String(i+1).padStart(2,'0')}`; });
+    const prefix = NUMBERING_PREFIX[category] || '';
+    const sorted = byCategoryDate[key].slice().sort((a,b)=> new Date(a.earliestCodedAt) - new Date(b.earliestCodedAt));
+    sorted.forEach((bucket,i)=>{ bucketNumbers[bucket.order.id+'::'+bucket.dateKey] = `${prefix}${dayDigit}${String(i+1).padStart(2,'0')}`; });
   });
   const numbers = {};
   allGroups.forEach(g=>{
@@ -4184,7 +4916,7 @@ function orderAgeBadge(o){
       if(lag!==null && (worst===null || lag>worst)) worst = lag;
     });
     if(worst===null) return '';
-    return worst===0 ? `<span class="pill pill-produced">Zamanında üretildi</span>` : `<span class="pill pill-produced">+${worst}sa üretim süresi</span>`;
+    return worst===0 ? `<span class="pill pill-produced">Zamanında üretildi</span>` : `<span class="pill pill-produced">+${formatDurationLabel(worst, o)} üretim süresi</span>`;
   }
   return ageBadge(o, o.items[0]);
 }
@@ -4239,6 +4971,119 @@ function renderOrders(){
   // red carried-over flag on the Sipariş # itself still shows wherever it
   // applies, this only changes the row ordering.
   const sorted = igOrders.slice().reverse();
+  // Sıcak Satış and İhracat buyers often place several genuinely separate
+  // purchases under the same name — grouping them under one shared rowspanned
+  // total (as every other channel's list does) implied they were one combined
+  // order when they usually aren't. Every line item gets its own fully
+  // independent row here instead: its own Toplam Tutar (computed from that
+  // item's own price/m², not the order-wide lump sum), and Sil removes just
+  // that one item rather than every purchase under that buyer's name. Rows are
+  // still grouped under a header per buyer name purely for readability, with
+  // its own subtotal — that grouping is visual only, nothing is shared or
+  // rowspanned between the rows underneath it.
+  const isFlatList = currentEntryMode === 'sicaksatis';
+
+  // Builds and appends every flat-list row for one order (one per line item),
+  // returning that order's own m²/Toplam so the caller can add it to a running
+  // buyer subtotal. Kept as its own function since it's identical work whether
+  // grouped under a buyer header or not.
+  function appendFlatOrderRows(o){
+    const groups = [];
+    const seenKeys = new Set();
+    o.items.forEach(item=>{
+      const key = item.setLabel || item.id;
+      if(seenKeys.has(key)) return;
+      seenKeys.add(key);
+      groups.push(item.setLabel ? o.items.filter(i=>i.setLabel===item.setLabel) : [item]);
+    });
+    const editBtn = `<button class="ghost small edit-order" data-id="${o.id}">Düzenle</button>`;
+    let orderM2Sum = 0, orderTutarSum = 0;
+    groups.forEach(group=>{
+      const isSet = group.length > 1;
+      const sizeCell = isSet
+        ? `${group.map(i=>i.size).join(', ')} <span class="muted">(${displaySetLabel(group[0].setLabel)} — ${group.length} parça)</span>`
+        : `${group[0].size}${group[0].setLabel ? ` <span class="muted">(${displaySetLabel(group[0].setLabel)})</span>` : ''}`;
+      const groupKey = group[0].setLabel || group[0].id;
+      const numCell = groupNumCell(group, o.id+'::'+groupKey, itemNumbers);
+      const tabanCell = group[0].taban || 'Dot Taban';
+      const fringeCell = group[0].fringe || 'Saçaksız';
+      const shapeCell = isSet ? group.map(i=>i.shape||'Standart').join(', ') : (group[0].shape || 'Standart');
+      const groupCarpetCount = bundleStickerCount(group);
+      const groupM2 = group.reduce((s,i)=>s + sizeToM2(i.size)*i.qty, 0);
+      const pricePerM2Cell = group[0].pricePerM2 ? formatTL(priceToNumber(group[0].pricePerM2))+' TL' : '-';
+      const groupTotal = group[0].pricePerM2 ? groupM2 * priceToNumber(group[0].pricePerM2) : null;
+      const groupTotalCell = groupTotal!==null ? formatTL(Math.round(groupTotal))+' TL' : '-';
+      const ids = group.map(i=>i.id).join(',');
+      const tr = document.createElement('tr');
+      // Same highlight as Baskı öncesi, and excluded from the running
+      // subtotal/grand total below — not a real sale, so it shouldn't
+      // inflate either.
+      if(o.saleType === 'Kayıp Kargo'){
+        tr.style.background = '#fff3e0';
+        tr.style.borderLeft = '4px solid var(--rust)';
+      } else {
+        orderM2Sum += groupM2;
+        if(groupTotal!==null) orderTutarSum += groupTotal;
+      }
+      tr.innerHTML = `<td>${numCell}</td><td>${o.date||'-'}</td><td><span class="badge-chan">${o.channel}</span></td>
+        <td>${o.customerName}</td><td>${o.phone||'-'}</td><td>${o.address||'-'}</td>
+        <td>${sizeCell}</td><td>${tabanCell}</td><td>${fringeCell}</td><td>${shapeCell}</td>
+        <td>${groupCarpetCount}</td>
+        <td>${groupM2.toFixed(2)}</td><td>${pricePerM2Cell}</td>
+        <td>${groupTotalCell}</td>${hidePrepaidCols ? '' : `<td>${o.prepaidAmount ? formatTL(priceToNumber(o.prepaidAmount))+' TL' : '-'}</td><td>${amountToCollect(o)===null ? '<span style="color:var(--rust);font-weight:600">Tutar girilmemiş</span>' : amountToCollect(o)===0 ? '<span class="muted">Hiçbir şey — tamamı ödendi</span>' : `<span style="font-weight:600">${formatTL(amountToCollect(o))} TL</span>`}</td>`}
+        <td>${orderAgeBadge(o)}</td>
+        <td>${editBtn} <button class="ghost small del-order-item" data-id="${o.id}" data-ids="${ids}">Sil</button></td>`;
+      tbody.appendChild(tr);
+    });
+    return { m2: orderM2Sum, tutar: orderTutarSum };
+  }
+
+  if(isFlatList){
+    // Grouped by buyer name, in the order each buyer's most recent purchase
+    // appears in `sorted` — so the buyer with the newest activity leads, same
+    // top-to-bottom feel as the rest of the app, without needing every one of
+    // their individual orders to also be newest-first inside the group (their
+    // own orders stay in `sorted`'s order, which already IS newest-first).
+    const byBuyer = new Map();
+    sorted.forEach(o=>{
+      const key = o.customerName || '(İsimsiz)';
+      if(!byBuyer.has(key)) byBuyer.set(key, []);
+      byBuyer.get(key).push(o);
+    });
+    let grandM2 = 0, grandTutar = 0;
+    byBuyer.forEach((buyerOrders, buyerName)=>{
+      const totalCols = hidePrepaidCols ? 17 : 19;
+      const headerTr = document.createElement('tr');
+      headerTr.innerHTML = `<td colspan="${totalCols}" style="background:var(--paper-soft,#f4f1ea);font-weight:600;padding:8px 10px;">${buyerName}</td>`;
+      tbody.appendChild(headerTr);
+      let buyerM2 = 0, buyerTutar = 0;
+      buyerOrders.forEach(o=>{
+        const sums = appendFlatOrderRows(o);
+        buyerM2 += sums.m2; buyerTutar += sums.tutar;
+      });
+      grandM2 += buyerM2; grandTutar += buyerTutar;
+      const subTr = document.createElement('tr');
+      subTr.style.fontWeight = '600';
+      subTr.style.borderTop = '1px solid var(--line)';
+      subTr.innerHTML = `<td colspan="11" style="text-align:right">${buyerName} toplamı</td>
+        <td>${buyerM2.toFixed(2)} m²</td><td></td>
+        <td>${formatTL(Math.round(buyerTutar))} TL</td>${hidePrepaidCols ? '' : '<td></td><td></td>'}<td></td><td></td>`;
+      tbody.appendChild(subTr);
+    });
+    if(igOrders.length){
+      const totalCarpets = igOrders.reduce((s,o)=>s+countCarpets(o.items),0);
+      const tr = document.createElement('tr');
+      tr.style.fontWeight = '700';
+      tr.style.borderTop = '2px solid var(--line)';
+      tr.innerHTML = `<td colspan="11" style="text-align:right">GENEL TOPLAM (${igOrders.length} sipariş, ${totalCarpets} halı)</td>
+        <td>${grandM2.toFixed(2)} m²</td><td></td>
+        <td>${formatTL(Math.round(grandTutar))} TL</td>${hidePrepaidCols ? '' : '<td></td><td></td>'}<td></td><td></td>`;
+      tbody.appendChild(tr);
+    }
+    wireOrdersRowHandlers(tbody);
+    return;
+  }
+
   sorted.forEach(o=>{
     // One row per carpet item — a set (even with multiple pieces/sizes) still
     // counts as a single item/row, matching how sets are treated everywhere
@@ -4276,6 +5121,13 @@ function renderOrders(){
 
     groups.forEach((group, gi)=>{
       const tr = document.createElement('tr');
+      // Same highlight as Baskı öncesi — a Kayıp Kargo entry isn't a real
+      // sale, so it needs to stand out here too rather than blending in with
+      // ordinary orders in this list.
+      if(o.saleType === 'Kayıp Kargo'){
+        tr.style.background = '#fff3e0';
+        tr.style.borderLeft = '4px solid var(--rust)';
+      }
       const isSet = group.length > 1;
       const sizeCell = isSet
         ? `${group.map(i=>i.size).join(', ')} <span class="muted">(${displaySetLabel(group[0].setLabel)} — ${group.length} parça)</span>`
@@ -4334,17 +5186,19 @@ function renderOrders(){
   // Instagram dealers collect payment themselves and report 0, making any
   // total built from price genuinely unreliable for this list — m²/counts
   // don't have that problem, since they reflect real production regardless
-  // of who was paid.
+  // of who was paid. Kayıp Kargo orders are excluded from this total
+  // entirely (not a real sale, however many items it ends up containing).
+  const realOrders = igOrders.filter(o=>o.saleType !== 'Kayıp Kargo');
   if(igOrders.length){
     let totalM2=0, totalCarpets=0;
-    igOrders.forEach(o=>{
+    realOrders.forEach(o=>{
       o.items.forEach(item=>{ totalM2 += sizeToM2(item.size) * item.qty; });
       totalCarpets += countCarpets(o.items);
     });
     const tr = document.createElement('tr');
     tr.style.fontWeight = '700';
     tr.style.borderTop = '2px solid var(--line)';
-    tr.innerHTML = `<td colspan="6" style="text-align:right">TOPLAM (${igOrders.length} sipariş, ${totalCarpets} halı)</td>
+    tr.innerHTML = `<td colspan="6" style="text-align:right">TOPLAM (${realOrders.length} sipariş, ${totalCarpets} halı)</td>
       <td></td><td></td><td></td><td></td>
       <td></td>
       <td>${totalM2.toFixed(2)} m²</td>
@@ -4352,6 +5206,14 @@ function renderOrders(){
     tbody.appendChild(tr);
   }
 
+  wireOrdersRowHandlers(tbody);
+}
+
+// Shared by both the buyer-grouped flat list (Sıcak Satış) and the normal
+// rowspanned list (Instagram/Trendyol/Hepsiburada) — same three actions
+// either way: edit the whole order, delete the whole order, or (flat list
+// only) delete just one line item off an order.
+function wireOrdersRowHandlers(tbody){
   tbody.querySelectorAll('.edit-order').forEach(b=>{
     b.onclick = ()=>startEditOrder(b.dataset.id);
   });
@@ -4364,14 +5226,44 @@ function renderOrders(){
       state.orders = state.orders.filter(o=>o.id!==b.dataset.id); saveState(); render();
     };
   });
+  // Flat-list Sil (Sıcak Satış): removes just this one line item, not every
+  // other purchase under the same buyer's name — since those are no longer
+  // treated as one combined order. If it was the only item left on the order,
+  // the whole (now-empty) order record is removed too rather than left behind
+  // with zero items.
+  tbody.querySelectorAll('.del-order-item').forEach(b=>{
+    b.onclick = async ()=>{
+      const auth = await requireAdmin('Bu kalemi silme');
+      if(!auth) return;
+      const order = state.orders.find(o=>o.id===b.dataset.id);
+      if(!order) return;
+      const ids = b.dataset.ids.split(',');
+      const removed = order.items.filter(i=>ids.includes(i.id));
+      const label = removed.length>1 ? `${displaySetLabel(removed[0].setLabel)} (${removed.length} parça)` : removed[0].size;
+      order.items = order.items.filter(i=>!ids.includes(i.id));
+      if(order.items.length){
+        logActivity(`Kalem silindi: ${label} — ${order.customerName}`, auth==='pin' ? 'Admin' : undefined);
+      } else {
+        // Nothing left on this order at all — remove the empty order record too.
+        state.orders = state.orders.filter(o=>o.id!==order.id);
+        logActivity(`Kalem silindi (son kalemdi, sipariş kaldırıldı): ${label} — ${order.customerName}`, auth==='pin' ? 'Admin' : undefined);
+      }
+      saveState(); render();
+    };
+  });
 }
 
 function renderExportOrders(){
-  // A simpler, one-row-per-order list — İhracat has no day-based Sipariş #
-  // (numbering isn't meaningful for export the way it is for IG's daily
-  // production batches), so there's no need for the rowspan/per-item structure
-  // renderOrders uses. Each order's own m² and Toplam Tutar are computed fresh
-  // from its items, same math as the shared totals footer.
+  // Every line item gets its own fully independent row — İhracat buyers often
+  // place several genuinely separate purchases under the same name, and
+  // combining them into one row (as this used to do, joining every item's
+  // size/taban/etc. into one comma-separated cell) implied they were a single
+  // order when they usually aren't. Order-level fields that don't cleanly
+  // split per item (customer info, currency/exchange amount, age) repeat on
+  // every row instead of trying to divide them; Toplam Tutar is genuinely
+  // per-item, computed from that item's own price/m². Rows are still grouped
+  // under a header per buyer name purely for readability, with its own
+  // subtotal — that grouping is visual only, nothing is shared between rows.
   const tbody = document.querySelector('#ihracatOrdersTable tbody');
   tbody.innerHTML = '';
   renderExportFileFilterList();
@@ -4393,60 +5285,169 @@ function renderExportOrders(){
   }
   document.getElementById('ihracatOrdersEmpty').style.display = exportOrders.length ? 'none' : 'block';
   const sorted = exportOrders.slice().reverse();
-  sorted.forEach(o=>{
-    const isProduced = o.items.some(i=>i.status==='produced');
-    // Still clickable even when produced — startEditOrder itself asks for the
-    // admin PIN in that case, rather than blocking editing outright, since a
-    // legitimate correction (like a price that failed to parse) shouldn't be
-    // permanently impossible just because production already happened.
+
+  // Builds and appends every flat row for one order, returning that order's
+  // own m²/Toplam so the caller can add it to a running buyer subtotal.
+  function appendExportOrderRows(o){
     const editBtn = `<button class="ghost small edit-order" data-id="${o.id}">Düzenle</button>`;
-    let orderM2 = 0;
-    o.items.forEach(item=>{ orderM2 += sizeToM2(item.size) * item.qty; });
-    const sizesText = o.items.map(i=>i.size+' ×'+i.qty).join(', ');
-    const tabanText = o.items.map(i=>i.taban||'Dot Taban').join(', ');
-    const fringeText = o.items.map(i=>i.fringe||'Saçaksız').join(', ');
-    const shapeText = o.items.map(i=>i.shape||'Standart').join(', ');
-    const tr = document.createElement('tr');
-    tr.innerHTML = `<td>${o.date||'-'}</td><td>${o.customerName}</td><td>${o.phone||'-'}</td>
-      <td>${o.city||'-'}</td><td>${o.country||'-'}</td><td>${sizesText}</td>
-      <td>${tabanText}</td><td>${fringeText}</td><td>${shapeText}</td>
-      <td>${o.currency||'-'}</td><td>${o.foreignAmount||'-'}</td><td>${o.exchangeRate||'-'}</td>
-      <td>${orderM2.toFixed(2)}</td><td>${o.price?formatTL(priceToNumber(o.price))+' TL':'-'}</td>
-      <td>${orderAgeBadge(o)}</td>
-      <td>${editBtn} <button class="ghost small del-order" data-id="${o.id}">Sil</button></td>`;
-    tbody.appendChild(tr);
+    const groups = [];
+    const seenKeys = new Set();
+    o.items.forEach(item=>{
+      const key = item.setLabel || item.id;
+      if(seenKeys.has(key)) return;
+      seenKeys.add(key);
+      groups.push(item.setLabel ? o.items.filter(i=>i.setLabel===item.setLabel) : [item]);
+    });
+    let orderM2Sum = 0, orderTutarSum = 0;
+    const orderByCurrency = {};
+    groups.forEach(group=>{
+      const isSet = group.length > 1;
+      const sizeCell = isSet
+        ? `${group.map(i=>i.size).join(', ')} <span class="muted">(${displaySetLabel(group[0].setLabel)} — ${group.length} parça)</span>`
+        : `${group[0].size}${group[0].setLabel ? ` <span class="muted">(${displaySetLabel(group[0].setLabel)})</span>` : ''}`;
+      const tabanCell = group[0].taban || 'Dot Taban';
+      const fringeCell = group[0].fringe || 'Saçaksız';
+      const shapeCell = isSet ? group.map(i=>i.shape||'Standart').join(', ') : (group[0].shape || 'Standart');
+      const groupCarpetCount = bundleStickerCount(group);
+      const groupM2 = group.reduce((s,i)=>s + sizeToM2(i.size)*i.qty, 0);
+      // pricePerM2 is entered in the order's own foreign currency (USD/EUR/…),
+      // same as Döviz Tutarı — it has to be multiplied by Kur to become TL, the
+      // same conversion the order-level Toplam Tutar already goes through
+      // elsewhere. Showing the raw foreign-currency line total on its own
+      // first, then its TL equivalent, rather than only ever showing one or
+      // silently treating the foreign figure as if it were already TL.
+      const groupTotalDoviz = group[0].pricePerM2 ? groupM2 * priceToNumber(group[0].pricePerM2) : null;
+      const rate = priceToNumber(o.exchangeRate);
+      const groupTotalTL = (groupTotalDoviz!==null && rate) ? groupTotalDoviz * rate : null;
+      const dovizCell = groupTotalDoviz!==null ? `${groupTotalDoviz.toFixed(2)} ${o.currency||''}`.trim() : '-';
+      const groupTotalCell = groupTotalTL!==null ? formatTL(Math.round(groupTotalTL))+' TL' : '-';
+      orderM2Sum += groupM2;
+      if(groupTotalTL!==null) orderTutarSum += groupTotalTL;
+      // Tracked separately per currency (not just one running total) — a
+      // buyer's, or the whole list's, orders can genuinely mix USD and EUR,
+      // and adding those raw numbers together would be meaningless. TL is
+      // the only figure safe to combine across every order regardless of its
+      // original currency.
+      if(groupTotalDoviz!==null && o.currency){
+        orderByCurrency[o.currency] = (orderByCurrency[o.currency]||0) + groupTotalDoviz;
+      }
+      const ids = group.map(i=>i.id).join(',');
+      const tr = document.createElement('tr');
+      tr.innerHTML = `<td>${o.date||'-'}</td><td>${o.customerName}</td><td>${o.phone||'-'}</td>
+        <td>${o.city||'-'}</td><td>${o.country||'-'}</td><td>${sizeCell}</td>
+        <td>${tabanCell}</td><td>${fringeCell}</td><td>${shapeCell}</td>
+        <td>${groupCarpetCount}</td>
+        <td>${o.currency||'-'}</td><td>${o.foreignAmount||'-'}</td><td>${o.exchangeRate||'-'}</td>
+        <td>${groupM2.toFixed(2)}</td><td>${dovizCell}</td><td>${groupTotalCell}</td>
+        <td>${orderAgeBadge(o)}</td>
+        <td>${editBtn} <button class="ghost small del-order-item" data-id="${o.id}" data-ids="${ids}">Sil</button></td>`;
+      tbody.appendChild(tr);
+    });
+    return { m2: orderM2Sum, tutar: orderTutarSum, byCurrency: orderByCurrency };
+  }
+
+  // Merges one order/buyer's per-currency totals into a running accumulator,
+  // adding each currency's own amount to its own running sum rather than
+  // combining different currencies together.
+  function mergeCurrency(accumulator, addition){
+    Object.keys(addition).forEach(cur=>{
+      accumulator[cur] = (accumulator[cur]||0) + addition[cur];
+    });
+  }
+  // Formats a per-currency accumulator as "1.234,56 USD, 567,89 EUR" — every
+  // currency that actually appears, each shown with its own real total, in no
+  // particular guaranteed order (however Object.keys happens to enumerate them).
+  function formatCurrencyBreakdown(accumulator){
+    const currencies = Object.keys(accumulator);
+    if(!currencies.length) return '';
+    return currencies.map(cur=>`${accumulator[cur].toLocaleString('tr-TR',{minimumFractionDigits:2,maximumFractionDigits:2})} ${cur}`).join(', ');
+  }
+
+  // Grouped by buyer name, in the order each buyer's most recent purchase
+  // appears in `sorted` — the buyer with the newest activity leads, same as
+  // the rest of the app, without needing every one of their orders to also
+  // be newest-first inside the group (their own orders stay in `sorted`'s
+  // order, which already IS newest-first).
+  const byBuyer = new Map();
+  sorted.forEach(o=>{
+    const key = o.customerName || '(İsimsiz)';
+    if(!byBuyer.has(key)) byBuyer.set(key, []);
+    byBuyer.get(key).push(o);
   });
+  let grandM2 = 0, grandTutar = 0;
+  const grandByCurrency = {};
+  byBuyer.forEach((buyerOrders, buyerName)=>{
+    const headerTr = document.createElement('tr');
+    headerTr.innerHTML = `<td colspan="18" style="background:var(--paper-soft,#f4f1ea);font-weight:600;padding:8px 10px;">${buyerName}</td>`;
+    tbody.appendChild(headerTr);
+    let buyerM2 = 0, buyerTutar = 0;
+    const buyerByCurrency = {};
+    buyerOrders.forEach(o=>{
+      const sums = appendExportOrderRows(o);
+      buyerM2 += sums.m2; buyerTutar += sums.tutar;
+      mergeCurrency(buyerByCurrency, sums.byCurrency);
+    });
+    grandM2 += buyerM2; grandTutar += buyerTutar;
+    mergeCurrency(grandByCurrency, buyerByCurrency);
+    const subTr = document.createElement('tr');
+    subTr.style.fontWeight = '600';
+    subTr.style.borderTop = '1px solid var(--line)';
+    // Kalem Tutarı (Döviz) now shows this buyer's own foreign-currency total(s)
+    // — safe here since it's summed within ONE buyer's orders, shown per
+    // currency separately rather than combined into one meaningless figure.
+    subTr.innerHTML = `<td colspan="13" style="text-align:right">${buyerName} toplamı</td>
+      <td>${buyerM2.toFixed(2)} m²</td>
+      <td>${formatCurrencyBreakdown(buyerByCurrency)}</td>
+      <td>${formatTL(Math.round(buyerTutar))} TL</td>
+      <td></td><td></td>`;
+    tbody.appendChild(subTr);
+  });
+
   tbody.querySelectorAll('.edit-order').forEach(b=>{
     b.onclick = ()=>startEditOrder(b.dataset.id);
   });
-  tbody.querySelectorAll('.del-order').forEach(b=>{
+  // Removes just this one line item, not every other purchase under the same
+  // buyer's name. If it was the only item left on the order, the whole
+  // (now-empty) order record is removed too.
+  tbody.querySelectorAll('.del-order-item').forEach(b=>{
     b.onclick = async ()=>{
-      const auth = await requireAdmin('Bu siparişi silme');
+      const auth = await requireAdmin('Bu kalemi silme');
       if(!auth) return;
       const order = state.orders.find(o=>o.id===b.dataset.id);
-      if(order) logActivity(`Sipariş silindi: ${order.customerName} (${order.channel})`, auth==='pin' ? 'Admin' : undefined);
-      state.orders = state.orders.filter(o=>o.id!==b.dataset.id); saveState(); render();
+      if(!order) return;
+      const ids = b.dataset.ids.split(',');
+      const removed = order.items.filter(i=>ids.includes(i.id));
+      const label = removed.length>1 ? `${displaySetLabel(removed[0].setLabel)} (${removed.length} parça)` : removed[0].size;
+      order.items = order.items.filter(i=>!ids.includes(i.id));
+      if(order.items.length){
+        logActivity(`Kalem silindi: ${label} — ${order.customerName}`, auth==='pin' ? 'Admin' : undefined);
+      } else {
+        state.orders = state.orders.filter(o=>o.id!==order.id);
+        logActivity(`Kalem silindi (son kalemdi, sipariş kaldırıldı): ${label} — ${order.customerName}`, auth==='pin' ? 'Admin' : undefined);
+      }
+      saveState(); render();
     };
   });
-  // Same simplified totals as the shared Tüm siparişler list — just sipariş
-  // sayısı, halı sayısı, and Toplam m². İhracat orders are treated as fully
-  // prepaid (no Peşinat/Bakiye concept here), but the same "some totals get
-  // messy to sum meaningfully" caution generally still applies, so this
-  // stays limited to the always-solid counts rather than adding back Toplam
-  // Tutar/Döviz Tutarı sums across mixed currencies.
+  // Grand total across every buyer — now includes Toplam Tutar too (unlike
+  // the shared Tüm siparişler list, which omits it since some Instagram
+  // dealers collect payment themselves and report 0, making that sum
+  // unreliable there). İhracat's per-item pricing is always entered directly,
+  // so summing it here is meaningful. Also shows the foreign-currency
+  // total(s) actually present across every order — every currency that shows
+  // up gets its own real sum, rather than only ever surfacing the TL figure.
   if(exportOrders.length){
-    let totalM2=0, totalCarpets=0;
-    exportOrders.forEach(o=>{
-      o.items.forEach(item=>{ totalM2 += sizeToM2(item.size) * item.qty; });
-      totalCarpets += countCarpets(o.items);
-    });
+    let totalCarpets=0;
+    exportOrders.forEach(o=>{ totalCarpets += countCarpets(o.items); });
     const tr = document.createElement('tr');
     tr.style.fontWeight = '700';
     tr.style.borderTop = '2px solid var(--line)';
-    tr.innerHTML = `<td colspan="9" style="text-align:right">TOPLAM (${exportOrders.length} sipariş, ${totalCarpets} halı)</td>
+    tr.innerHTML = `<td colspan="9" style="text-align:right">GENEL TOPLAM (${exportOrders.length} sipariş, ${totalCarpets} halı)</td>
+      <td>${totalCarpets}</td>
       <td></td><td></td><td></td>
-      <td>${totalM2.toFixed(2)} m²</td>
-      <td></td><td></td><td></td>`;
+      <td>${grandM2.toFixed(2)} m²</td>
+      <td>${formatCurrencyBreakdown(grandByCurrency)}</td>
+      <td>${formatTL(Math.round(grandTutar))} TL</td>
+      <td></td><td></td>`;
     tbody.appendChild(tr);
   }
 }
@@ -4514,12 +5515,34 @@ function renderQueue(){
   tbody.innerHTML='';
   renderFileFilterListGeneric('queueFileFilterList', 'queueFileFilterToggle', 'queueFileFilterSearch', selectedQueueFileFilterIds, 'all', renderQueue);
   let count = 0;
+  const itemNumbers = computeItemNumbers();
+  // Telefon/Adres matter for delivery-focused channels, but not for Sıcak
+  // Satış or İhracat at this specific stage — coding just needs to match a
+  // design to a code, and carpet/set count is far more directly useful here
+  // than an address that isn't acted on until much later, if at all.
+  const hidePhoneAdres = currentEntryMode==='sicaksatis' || currentEntryMode==='ihracat';
+  document.getElementById('thQueuePhone').style.display = hidePhoneAdres ? 'none' : '';
+  document.getElementById('thQueueAdres').style.display = hidePhoneAdres ? 'none' : '';
+  document.getElementById('thQueueCarpetCount').style.display = hidePhoneAdres ? '' : 'none';
 
-  // Only orders with at least one still-pending item belong here. Nothing here
-  // has been coded yet, so there's no number and no "carried over" concept to
-  // apply — sort just falls back to a stable order (oldest orders first).
-  const ordersWithPending = applyQueueFilters(
-    state.orders.filter(o=>o.items.some(i=>i.status==='pending')),
+  // Every order stays visible here once it has at least one item that either
+  // still needs a code, or has already been coded — a coded row no longer
+  // disappears the moment it's confirmed, it switches to a read-only
+  // "✓ Onaylandı" state with a Düzenle button, so a mistaken code can be
+  // caught and fixed without hunting through Ayırma/Üretim for it. İhracat
+  // items skip straight to 'sorted' on coding (bypassing Ayırma entirely),
+  // so 'sorted' is included here as ITS equivalent of "just coded" — without
+  // this, an İhracat row would vanish the instant Onayla was clicked, with
+  // no chance to catch and fix a code typo the way every other channel
+  // already allows. It still leaves this list once fully produced, same
+  // principle as every other channel leaving once it moves on to its own
+  // next stage (Ayırma, for them).
+  // Scoped to whichever channel is currently selected at the top of Sipariş
+  // Merkezi — each channel gets its own fully separate Baskı öncesi now,
+  // instead of one shared list grouped by channel headers.
+  const relevantStatuses = currentEntryMode==='ihracat' ? ['pending','coded','sorted'] : ['pending','coded'];
+  const ordersWithItemsHere = applyQueueFilters(
+    state.orders.filter(o=>o.items.some(i=>relevantStatuses.includes(i.status)) && channelCategoryForNumbering(o.channel)===currentEntryMode),
     selectedQueueFileFilterIds, 'queueTsFrom', 'queueTsTo'
   );
   // Newest upload/entry at the top: state.orders accumulates in the order things
@@ -4529,19 +5552,19 @@ function renderQueue(){
   // nearest the top too (since that row was the last one pushed within that
   // batch) — exactly the nested "newest upload on top, last row of that sheet
   // on top of its own block" pattern, with no separate sort needed.
-  const sortedOrders = ordersWithPending.slice().reverse();
+  const sortedOrders = ordersWithItemsHere.slice().reverse();
 
   sortedOrders.forEach(o=>{
-    const pending = o.items.filter(i=>i.status==='pending');
+    const relevant = o.items.filter(i=>relevantStatuses.includes(i.status));
     // One row per item — a set (even multi-piece) still counts as one row, same
     // convention used everywhere else in the app.
     const groups = [];
     const seenKeys = new Set();
-    pending.forEach(item=>{
+    relevant.forEach(item=>{
       const key = item.setLabel || item.id;
       if(seenKeys.has(key)) return;
       seenKeys.add(key);
-      groups.push(item.setLabel ? pending.filter(i=>i.setLabel===item.setLabel) : [item]);
+      groups.push(item.setLabel ? relevant.filter(i=>i.setLabel===item.setLabel) : [item]);
     });
     count += groups.reduce((s,g)=>s+g.length,0);
 
@@ -4552,15 +5575,30 @@ function renderQueue(){
       ? '<span class="muted">Hiçbir şey — tamamı ödendi</span>'
       : `<span style="font-weight:600">${formatTL(collectAmt)} TL</span>`;
     const rowspan = groups.length;
-    const numCell = '—'; // nothing here has a number yet — assigned only once coded
 
     groups.forEach((group, gi)=>{
       const tr = document.createElement('tr');
       const isSet = group.length > 1;
       const ids = group.map(i=>i.id).join(',');
+      const rowKey = o.id + '::' + ids;
+      // Flagged the moment Sipariş Türü is "Kayıp Kargo" — a reminder to
+      // physically search the production floor BEFORE producing a
+      // replacement, since the original may simply be sitting there rather
+      // than genuinely lost. Highlighted clearly enough that it can't be
+      // coded past without noticing, and Onayla itself requires an explicit
+      // "searched and didn't find it" confirmation rather than proceeding
+      // straight through like a normal item.
+      const isLostCargo = o.saleType === 'Kayıp Kargo';
+      if(isLostCargo){
+        tr.style.background = '#fff3e0';
+        tr.style.borderLeft = '4px solid var(--rust)';
+      }
+      const lostCargoWarning = isLostCargo
+        ? `<div style="color:var(--rust);font-weight:700;font-size:12px;margin-bottom:3px;">⚠ KAYIP KARGO — önce üretim sahasında arayın, bulunamazsa üretin</div>`
+        : '';
       const sizeCell = isSet
-        ? `${group.map(i=>i.size).join(', ')} <span class="muted">(${displaySetLabel(group[0].setLabel)} — ${group.length} parça)</span>`
-        : `${group[0].size}${group[0].setLabel ? ` <span class="muted">(${displaySetLabel(group[0].setLabel)})</span>` : ''}`;
+        ? `${lostCargoWarning}${group.map(i=>i.size).join(', ')} <span class="muted">(${displaySetLabel(group[0].setLabel)} — ${group.length} parça)</span>`
+        : `${lostCargoWarning}${group[0].size}${group[0].setLabel ? ` <span class="muted">(${displaySetLabel(group[0].setLabel)})</span>` : ''}`;
       const shared = group.every(i=>i.images && i.images.length) ? group[0]
         : group.find(i=>i.images && i.images.length);
       // Fallback to the Trendyol product catalog image (matched by Barkod) when
@@ -4595,19 +5633,65 @@ function renderQueue(){
           : `${uploadBtn}${warnBadge}`;
       }
 
+      // Three states for the code cell: still pending (editable input, never
+      // coded yet), coded and NOT being corrected right now (read-only code +
+      // Onaylandı + Düzenle), or coded and CURRENTLY being corrected (editable
+      // input again, pre-filled with the existing code, Kaydet instead of
+      // Onayla).
+      const isPending = group[0].status === 'pending';
+      const isBeingEdited = queueEditingKey === rowKey;
+      // A pending item has no number yet (assigned only once coded); a coded
+      // one shows its real assigned number, same lookup Ayırma/Üretim/Tüm
+      // siparişler already use — this is now per-GROUP, not rowspanned across
+      // the whole order, since different items in the same order can be coded
+      // (and thus numbered) at different times.
+      const groupKey = o.id + '::' + (group[0].setLabel || group[0].id);
+      const numCell = isPending ? '—' : groupNumCell(group, groupKey, itemNumbers);
+      // Carpet/set count — same bundleStickerCount convention used everywhere
+      // else (the two specific bathroom-mat presets count as 1 per copy
+      // ordered; every other set counts its actual physical pieces), so this
+      // always agrees with what Ayırma/Üretim will show for the same group.
+      const groupCarpetCount = bundleStickerCount(group);
+      let codeCell;
+      const lostCargoRevealed = lostCargoRevealedKeys.has(rowKey);
+      if(isLostCargo && isPending && !lostCargoRevealed){
+        // Before any code input is even shown, a Kayıp Kargo item asks the
+        // real question directly: was it actually found on the floor (no
+        // replacement needed), or does it genuinely need producing? These
+        // are two different outcomes, not a yes/no gate in front of the same
+        // action — "found" closes this out with nothing produced at all,
+        // while "needs production" reveals the normal code/Onayla flow for
+        // this row and proceeds exactly like any other item from there.
+        codeCell = `<td colspan="2">
+          <button class="small found-lostcargo" data-oid="${o.id}" data-ids="${ids}">✓ Sahada bulundu</button>
+          <button class="small ghost needs-production-lostcargo" data-oid="${o.id}" data-ids="${ids}">Üretilecek — kodla</button>
+        </td>`;
+      } else if(isPending || isBeingEdited){
+        const existingCode = isBeingEdited ? (group[0].code||'') : '';
+        const btnLabel = isBeingEdited ? 'Kaydet' : 'Onayla';
+        // No longer the confirm-code-lostcargo variant here — the found/needs-
+        // production choice above IS the confirmation now. Asking again with
+        // a second popup after "Üretilecek" was already clicked would just be
+        // redundant friction over the same decision.
+        const btnClass = isBeingEdited ? 'save-code-edit' : 'confirm-code';
+        codeCell = `<td><input class="code-input" placeholder="kod" value="${existingCode}" data-oid="${o.id}" data-ids="${ids}"></td>
+          <td><button class="small ${btnClass}" data-oid="${o.id}" data-ids="${ids}">${btnLabel}</button></td>`;
+      } else {
+        codeCell = `<td>${group[0].code||''}</td>
+          <td><span style="color:var(--forest);font-weight:600">✓ Onaylandı</span> <button class="ghost small edit-code" data-oid="${o.id}" data-ids="${ids}">Düzenle</button></td>`;
+      }
+
       if(gi===0){
-        tr.innerHTML = `<td rowspan="${rowspan}">${numCell}</td><td rowspan="${rowspan}">${o.date||'-'}</td><td rowspan="${rowspan}"><span class="badge-chan">${o.channel}</span></td>
-          <td rowspan="${rowspan}">${o.customerName}</td><td rowspan="${rowspan}">${o.phone||'-'}</td><td rowspan="${rowspan}">${o.address||'-'}</td>
+        tr.innerHTML = `<td>${numCell}</td><td rowspan="${rowspan}">${o.date||'-'}</td><td rowspan="${rowspan}"><span class="badge-chan">${o.channel}</span></td>
+          <td rowspan="${rowspan}">${o.customerName}</td>${hidePhoneAdres ? '' : `<td rowspan="${rowspan}">${o.phone||'-'}</td><td rowspan="${rowspan}">${o.address||'-'}</td>`}${hidePhoneAdres ? `<td>${groupCarpetCount}</td>` : ''}
           <td>${sizeCell}</td>
           <td rowspan="${rowspan}">${o.price||'-'}</td><td rowspan="${rowspan}">${o.prepaidAmount||'-'}</td><td rowspan="${rowspan}">${collectCell}</td>
           <td rowspan="${rowspan}">${orderAgeBadge(o)}</td>
           <td>${thumb}</td>
-          <td><input class="code-input" placeholder="kod" value="" data-oid="${o.id}" data-ids="${ids}"></td>
-          <td><button class="small confirm-code" data-oid="${o.id}" data-ids="${ids}">Onayla</button></td>`;
+          ${codeCell}`;
       } else {
-        tr.innerHTML = `<td>${sizeCell}</td><td>${thumb}</td>
-          <td><input class="code-input" placeholder="kod" value="" data-oid="${o.id}" data-ids="${ids}"></td>
-          <td><button class="small confirm-code" data-oid="${o.id}" data-ids="${ids}">Onayla</button></td>`;
+        tr.innerHTML = `<td>${numCell}</td>${hidePhoneAdres ? `<td>${groupCarpetCount}</td>` : ''}<td>${sizeCell}</td><td>${thumb}</td>
+          ${codeCell}`;
       }
       tbody.appendChild(tr);
     });
@@ -4649,7 +5733,77 @@ function wireQueueHandlers(tbody){
       r.readAsDataURL(f);
     };
   });
+  // The actual "confirm this code" logic, shared by the normal Onayla button
+  // and the Kayıp Kargo variant below — the only difference for a Kayıp Kargo
+  // item is the explicit confirmation gate in front of it.
+  function confirmCode(b){
+    const input = tbody.querySelector(`.code-input[data-oid="${b.dataset.oid}"][data-ids="${b.dataset.ids}"]`);
+    const code = input.value.trim();
+    if(!code){ input.style.borderColor = 'var(--rust)'; return; }
+    const order = state.orders.find(o=>o.id===b.dataset.oid);
+    const ids = b.dataset.ids.split(',');
+    const group = order.items.filter(i=>ids.includes(i.id));
+    const codedAt = new Date().toISOString();
+    const label = group.length>1 ? `${displaySetLabel(group[0].setLabel)} (${group.length} parça)` : group[0].size;
+    const lostCargoTag = order.saleType==='Kayıp Kargo' ? ' [Kayıp Kargo — sahada bulunamadı, yeniden üretiliyor]' : '';
+    if(order.channel==='İhracat'){
+      // İhracat items skip the sticker/sorting stage entirely — bigger bulk
+      // quantities don't get an individual sticker per piece the way IG's
+      // single carpets do, so coding goes straight to production tracking.
+      group.forEach(i=>{ i.code = code; i.status = 'sorted'; i.codedAt = codedAt; i.sortedAt = codedAt; i.producedQty = i.producedQty||0; });
+      logActivity(`Kodlandı "${label}" — ${order.customerName} → ${code} (doğrudan üretime geçti)${lostCargoTag}`);
+    } else {
+      group.forEach(i=>{ i.code = code; i.status = 'coded'; i.codedAt = codedAt; });
+      assignTrendyolNumberIfNeeded(order);
+      logActivity(`Kodlandı "${label}" — ${order.customerName} → ${code}${lostCargoTag}`);
+    }
+    saveState(); render();
+  }
   tbody.querySelectorAll('.confirm-code').forEach(b=>{
+    b.onclick = ()=>confirmCode(b);
+  });
+  // "✓ Sahada bulundu" — the carpet was physically found on the production
+  // floor, so no replacement is produced at all. Resolves the item straight
+  // to a terminal state and removes it from Baskı öncesi entirely; this
+  // deliberately does NOT go through the normal coded/sorted/produced flow,
+  // since nothing is actually being made here.
+  tbody.querySelectorAll('.found-lostcargo').forEach(b=>{
+    b.onclick = ()=>{
+      const order = state.orders.find(o=>o.id===b.dataset.oid);
+      const ids = b.dataset.ids.split(',');
+      const group = order.items.filter(i=>ids.includes(i.id));
+      const label = group.length>1 ? `${displaySetLabel(group[0].setLabel)} (${group.length} parça)` : group[0].size;
+      const resolvedAt = new Date().toISOString();
+      group.forEach(i=>{ i.status = 'lostcargo-found'; i.lostCargoResolvedAt = resolvedAt; });
+      logActivity(`Kayıp Kargo çözüldü — "${label}" (${order.customerName}) sahada bulundu, üretim gerekmedi`);
+      saveState(); render();
+    };
+  });
+  // "Üretilecek — kodla" — confirms the item genuinely needs reproducing and
+  // reveals the normal code input for this one row, exactly like any other
+  // item from here on. This click IS the "searched and didn't find it"
+  // confirmation, so no further popup follows it.
+  tbody.querySelectorAll('.needs-production-lostcargo').forEach(b=>{
+    b.onclick = ()=>{
+      const rowKey = b.dataset.oid + '::' + b.dataset.ids;
+      lostCargoRevealedKeys.add(rowKey);
+      renderQueue();
+    };
+  });
+  // "Düzenle" — switches ONE specific row (identified by oid::ids) into edit
+  // mode, showing the code as an editable input again rather than needing to
+  // hunt the item down elsewhere to fix a typo.
+  tbody.querySelectorAll('.edit-code').forEach(b=>{
+    b.onclick = ()=>{
+      queueEditingKey = b.dataset.oid + '::' + b.dataset.ids;
+      renderQueue();
+    };
+  });
+  // "Kaydet" — saves a corrected code for an item that was already confirmed
+  // (status stays whatever it already progressed to — coded/sorted/produced —
+  // only the code text itself changes, since correcting a typo shouldn't
+  // undo any sorting/production work already done against it).
+  tbody.querySelectorAll('.save-code-edit').forEach(b=>{
     b.onclick = ()=>{
       const input = tbody.querySelector(`.code-input[data-oid="${b.dataset.oid}"][data-ids="${b.dataset.ids}"]`);
       const code = input.value.trim();
@@ -4657,19 +5811,10 @@ function wireQueueHandlers(tbody){
       const order = state.orders.find(o=>o.id===b.dataset.oid);
       const ids = b.dataset.ids.split(',');
       const group = order.items.filter(i=>ids.includes(i.id));
-      const codedAt = new Date().toISOString();
-      const label = group.length>1 ? `${displaySetLabel(group[0].setLabel)} (${group.length} parça)` : group[0].size;
-      if(order.channel==='İhracat'){
-        // İhracat items skip the sticker/sorting stage entirely — bigger bulk
-        // quantities don't get an individual sticker per piece the way IG's
-        // single carpets do, so coding goes straight to production tracking.
-        group.forEach(i=>{ i.code = code; i.status = 'sorted'; i.codedAt = codedAt; i.sortedAt = codedAt; i.producedQty = i.producedQty||0; });
-        logActivity(`Kodlandı "${label}" — ${order.customerName} → ${code} (doğrudan üretime geçti)`);
-      } else {
-        group.forEach(i=>{ i.code = code; i.status = 'coded'; i.codedAt = codedAt; });
-        assignTrendyolNumberIfNeeded(order);
-        logActivity(`Kodlandı "${label}" — ${order.customerName} → ${code}`);
-      }
+      const oldCode = group[0].code;
+      group.forEach(i=>{ i.code = code; });
+      logActivity(`Kod düzeltildi "${displaySetLabel(group[0].setLabel)||group[0].size}" — ${order.customerName}: ${oldCode} → ${code}`);
+      queueEditingKey = null;
       saveState(); render();
     };
   });
@@ -4721,12 +5866,27 @@ function renderSort(){
   const itemNumbers = computeItemNumbers();
   const filteredOrders = applyQueueFilters(state.orders, selectedSortFileFilterIds, 'sortTsFrom', 'sortTsTo');
   filteredOrders.forEach(o=>{
-    const coded = o.items.filter(i=>i.status==='coded');
-    coded.forEach(item=>{
+    // İhracat skips this stage entirely — coding sends it straight to
+    // 'sorted' with no actual sticker step in between, so it never belongs
+    // here regardless of status (it gets its own dedicated view in Üretim →
+    // İhracat Üretimi instead).
+    if(o.channel==='İhracat') return;
+    // Scoped to whichever channel is currently selected at the top of
+    // Sipariş Merkezi — each channel gets its own fully separate Ayırma &
+    // etiketler now, instead of one shared list grouped by channel headers.
+    if(channelCategoryForNumbering(o.channel) !== currentEntryMode) return;
+    // A sorted (printed) copy stays visible here too now, rather than
+    // disappearing the moment its sticker is printed — its own unique
+    // setLabel suffix (from splitOffOneCopy) already keeps it as its own
+    // separate group here, distinct from any copies still waiting to be
+    // printed, so this naturally shows both states side by side without
+    // needing any other change to the grouping itself.
+    const relevant = o.items.filter(i=>i.status==='coded' || i.status==='sorted');
+    relevant.forEach(item=>{
       const setKey = o.id + '::' + (item.setLabel || item.id);
       if(seenSets.has(setKey)) return;
       seenSets.add(setKey);
-      const bundle = item.setLabel ? coded.filter(i=>i.setLabel===item.setLabel) : [item];
+      const bundle = item.setLabel ? relevant.filter(i=>i.setLabel===item.setLabel) : [item];
       count += bundle.length;
       const taban = bundle[0].taban;
       groups[taban] = groups[taban]||[];
@@ -4739,42 +5899,48 @@ function renderSort(){
     g.className = 'taban-group';
     // "kalem" here means physical pieces needing their own sticker — a piece
     // with qty:5 is 5 physical carpets, not 1, so the count must add up qty,
-    // not just the number of distinct size/piece entries.
+    // not just the number of distinct size/piece entries. Counts everything
+    // shown in this taban group, printed or not.
     const physicalCount = groups[taban].reduce((s,x)=>s+bundleStickerCount(x.bundle), 0);
     g.innerHTML = `<h3>${taban} — ${physicalCount} kalem <button class="ghost small print-taban-stickers" data-taban="${taban}" style="margin-left:10px;font-weight:normal;font-family:'Inter',sans-serif;font-size:12px;">Bu grubun etiketlerini yazdır</button></h3>`;
     groups[taban].sort((a,b)=>(isGroupCarriedOver(b.bundle)?1:0)-(isGroupCarriedOver(a.bundle)?1:0));
     groups[taban].forEach(({order,bundle})=>{
-      const isSet = bundle.length>1;
-      const setNote = isSet ? ` <span class="muted">(${displaySetLabel(bundle[0].setLabel)} — ${bundle.length} parça)</span>` : (bundle[0].setLabel ? ` <span class="muted">(${displaySetLabel(bundle[0].setLabel)})</span>` : '');
-      const sizes = bundle.map(i=>i.size).join(', ');
-      const extraTags = [];
-      if(bundle[0].fringe) extraTags.push(bundle[0].fringe);
-      if(bundle[0].shape) extraTags.push(bundle[0].shape);
-      const extraNote = extraTags.length ? ` <span class="muted">[${extraTags.join(', ')}]</span>` : '';
-      const withImg = bundle.find(i=>i.images && i.images.length);
-      const thumb = withImg ? `<img src="${withImg.images[0]}" class="thumb" style="width:24px;height:24px">` : '';
-      const ids = bundle.map(i=>i.id).join(',');
-      const num = itemNumbers[order.id+'::'+(bundle[0].setLabel||bundle[0].id)] || '—';
-      const carried = isGroupCarriedOver(bundle);
-      // Every physical carpet in the order gets its own sequential number —
-      // one continuous count across the whole order (701-1/6, 701-2/6, ...),
-      // not restarted per item and not grouped separately by item, whether
-      // pieces come from the same item (via qty) or from different items
-      // entirely. bundleStickerCount already applies the collapsible-pair
-      // convention (only the two specific bathroom-mat presets count as one
-      // slot per copy; any other 2-piece combination counts like any other
-      // multi-piece set), so this stays consistent everywhere it's used.
-      const stickerCount = bundleStickerCount(bundle);
-      const copyCount = stickerCount > 1 ? stickerCount : 1;
-      for(let copyIdx=1; copyIdx<=copyCount; copyIdx++){
-        const tag = document.createElement('span');
-        tag.className = 'tag';
-        const thisPos = numberWithPosition(num, order, bundle[0], copyIdx);
-        const pos = carried ? `<span style="color:var(--rust);font-weight:600" title="Önceki günden devretmiş">${thisPos}</span>` : thisPos;
-        tag.innerHTML = `${thumb} <span class="ts">${pos}</span> ${bundle[0].code} — ${order.customerName} — ${sizes}${setNote}${extraNote} ${ageBadge(order, bundle[0])}
-          <button class="ghost small mark-sorted" data-oid="${order.id}" data-ids="${ids}" data-copy-idx="${copyIdx}" data-copy-total="${copyCount}">Etiket bastır</button>`;
-        g.appendChild(tag);
-      }
+        const isSet = bundle.length>1;
+        const setNote = isSet ? ` <span class="muted">(${displaySetLabel(bundle[0].setLabel)} — ${bundle.length} parça)</span>` : (bundle[0].setLabel ? ` <span class="muted">(${displaySetLabel(bundle[0].setLabel)})</span>` : '');
+        const sizes = bundle.map(i=>i.size).join(', ');
+        const extraTags = [];
+        if(bundle[0].fringe) extraTags.push(bundle[0].fringe);
+        if(bundle[0].shape) extraTags.push(bundle[0].shape);
+        const extraNote = extraTags.length ? ` <span class="muted">[${extraTags.join(', ')}]</span>` : '';
+        const withImg = bundle.find(i=>i.images && i.images.length);
+        const thumb = withImg ? `<img src="${withImg.images[0]}" class="thumb" style="width:24px;height:24px">` : '';
+        const ids = bundle.map(i=>i.id).join(',');
+        const num = itemNumbers[order.id+'::'+(bundle[0].setLabel||bundle[0].id)] || '—';
+        const carried = isGroupCarriedOver(bundle);
+        // Every physical carpet in the order gets its own sequential number —
+        // one continuous count across the whole order (701-1/6, 701-2/6, ...),
+        // not restarted per item and not grouped separately by item, whether
+        // pieces come from the same item (via qty) or from different items
+        // entirely. bundleStickerCount already applies the collapsible-pair
+        // convention (only the two specific bathroom-mat presets count as one
+        // slot per copy; any other 2-piece combination counts like any other
+        // multi-piece set), so this stays consistent everywhere it's used.
+        const stickerCount = bundleStickerCount(bundle);
+        const copyCount = stickerCount > 1 ? stickerCount : 1;
+        const isPrinted = bundle[0].status === 'sorted';
+        for(let copyIdx=1; copyIdx<=copyCount; copyIdx++){
+          const tag = document.createElement('span');
+          tag.className = 'tag';
+          const thisPos = numberWithPosition(num, order, bundle[0], copyIdx);
+          const pos = carried ? `<span style="color:var(--rust);font-weight:600" title="Önceki günden devretmiş">${thisPos}</span>` : thisPos;
+          const actionHtml = isPrinted
+            ? `<span style="color:var(--forest);font-weight:600">✓ Etiket basıldı</span>
+               <button class="ghost small reprint-sticker" data-oid="${order.id}" data-ids="${ids}" data-copy-idx="${copyIdx}">Tekrar etiket bastır</button>`
+            : `<button class="ghost small mark-sorted" data-oid="${order.id}" data-ids="${ids}" data-copy-idx="${copyIdx}" data-copy-total="${copyCount}">Etiket bastır</button>`;
+          tag.innerHTML = `${thumb} <span class="ts">${pos}</span> ${bundle[0].code} — ${order.customerName} — ${sizes}${setNote}${extraNote} ${ageBadge(order, bundle[0])}
+            ${actionHtml}`;
+          g.appendChild(tag);
+        }
     });
     wrap.appendChild(g);
   });
@@ -4794,49 +5960,76 @@ function renderSort(){
       printStickers(thisCopy, itemNumbers);
       // Each click here is exactly one physical carpet — splitOffOneCopy peels
       // off just this one, leaving the rest still needing their own clicks.
+      // The split-off copy STAYS VISIBLE here (now showing "✓ Etiket basıldı"
+      // + a reprint option) instead of vanishing from the list.
       const label = bundle.length>1 ? `${displaySetLabel(bundle[0].setLabel)} (${bundle.length} parça)` : bundle[0].size;
       splitOffOneCopy(order, bundle, 'sorted', 'sortedAt');
       logActivity(`Etiket basıldı olarak işaretlendi: ${bundle[0].code} — ${order.customerName} (${label})`);
       saveState(); render();
     };
   });
+  // Reprints an already-printed sticker without touching its status — for a
+  // printer jam, a paper-feed problem, or an order edit that means the
+  // sticker needs to come out again. Purely a reprint; nothing about the
+  // item's progress changes.
+  wrap.querySelectorAll('.reprint-sticker').forEach(b=>{
+    b.onclick = ()=>{
+      const order = state.orders.find(o=>o.id===b.dataset.oid);
+      const ids = b.dataset.ids.split(',');
+      const bundle = order.items.filter(i=>ids.includes(i.id));
+      printStickers(expandBundleForStickers(order, bundle), itemNumbers);
+      logActivity(`Etiket tekrar basıldı: ${bundle[0].code} — ${order.customerName}`);
+    };
+  });
   wrap.querySelectorAll('.print-taban-stickers').forEach(b=>{
     b.onclick = (e)=>{
       e.stopPropagation();
       const taban = b.dataset.taban;
+      // Bulk-print only covers copies still awaiting their first sticker —
+      // an already-printed copy sitting in this same taban group is left
+      // alone, since reprinting it wasn't asked for and shouldn't happen as
+      // a side effect of printing the rest of the group.
+      const toPrint = (groups[taban]||[]).filter(({bundle})=>bundle[0].status==='coded');
       const pairs = [];
-      (groups[taban]||[]).forEach(({order,bundle})=>{
+      toPrint.forEach(({order,bundle})=>{
         pairs.push(...expandBundleForStickers(order, bundle));
       });
+      if(!pairs.length){ showMessage('Bu grupta henüz basılmamış etiket yok.'); return; }
       printStickers(pairs, itemNumbers);
-      // Printing here is a bulk action covering every item in this taban
-      // group at once — it needs to move all of them to sorted too, the same
-      // as the per-row button does for just its own row. Without this, every
-      // item printed this way stays stuck in "coded" and never reaches
-      // Üretim, even though a sticker was already produced for it.
-      const now = new Date().toISOString();
-      (groups[taban]||[]).forEach(({bundle})=>{
-        bundle.forEach(i=>{ i.status = 'sorted'; i.sortedAt = now; });
+      // Printing here is a bulk action covering every still-unprinted item in
+      // this taban group at once — each one gets peeled off via
+      // splitOffOneCopy exactly like the per-row button does, so a bundle
+      // with several physical copies correctly ends up with each copy
+      // individually marked rather than the whole bundle collapsing to
+      // "printed" in one step. Calling splitOffOneCopy repeatedly on the SAME
+      // bundle reference is safe and correct — it mutates those same item
+      // objects' qty in place each time, naturally peeling off one copy per
+      // call until the last one just flips status directly.
+      toPrint.forEach(({order,bundle})=>{
+        const copies = bundleStickerCount(bundle);
+        for(let i=0;i<copies;i++) splitOffOneCopy(order, bundle, 'sorted', 'sortedAt');
       });
-      logActivity(`"${taban}" grubu için tüm etiketler basıldı olarak işaretlendi.`);
+      logActivity(`"${taban}" grubu için basılmamış etiketler basıldı olarak işaretlendi.`);
       saveState(); render();
     };
   });
   document.getElementById('printAllStickers').onclick = ()=>{
     const pairs = [];
+    const toPrintAll = [];
     Object.values(groups).forEach(list=>{
       list.forEach(({order,bundle})=>{
+        if(bundle[0].status!=='coded') return;
+        toPrintAll.push({order,bundle});
         pairs.push(...expandBundleForStickers(order, bundle));
       });
     });
+    if(!pairs.length){ showMessage('Basılmamış etiket yok.'); return; }
     printStickers(pairs, itemNumbers);
-    const now = new Date().toISOString();
-    Object.values(groups).forEach(list=>{
-      list.forEach(({bundle})=>{
-        bundle.forEach(i=>{ i.status = 'sorted'; i.sortedAt = now; });
-      });
+    toPrintAll.forEach(({order,bundle})=>{
+      const copies = bundleStickerCount(bundle);
+      for(let i=0;i<copies;i++) splitOffOneCopy(order, bundle, 'sorted', 'sortedAt');
     });
-    logActivity(`Tüm etiketler basıldı olarak işaretlendi.`);
+    logActivity(`Basılmamış tüm etiketler basıldı olarak işaretlendi.`);
     saveState(); render();
   };
 }
@@ -4941,6 +6134,19 @@ function printStickers(pairs, itemNumbers){
 }
 
 function orderPlacedAt(order){
+  // Instagram orders can arrive several days apart within the very same
+  // upload batch (one Excel file spanning a week's worth of orders, all
+  // saved to the system in that one upload moment) — recordedAt would then
+  // be identical for all of them regardless of which day each one actually
+  // came in, understating how old the earliest rows really are. So for
+  // Instagram specifically, age counts from noon of each row's OWN order
+  // date instead of the shared upload timestamp — noon (not midnight) since
+  // that's the operator's own daily cutoff convention for what counts as
+  // "today's" orders.
+  if(channelCategoryForNumbering(order.channel) === 'ig'){
+    const d = parseDMY(order.date);
+    if(d){ d.setHours(12,0,0,0); return d; }
+  }
   // The real starting point for "how long has this taken": the exact moment the
   // order was actually recorded into the system (upload save or manual save), not
   // just midnight of its date. Falls back to midnight of the order date only for
@@ -4991,6 +6197,18 @@ function hoursSinceOrderDate(order){
   return Math.max(0, hours);
 }
 
+// İhracat orders typically take weeks in production, so a raw hour count
+// ("312sa") becomes unwieldy fast — shown in whole days instead once at
+// least a full day has passed; still hours for anything under 24, since
+// "0 gün" would read as if nothing had happened yet. Every other channel
+// keeps the existing hour count unchanged.
+function formatDurationLabel(hours, order){
+  if(order.channel === 'İhracat' && hours >= 24){
+    return `${Math.floor(hours/24)} gün`;
+  }
+  return `${hours}sa`;
+}
+
 function ageBadge(order, item){
   // A single, consistent age/delay indicator meant to show up everywhere the item
   // actually sits (queue, sorting, production, orders list) — not tucked away in a
@@ -4999,11 +6217,11 @@ function ageBadge(order, item){
   if(item.status==='produced'){
     const lag = itemLagHours(order, item);
     if(lag===null) return '';
-    return lag===0 ? `<span class="pill pill-produced">Zamanında üretildi</span>` : `<span class="pill pill-produced">+${lag}sa üretim süresi</span>`;
+    return lag===0 ? `<span class="pill pill-produced">Zamanında üretildi</span>` : `<span class="pill pill-produced">+${formatDurationLabel(lag, order)} üretim süresi</span>`;
   }
   const hours = hoursSinceOrderDate(order);
   if(hours===null || hours<=0) return '';
-  return `<span class="pill pill-pending">Siparişten bu yana ${hours}sa</span>`;
+  return `<span class="pill pill-pending">Siparişten bu yana ${formatDurationLabel(hours, order)}</span>`;
 }
 
 function renderProduction(){
@@ -5017,12 +6235,20 @@ function renderProduction(){
   const filteredOrders = applyQueueFilters(state.orders, selectedProdFileFilterIds, 'prodTsFrom', 'prodTsTo');
   filteredOrders.forEach(o=>{
     if(o.channel==='İhracat') return; // İhracat gets its own partial-quantity view below
-    const sorted = o.items.filter(i=>i.status==='sorted');
-    sorted.forEach(item=>{
+    // Scoped to whichever channel is currently selected at the top of
+    // Sipariş Merkezi — each channel gets its own fully separate Üretim now,
+    // instead of one shared list grouped by channel headers.
+    if(channelCategoryForNumbering(o.channel) !== currentEntryMode) return;
+    // A produced copy stays visible here too now, rather than disappearing
+    // the moment it's marked done — its own unique setLabel suffix (from
+    // splitOffOneCopy) already keeps it as its own separate group here,
+    // distinct from any copies still waiting to be produced.
+    const relevant = o.items.filter(i=>i.status==='sorted' || i.status==='produced');
+    relevant.forEach(item=>{
       const setKey = o.id + '::' + (item.setLabel || item.id);
       if(seenSets.has(setKey)) return;
       seenSets.add(setKey);
-      const bundle = item.setLabel ? sorted.filter(i=>i.setLabel===item.setLabel) : [item];
+      const bundle = item.setLabel ? relevant.filter(i=>i.setLabel===item.setLabel) : [item];
       count += bundle.length;
       const taban = bundle[0].taban;
       groups[taban] = groups[taban]||[];
@@ -5034,40 +6260,51 @@ function renderProduction(){
     const g = document.createElement('div');
     g.className = 'taban-group';
     g.innerHTML = `<h3>${taban} — ${groups[taban].reduce((s,x)=>s+bundleStickerCount(x.bundle),0)} kalem</h3>`;
-    // Longest-waiting first, so anything delayed surfaces at the top instead of getting buried.
-    // Carried over from a previous coding day first, then longest-waiting-in-production among the rest.
-    groups[taban].sort((a,b)=>(isGroupCarriedOver(b.bundle)?1:0)-(isGroupCarriedOver(a.bundle)?1:0) || hoursWaiting(b.bundle[0].sortedAt)-hoursWaiting(a.bundle[0].sortedAt));
-    groups[taban].forEach(({order,bundle})=>{
-      const isSet = bundle.length>1;
-      const setNote = isSet ? ` <span class="muted">(${displaySetLabel(bundle[0].setLabel)} — ${bundle.length} parça)</span>` : (bundle[0].setLabel ? ` <span class="muted">(${displaySetLabel(bundle[0].setLabel)})</span>` : '');
-      const sizes = bundle.map(i=>i.size).join(', ');
-      const withImg = bundle.find(i=>i.images && i.images.length);
-      const thumb = withImg ? `<img src="${withImg.images[0]}" class="thumb" style="width:24px;height:24px">` : '';
-      const ids = bundle.map(i=>i.id).join(',');
-      const num = itemNumbers[order.id+'::'+(bundle[0].setLabel||bundle[0].id)] || '—';
-      const carried = isGroupCarriedOver(bundle);
-      const hours = hoursWaiting(bundle[0].sortedAt);
-      const waitNote = hours<=0 ? '' : hours===1
-        ? ` <span class="pill pill-pending" style="margin-left:4px">1 saattir üretimde</span>`
-        : ` <span class="pill pill-pending" style="margin-left:4px">${hours} saattir üretimde</span>`;
-      // Same copy-expansion as Ayırma & etiketler — a bundle representing
-      // more than one physical piece (a 2-piece pair at qty > 1, or any other
-      // multi-piece qty) gets its own row per copy here too, each with its
-      // own distinct number, instead of one row silently covering several
-      // physical carpets at once (which is exactly what made "3 kalem" show
-      // only 2 rows here before this fix).
-      const stickerCount = bundleStickerCount(bundle);
-      const copyCount = stickerCount > 1 ? stickerCount : 1;
-      for(let copyIdx=1; copyIdx<=copyCount; copyIdx++){
-        const tag = document.createElement('span');
-        tag.className = 'tag';
-        const thisPos = numberWithPosition(num, order, bundle[0], copyIdx);
-        const pos = carried ? `<span style="color:var(--rust);font-weight:600" title="Önceki günden devretmiş">${thisPos}</span>` : thisPos;
-        tag.innerHTML = `${thumb} <span class="ts">${pos}</span> ${bundle[0].code} — ${order.customerName} — ${sizes}${setNote}${waitNote} ${ageBadge(order, bundle[0])}
-          <button class="ghost small mark-produced" data-oid="${order.id}" data-ids="${ids}">Üretildi olarak işaretle</button>`;
-        g.appendChild(tag);
-      }
-    });
+      // Longest-waiting first, so anything delayed surfaces at the top instead of getting buried.
+      // Carried over from a previous coding day first, then longest-waiting-in-production among the rest.
+      groups[taban].sort((a,b)=>(isGroupCarriedOver(b.bundle)?1:0)-(isGroupCarriedOver(a.bundle)?1:0) || hoursWaiting(b.bundle[0].sortedAt)-hoursWaiting(a.bundle[0].sortedAt));
+      groups[taban].forEach(({order,bundle})=>{
+        const isSet = bundle.length>1;
+        const setNote = isSet ? ` <span class="muted">(${displaySetLabel(bundle[0].setLabel)} — ${bundle.length} parça)</span>` : (bundle[0].setLabel ? ` <span class="muted">(${displaySetLabel(bundle[0].setLabel)})</span>` : '');
+        const sizes = bundle.map(i=>i.size).join(', ');
+        const withImg = bundle.find(i=>i.images && i.images.length);
+        const thumb = withImg ? `<img src="${withImg.images[0]}" class="thumb" style="width:24px;height:24px">` : '';
+        const ids = bundle.map(i=>i.id).join(',');
+        const rowKey = order.id + '::' + ids;
+        const num = itemNumbers[order.id+'::'+(bundle[0].setLabel||bundle[0].id)] || '—';
+        const carried = isGroupCarriedOver(bundle);
+        const hours = hoursWaiting(bundle[0].sortedAt);
+        const waitNote = hours<=0 ? '' : hours===1
+          ? ` <span class="pill pill-pending" style="margin-left:4px">1 saattir üretimde</span>`
+          : ` <span class="pill pill-pending" style="margin-left:4px">${hours} saattir üretimde</span>`;
+        // Same copy-expansion as Ayırma & etiketler — a bundle representing
+        // more than one physical piece (a 2-piece pair at qty > 1, or any other
+        // multi-piece qty) gets its own row per copy here too, each with its
+        // own distinct number, instead of one row silently covering several
+        // physical carpets at once (which is exactly what made "3 kalem" show
+        // only 2 rows here before this fix).
+        const stickerCount = bundleStickerCount(bundle);
+        const copyCount = stickerCount > 1 ? stickerCount : 1;
+        const isProduced = bundle[0].status === 'produced';
+        const isBeingEdited = productionEditingKey === rowKey;
+        for(let copyIdx=1; copyIdx<=copyCount; copyIdx++){
+          const tag = document.createElement('span');
+          tag.className = 'tag';
+          const thisPos = numberWithPosition(num, order, bundle[0], copyIdx);
+          const pos = carried ? `<span style="color:var(--rust);font-weight:600" title="Önceki günden devretmiş">${thisPos}</span>` : thisPos;
+          let actionHtml;
+          if(!isProduced){
+            actionHtml = `<button class="ghost small mark-produced" data-oid="${order.id}" data-ids="${ids}">Üretildi olarak işaretle</button>`;
+          } else if(isBeingEdited){
+            actionHtml = `<button class="ghost small remark-produced" data-oid="${order.id}" data-ids="${ids}">Tekrar üretildi olarak işaretle</button>`;
+          } else {
+            actionHtml = `<span style="color:var(--forest);font-weight:600">✓ Üretildi</span> <button class="ghost small edit-produced" data-oid="${order.id}" data-ids="${ids}">Düzenle</button>`;
+          }
+          tag.innerHTML = `${thumb} <span class="ts">${pos}</span> ${bundle[0].code} — ${order.customerName} — ${sizes}${setNote}${waitNote} ${ageBadge(order, bundle[0])}
+            ${actionHtml}`;
+          g.appendChild(tag);
+        }
+      });
     wrap.appendChild(g);
   });
   wrap.querySelectorAll('.mark-produced').forEach(b=>{
@@ -5086,6 +6323,33 @@ function renderProduction(){
       const label = bundle.length>1 ? `${displaySetLabel(bundle[0].setLabel)} (${bundle.length} parça)` : bundle[0].size;
       splitOffOneCopy(order, bundle, 'produced', 'producedAt');
       logActivity(`Üretildi olarak işaretlendi: ${bundle[0].code} — ${order.customerName} (${label})${lag>0?` — sipariş tarihinden ${lag} saat sonra`:''}`);
+      saveState(); render();
+    };
+  });
+  // "Düzenle" — switches an already-produced row into its re-confirm state
+  // (showing "Tekrar üretildi olarak işaretle" instead of the ✓ label), for
+  // when a piece needs to be remade (e.g. failed quality control) and the
+  // re-make needs its own confirmation once it's actually done.
+  wrap.querySelectorAll('.edit-produced').forEach(b=>{
+    b.onclick = ()=>{
+      productionEditingKey = b.dataset.oid + '::' + b.dataset.ids;
+      renderProduction();
+    };
+  });
+  // "Tekrar üretildi olarak işaretle" — re-confirms production on a piece
+  // that was already marked produced once (status stays 'produced'; only the
+  // producedAt timestamp and activity log move forward), for a remake after
+  // a quality issue.
+  wrap.querySelectorAll('.remark-produced').forEach(b=>{
+    b.onclick = ()=>{
+      const order = state.orders.find(o=>o.id===b.dataset.oid);
+      const ids = b.dataset.ids.split(',');
+      const bundle = order.items.filter(i=>ids.includes(i.id));
+      const now = new Date().toISOString();
+      bundle.forEach(i=>{ i.producedAt = now; });
+      const label = bundle.length>1 ? `${displaySetLabel(bundle[0].setLabel)} (${bundle.length} parça)` : bundle[0].size;
+      logActivity(`Tekrar üretildi olarak işaretlendi (yeniden üretim/kalite düzeltmesi): ${bundle[0].code} — ${order.customerName} (${label})`);
+      productionEditingKey = null;
       saveState(); render();
     };
   });
@@ -5123,13 +6387,21 @@ function renderExportProduction(){
       const target = item.qty || 1;
       const remaining = Math.max(0, target - produced);
       const pct = target ? Math.min(100, Math.round(produced/target*100)) : 0;
+      const rowKey = order.id + '::' + item.id;
+      const isEditingCode = exportCodeEditingKey === rowKey;
+      const codeCell = isEditingCode
+        ? `<input class="ex-code-input" value="${item.code||''}" data-oid="${order.id}" data-id="${item.id}" style="width:90px">
+           <button class="ghost small ex-save-code" data-oid="${order.id}" data-id="${item.id}">Kaydet</button>`
+        : `<span>${item.code}</span>
+           <button class="ghost small ex-edit-code" data-oid="${order.id}" data-id="${item.id}" title="Kod yazım hatası varsa düzeltin">Düzenle</button>`;
       const row = document.createElement('div');
       row.className = 'tag';
       row.style.display = 'flex';
       row.style.alignItems = 'center';
       row.style.gap = '10px';
       row.innerHTML = `
-        <span>${order.customerName} — ${item.size}${item.setLabel?` <span class="muted">(${displaySetLabel(item.setLabel)})</span>`:''} ${item.code}</span>
+        <span>${order.customerName} — ${item.size}${item.setLabel?` <span class="muted">(${displaySetLabel(item.setLabel)})</span>`:''}</span>
+        ${codeCell}
         <span class="muted">Hedef: ${target}</span>
         <label style="margin:0">Üretilen:</label>
         <input type="number" class="ex-produced-input" min="0" max="${target}" value="${produced}" style="width:70px" data-oid="${order.id}" data-id="${item.id}">
@@ -5143,6 +6415,26 @@ function renderExportProduction(){
     wrap.appendChild(g);
   });
 
+  wrap.querySelectorAll('.ex-edit-code').forEach(b=>{
+    b.onclick = ()=>{
+      exportCodeEditingKey = b.dataset.oid + '::' + b.dataset.id;
+      renderExportProduction();
+    };
+  });
+  wrap.querySelectorAll('.ex-save-code').forEach(b=>{
+    b.onclick = ()=>{
+      const input = wrap.querySelector(`.ex-code-input[data-oid="${b.dataset.oid}"][data-id="${b.dataset.id}"]`);
+      const code = input.value.trim();
+      if(!code){ input.style.borderColor = 'var(--rust)'; return; }
+      const order = state.orders.find(o=>o.id===b.dataset.oid);
+      const item = order.items.find(i=>i.id===b.dataset.id);
+      const oldCode = item.code;
+      item.code = code;
+      logActivity(`İhracat kodu düzeltildi: ${item.size} — ${order.customerName}: ${oldCode} → ${code}`);
+      exportCodeEditingKey = null;
+      saveState(); render();
+    };
+  });
   wrap.querySelectorAll('.ex-update-produced').forEach(b=>{
     b.onclick = ()=>{
       const order = state.orders.find(o=>o.id===b.dataset.oid);
@@ -5175,7 +6467,7 @@ function renderOverview(){
   // explanation in the Raporlar handler above.
   const from = fromVal ? (()=>{ const [y,m,d]=fromVal.split('-').map(Number); return new Date(y,m-1,d); })() : null;
   const to = toVal ? (()=>{ const [y,m,d]=toVal.split('-').map(Number); return new Date(y,m-1,d,23,59,59,999); })() : null;
-  const orders = state.orders.filter(o=>{
+  const allOrders = state.orders.filter(o=>{
     if(!from && !to) return true;
     const d = parseDMY(o.date);
     if(!d) return false;
@@ -5183,6 +6475,15 @@ function renderOverview(){
     if(to && d > to) return false;
     return true;
   });
+  // Kayıp Kargo orders are never a real sale, so they're excluded from every
+  // main stat here (Siparişler, Halı sayısı, and the status breakdown) the
+  // same way Tüm Siparişler already excludes them from its own totals — an
+  // item that's been confirmed as genuinely needing reproduction still
+  // doesn't retroactively become a new sale just because real production
+  // work now happens on it. Its own dedicated section below is where that
+  // work is actually tracked and made visible, kept separate on purpose so
+  // it never quietly inflates the regular sales numbers.
+  const orders = allOrders.filter(o=>o.saleType !== 'Kayıp Kargo');
 
   const totalCarpetCount = orders.reduce((s,o)=>s+countCarpets(o.items), 0);
   // Every stat here counts CARPETS (same rule as "Halı sayısı"), not raw item-lines
@@ -5236,6 +6537,33 @@ function renderOverview(){
   document.getElementById('tabanStatsBody').innerHTML = Object.keys(byTaban).length ?
     Object.entries(byTaban).map(([t,s])=>`<tr><td>${t}</td><td>${s.carpets}</td><td>${s.coded}</td><td>${s.sorted}</td><td>${s.produced}</td></tr>`).join('')
     : '<tr><td colspan="5" class="empty">Henüz veri yok.</td></tr>';
+
+  // Kayıp Kargo tracked in its own separate card, deliberately outside the
+  // main stats above — visibility into how much this is costing in lost
+  // production time, without it ever quietly inflating the real sales
+  // numbers. Counted per-CARPET (matching every other stat here), not per
+  // order, since a single Kayıp Kargo order can mix items across different
+  // resolutions (some found, some genuinely reproduced).
+  const lostCargoOrders = allOrders.filter(o=>o.saleType==='Kayıp Kargo');
+  const lostCargoCard = document.getElementById('lostCargoOverviewCard');
+  if(lostCargoOrders.length){
+    lostCargoCard.style.display = 'block';
+    let awaiting=0, found=0, reproducing=0;
+    lostCargoOrders.forEach(o=>{
+      awaiting += countCarpets(o.items.filter(i=>i.status==='pending'));
+      found += countCarpets(o.items.filter(i=>i.status==='lostcargo-found'));
+      reproducing += countCarpets(o.items.filter(i=>i.status==='coded'||i.status==='sorted'||i.status==='produced'));
+    });
+    const lostCargoStats = [
+      {n: lostCargoOrders.length, l:'Vaka'},
+      {n: awaiting, l:'Karar bekliyor'},
+      {n: found, l:'Sahada bulundu'},
+      {n: reproducing, l:'Yeniden üretiliyor/üretildi'},
+    ];
+    document.getElementById('lostCargoStatGrid').innerHTML = lostCargoStats.map(s=>`<div class="stat"><div class="n">${s.n}</div><div class="l">${s.l}</div></div>`).join('');
+  } else {
+    lostCargoCard.style.display = 'none';
+  }
 }
 document.getElementById('ovFrom').addEventListener('change', renderOverview);
 document.getElementById('ovTo').addEventListener('change', renderOverview);
@@ -5311,10 +6639,18 @@ function renderLog(){
 }
 
 function render(){
-  renderOrders(); renderExportOrders(); renderQueue(); renderSort(); renderProduction(); renderOverview(); renderChannels(); renderUploadLog(); renderTrendyolUploadLog(); renderLog(); renderSetTemplates(); renderCommonSizes(); renderUsers(); renderOperatorBar(); renderReport();
-  // Click any design-photo thumbnail (Baskı öncesi, Ayırma & etiketler, Üretim)
-  // to see it enlarged — re-wired after every render since these images get
-  // rebuilt from scratch each time.
+  renderOrders(); renderExportOrders(); renderQueue(); renderSort(); renderProduction(); renderOverview(); renderChannels(); renderUploadLog(); renderTrendyolUploadLog(); renderLog(); renderSetTemplates(); renderCommonSizes(); renderUsers(); renderOperatorBar(); renderReport(); renderCatalogInfo();
+  wireImageLightbox();
+}
+
+// Click any design-photo thumbnail (Baskı öncesi, Ayırma & etiketler, Üretim)
+// to see it enlarged — re-wired after every render since these images get
+// rebuilt from scratch each time. Also called from renderCurrentStage() (used
+// when just switching channel/stage rather than a full render), since that
+// path rebuilds a stage's thumbnails too but doesn't go through render()
+// itself — without calling this there too, a thumbnail rendered that way
+// would have no click handler attached at all.
+function wireImageLightbox(){
   document.querySelectorAll('.thumb').forEach(img=>{
     img.style.cursor = 'zoom-in';
     img.onclick = (e)=>{ e.stopPropagation(); openImageLightbox(img.src); };
