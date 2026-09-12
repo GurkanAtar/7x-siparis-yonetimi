@@ -174,6 +174,7 @@
               <option value="Eksik Gönderim Telafisi">Eksik Gönderim Telafisi</option>
               <option value="Değişim">Değişim</option>
               <option value="Hediye">Hediye</option>
+              <option value="Numune Gönderimi">Numune Gönderimi</option>
             </select>
           </div>
           <div><label>Not</label><input id="mNote" placeholder="opsiyonel"></div>
@@ -269,6 +270,7 @@
               <option value="Eksik Gönderim Telafisi">Eksik Gönderim Telafisi</option>
               <option value="Değişim">Değişim</option>
               <option value="Hediye">Hediye</option>
+              <option value="Numune Gönderimi">Numune Gönderimi</option>
             </select>
           </div>
           <div><label>Not</label><input id="ssNote" placeholder="opsiyonel"></div>
@@ -311,6 +313,12 @@
         </div>
         <div class="row row2">
           <div><label>Not</label><input id="exNote" placeholder="opsiyonel"></div>
+          <div><label>Sipariş Türü</label>
+            <select id="exSaleType">
+              <option value="">Satış</option>
+              <option value="Numune Gönderimi">Numune Gönderimi</option>
+            </select>
+          </div>
         </div>
         <p class="muted" style="margin-top:-4px">Peşinat/Bakiye yok — ihracat siparişleri farklı bir yöntemle tam olarak önceden tahsil edilir.</p>
       </div>
@@ -1563,6 +1571,7 @@ function normalizeSaleType(raw){
   if(key.includes('eksik')) return 'Eksik Gönderim Telafisi';
   if(key.includes('degisim')) return 'Değişim';
   if(key.includes('hediye')) return 'Hediye';
+  if(key.includes('numune')) return 'Numune Gönderimi';
   // Anything unrecognized (including "Satış"/blank, the default) is passed
   // through as originally typed rather than forced into one of the known
   // options — this only ever snaps a RECOGNIZED variant to its canonical
@@ -3210,7 +3219,7 @@ function getEntryFieldValues(){
       address: '',
       price: priceStr,
       note: document.getElementById('exNote').value.trim(),
-      saleType: '',
+      saleType: document.getElementById('exSaleType').value,
       // Export has no Peşinat/Bakiye of its own — paid in full via a different
       // method beforehand, so prepaidAmount is forced equal to price, making
       // Bakiye compute to 0 through the existing shared logic with no special
@@ -3670,6 +3679,7 @@ document.getElementById('saveOrder').onclick = async ()=>{
   }
   if(currentEntryMode==='ihracat'){
     ['exName','exPhone','exCity','exCountry','exForeignAmount','exRate','exNote'].forEach(id=>document.getElementById(id).value='');
+    document.getElementById('exSaleType').value='';
     document.getElementById('exPriceTL').value='';
     document.getElementById('exOrderDate').value = toDateInputValue(new Date());
   } else if(currentEntryMode==='sicaksatis'){
@@ -3764,6 +3774,7 @@ async function startEditOrder(orderId){
     document.getElementById('exForeignAmount').value = order.foreignAmount||'';
     document.getElementById('exRate').value = order.exchangeRate||'';
     document.getElementById('exNote').value = order.note||'';
+    document.getElementById('exSaleType').value = order.saleType||'';
     document.getElementById('exOrderDate').value = dateVal;
     updateExchangeTL();
   } else if(targetSub==='trendyol'){
@@ -3834,6 +3845,7 @@ document.getElementById('cancelEdit').onclick = ()=>{
   document.getElementById('cancelEdit').style.display = 'none';
   if(currentEntryMode==='ihracat'){
     ['exName','exPhone','exCity','exCountry','exForeignAmount','exRate','exNote'].forEach(id=>document.getElementById(id).value='');
+    document.getElementById('exSaleType').value='';
     document.getElementById('exPriceTL').value='';
     document.getElementById('exOrderDate').value = toDateInputValue(new Date());
   } else if(currentEntryMode==='sicaksatis'){
@@ -5176,7 +5188,13 @@ function renderOrders(){
       const tr = document.createElement('tr');
       // Same highlight as Baskı öncesi, and excluded from the running
       // subtotal/grand total below — not a real sale, so it shouldn't
-      // inflate either.
+      // inflate either. A Kayıp Kargo order that's STILL missing phone/address
+      // (saved via the "eksik bilgiye rağmen kaydet" override, with no
+      // matching prior order found to auto-fill from) gets an extra text
+      // badge on top of the usual highlight — the amber tint alone doesn't
+      // distinguish a complete Kayıp Kargo case from one that still needs
+      // contact info chased down.
+      const missingContactInfo = (!o.phone || !o.phone.trim()) || (!o.address || !o.address.trim());
       if(o.saleType === 'Kayıp Kargo'){
         tr.style.background = '#fff3e0';
         tr.style.borderLeft = '4px solid var(--rust)';
@@ -5184,8 +5202,10 @@ function renderOrders(){
         orderM2Sum += groupM2;
         if(groupTotal!==null) orderTutarSum += groupTotal;
       }
+      const missingContactBadge = (o.saleType==='Kayıp Kargo' && missingContactInfo)
+        ? ' <span class="pill" style="background:var(--rust);color:#fff;">İletişim bilgisi eksik</span>' : '';
       tr.innerHTML = `<td>${numCell}</td><td>${o.date||'-'}</td><td><span class="badge-chan">${o.channel}</span></td>
-        <td>${o.customerName}</td><td>${o.phone||'-'}</td><td>${o.address||'-'}</td>
+        <td>${o.customerName}${missingContactBadge}</td><td>${o.phone||'-'}</td><td>${o.address||'-'}</td>
         <td>${sizeCell}</td><td>${tabanCell}</td><td>${fringeCell}</td><td>${shapeCell}</td>
         <td>${groupCarpetCount}</td>
         <td>${groupM2.toFixed(2)}</td><td>${pricePerM2Cell}</td>
@@ -5282,11 +5302,16 @@ function renderOrders(){
       const tr = document.createElement('tr');
       // Same highlight as Baskı öncesi — a Kayıp Kargo entry isn't a real
       // sale, so it needs to stand out here too rather than blending in with
-      // ordinary orders in this list.
+      // ordinary orders in this list. A Kayıp Kargo case still missing
+      // phone/address gets an extra text badge on top of the highlight —
+      // see the same logic in the rowspanned list above.
+      const missingContactInfo = (!o.phone || !o.phone.trim()) || (!o.address || !o.address.trim());
       if(o.saleType === 'Kayıp Kargo'){
         tr.style.background = '#fff3e0';
         tr.style.borderLeft = '4px solid var(--rust)';
       }
+      const missingContactBadge = (o.saleType==='Kayıp Kargo' && missingContactInfo)
+        ? ' <span class="pill" style="background:var(--rust);color:#fff;">İletişim bilgisi eksik</span>' : '';
       const isSet = group.length > 1;
       const sizeCell = isSet
         ? `${group.map(i=>i.size).join(', ')} <span class="muted">(${displaySetLabel(group[0].setLabel)} — ${group.length} parça)</span>`
@@ -5325,7 +5350,7 @@ function renderOrders(){
         : (impliedPriceM2!==null ? formatTL(impliedPriceM2)+' TL' : '-');
       if(gi===0){
         tr.innerHTML = `<td>${numCell}</td><td rowspan="${rowspan}">${o.date||'-'}</td><td rowspan="${rowspan}"><span class="badge-chan">${o.channel}</span></td>
-          <td rowspan="${rowspan}">${o.customerName}</td><td rowspan="${rowspan}">${o.phone||'-'}</td><td rowspan="${rowspan}">${o.address||'-'}</td>
+          <td rowspan="${rowspan}">${o.customerName}${missingContactBadge}</td><td rowspan="${rowspan}">${o.phone||'-'}</td><td rowspan="${rowspan}">${o.address||'-'}</td>
           <td>${sizeCell}</td><td>${tabanCell}</td><td>${fringeCell}</td><td>${shapeCell}</td>
           <td>${groupCarpetCount}</td>
           <td>${groupM2.toFixed(2)}</td><td>${pricePerM2Cell}</td>
