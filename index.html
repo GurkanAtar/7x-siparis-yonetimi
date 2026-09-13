@@ -16,38 +16,76 @@
     --teal:#3F7A5E; --teal-bg:#DEEBE3;
     --rust:#B14A33; --rust-bg:#F5DED7;
   }
-  /* "Üretim görünümü" (production floor) theme — a pure color/typography
-     override, toggled at runtime via the theme-production class on <body>
-     (see the toggle button in the operator bar). Every existing rule above
-     and below already reads colors through these same custom properties,
-     so redefining them here re-themes the entire app without touching a
-     single layout rule, calculation, or data field. Kept as strictly
-     additive CSS: nothing here is ever the only place a rule is defined,
-     so removing this block (or simply not adding the class) fully restores
-     the original look with zero side effects — that's the "cancel" path. */
-  body.theme-production{
+  /* Four alternate color themes, switched at runtime via the theme select in
+     the operator bar (see themeSelect in the script below). Pure color/
+     typography overrides — every existing rule above and below already
+     reads colors through these same custom properties, so naming a theme
+     here re-themes the entire app without touching a single layout rule,
+     calculation, or data field. Kept strictly additive: nothing here is
+     ever the only place a rule is defined, so switching back to
+     "Varsayılan" (no class at all) fully restores the original look with
+     zero side effects.
+     The structural treatment (font, border weight, stat card size) is
+     shared across all four via one combined selector; only the actual
+     colors differ per theme, listed separately below that. Each theme
+     keeps its own amber/teal/rust distinct from its own primary accent
+     color specifically so the "İletişim bilgisi eksik" badge and other
+     status colors still read as alerts rather than blending into the
+     theme's own palette. */
+  body.theme-lacivert-fistik, body.theme-kehribar, body.theme-bordo, body.theme-turkuaz{
+    font-family:'Archivo',sans-serif;
+    font-size:15.5px;
+  }
+  body.theme-lacivert-fistik h1, body.theme-lacivert-fistik .card h2, body.theme-lacivert-fistik .taban-group h3,
+  body.theme-kehribar h1, body.theme-kehribar .card h2, body.theme-kehribar .taban-group h3,
+  body.theme-bordo h1, body.theme-bordo .card h2, body.theme-bordo .taban-group h3,
+  body.theme-turkuaz h1, body.theme-turkuaz .card h2, body.theme-turkuaz .taban-group h3{
+    font-family:'Archivo',sans-serif;font-weight:700;
+  }
+  body.theme-lacivert-fistik .card, body.theme-kehribar .card, body.theme-bordo .card, body.theme-turkuaz .card{border-width:2px;}
+  body.theme-lacivert-fistik table, body.theme-kehribar table, body.theme-bordo table, body.theme-turkuaz table{font-size:14.5px;}
+  body.theme-lacivert-fistik th, body.theme-kehribar th, body.theme-bordo th, body.theme-turkuaz th{font-size:11.5px;font-weight:600;}
+  body.theme-lacivert-fistik .stat, body.theme-kehribar .stat, body.theme-bordo .stat, body.theme-turkuaz .stat{background:var(--indigo);border-color:var(--indigo);}
+  body.theme-lacivert-fistik .stat .n, body.theme-kehribar .stat .n, body.theme-bordo .stat .n, body.theme-turkuaz .stat .n{font-family:'Archivo',sans-serif;font-size:27px;font-weight:700;}
+  body.theme-lacivert-fistik .stat .l, body.theme-kehribar .stat .l, body.theme-bordo .stat .l, body.theme-turkuaz .stat .l{color:#CBD5E1;}
+  body.theme-lacivert-fistik button, body.theme-kehribar button, body.theme-bordo button, body.theme-turkuaz button{font-weight:600;}
+
+  body.theme-lacivert-fistik{
     --paper:#EEF2F5; --card:#FFFFFF; --ink:#1E293B; --ink-soft:#51606F;
     --line:#334155; --indigo:#334155; --indigo-dark:#0F172A;
     --amber:#A16207; --amber-bg:#FEF3C7;
     --teal:#166534; --teal-bg:#DCFCE7;
     --rust:#B91C1C; --rust-bg:#FEE2E2;
-    font-family:'Archivo',sans-serif;
-    font-size:15.5px;
   }
-  body.theme-production h1,
-  body.theme-production .card h2,
-  body.theme-production .taban-group h3{font-family:'Archivo',sans-serif;font-weight:700;}
-  body.theme-production .card{border-width:2px;}
-  body.theme-production table{font-size:14.5px;}
-  body.theme-production th{font-size:11.5px;font-weight:600;}
-  /* The stat cards are the one place this theme departs from a plain
-     variable swap: solid dark-slate blocks with a lime headline number,
-     matching the high-contrast "production floor" look specifically —
-     everywhere else just inherits the swapped variables above. */
-  body.theme-production .stat{background:var(--indigo);border-color:var(--indigo);}
-  body.theme-production .stat .n{color:#BEF264;font-family:'Archivo',sans-serif;font-size:27px;font-weight:700;}
-  body.theme-production .stat .l{color:#CBD5E1;}
-  body.theme-production button{font-weight:600;}
+  body.theme-lacivert-fistik .stat .n{color:#BEF264;}
+
+  body.theme-kehribar{
+    --paper:#F5F1E8; --card:#FFFFFF; --ink:#1E293B; --ink-soft:#5C5647;
+    --line:#1E293B; --indigo:#1E293B; --indigo-dark:#0B1220;
+    --amber:#B45309; --amber-bg:#FEF0DC;
+    --teal:#166534; --teal-bg:#DCFCE7;
+    --rust:#B91C1C; --rust-bg:#FEE2E2;
+  }
+  body.theme-kehribar .stat .n{color:#FBBF24;}
+
+  body.theme-bordo{
+    --paper:#F7EFEC; --card:#FFFFFF; --ink:#2A1210; --ink-soft:#6B534E;
+    --line:#7F1D1D; --indigo:#7F1D1D; --indigo-dark:#450A0A;
+    --amber:#B45309; --amber-bg:#FEF0DC;
+    --teal:#166534; --teal-bg:#DCFCE7;
+    --rust:#EA580C; --rust-bg:#FFEDD5;
+  }
+  body.theme-bordo .stat{background:#27272A;border-color:#27272A;}
+  body.theme-bordo .stat .n{color:#FCA5A5;}
+
+  body.theme-turkuaz{
+    --paper:#F1F5F5; --card:#FFFFFF; --ink:#18181B; --ink-soft:#52525B;
+    --line:#18181B; --indigo:#18181B; --indigo-dark:#000000;
+    --amber:#A16207; --amber-bg:#FEF3C7;
+    --teal:#0F766E; --teal-bg:#CCFBF1;
+    --rust:#B91C1C; --rust-bg:#FEE2E2;
+  }
+  body.theme-turkuaz .stat .n{color:#22D3EE;}
   *{box-sizing:border-box;}
   body{margin:0;background:var(--paper);color:var(--ink);font-family:'IBM Plex Sans',sans-serif;}
   .wrap{max-width:1800px;margin:0 auto;padding:28px 24px 60px;}
@@ -138,13 +176,15 @@
 <body>
 <script>
   // Applied before anything else renders, synchronously, so there's no
-  // flash of the classic theme before switching to production (or vice
-  // versa). This is a purely personal, per-browser display preference —
-  // stored in localStorage, never in the shared app state — so each person
-  // using this app can choose their own view without affecting anyone
-  // else's, and it never touches saveState() or any business data.
-  if(localStorage.getItem('themePreference') === 'production'){
-    document.body.classList.add('theme-production');
+  // flash of one theme before switching to another. This is a purely
+  // personal, per-browser display preference — stored in localStorage,
+  // never in the shared app state — so each person using this app can
+  // choose their own view without affecting anyone else's, and it never
+  // touches saveState() or any business data.
+  const VALID_THEMES = ['theme-lacivert-fistik','theme-kehribar','theme-bordo','theme-turkuaz'];
+  const savedTheme = localStorage.getItem('themeName');
+  if(VALID_THEMES.includes(savedTheme)){
+    document.body.classList.add(savedTheme);
   }
 </script>
 <div id="saveErrorBanner" style="display:none;position:sticky;top:0;z-index:500;background:#b3261e;color:#fff;padding:12px 16px;text-align:center;font-weight:600;font-family:'Inter',sans-serif;font-size:14px;">
@@ -1285,18 +1325,32 @@ function renderOperatorBar(){
     ? ` <span class="pill pill-coded" title="Silme ve 24 saatten eski düzenleme gibi yönetici işlemleri için geçici yetkiniz var">Geçici yönetici yetkisi — ${Math.max(0,Math.round((new Date(myGrant.expires_at).getTime()-Date.now())/60000))} dakika kaldı</span>`
     : '';
   const roleLabel = isOwner ? 'Yönetici' : (currentProfile ? currentProfile.role : '');
+  const VALID_THEMES = ['theme-lacivert-fistik','theme-kehribar','theme-bordo','theme-turkuaz'];
+  const currentTheme = VALID_THEMES.find(t=>document.body.classList.contains(t)) || '';
+  const THEME_LABELS = {
+    '': 'Varsayılan',
+    'theme-lacivert-fistik': 'Lacivert & Fıstık Yeşili',
+    'theme-kehribar': 'Kehribar',
+    'theme-bordo': 'Bordo',
+    'theme-turkuaz': 'Turkuaz',
+  };
   bar.innerHTML = `
     <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
       <span><strong>${operatorName}</strong> olarak çalışıyorsunuz <span class="muted">(${roleLabel})</span></span>
       <span class="muted">İşlemler bu isim altında kaydedilecek.</span>${grantNote}
-      <button class="ghost small" id="themeToggleBtn">${document.body.classList.contains('theme-production') ? 'Klasik görünüme dön' : 'Üretim görünümü'}</button>
+      <label class="muted" style="font-size:12px;display:flex;align-items:center;gap:6px;">Görünüm:
+        <select id="themeSelect" style="width:auto;padding:4px 8px;font-size:12px;">
+          ${Object.entries(THEME_LABELS).map(([cls,label])=>`<option value="${cls}" ${currentTheme===cls?'selected':''}>${label}</option>`).join('')}
+        </select>
+      </label>
       <button class="ghost small" id="logoutBtn">Çıkış yap</button>
-      <span class="muted" style="font-size:10px;margin-left:auto;" title="Bu sürümün ne zaman oluşturulduğu — canlı sitenin en güncel dosyayı çalıştırıp çalıştırmadığını doğrulamak için.">Sürüm: 2026-09-13 07:38 UTC</span>
+      <span class="muted" style="font-size:10px;margin-left:auto;" title="Bu sürümün ne zaman oluşturulduğu — canlı sitenin en güncel dosyayı çalıştırıp çalıştırmadığını doğrulamak için.">Sürüm: 2026-09-13 16:37 UTC</span>
     </div>`;
-  document.getElementById('themeToggleBtn').onclick = ()=>{
-    const on = document.body.classList.toggle('theme-production');
-    localStorage.setItem('themePreference', on ? 'production' : 'classic');
-    document.getElementById('themeToggleBtn').textContent = on ? 'Klasik görünüme dön' : 'Üretim görünümü';
+  document.getElementById('themeSelect').onchange = (e)=>{
+    VALID_THEMES.forEach(t=>document.body.classList.remove(t));
+    const chosen = e.target.value;
+    if(chosen){ document.body.classList.add(chosen); localStorage.setItem('themeName', chosen); }
+    else { localStorage.removeItem('themeName'); }
   };
   document.getElementById('logoutBtn').onclick = async ()=>{
     await sb.auth.signOut();
