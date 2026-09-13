@@ -115,7 +115,7 @@
   .preview-box .ts{font-family:'IBM Plex Mono',monospace;color:var(--ink-soft);font-size:11px;}
   .src-tag{font-size:10px;text-transform:uppercase;letter-spacing:.03em;color:var(--ink-soft);}
   .dropdown-wrap{position:relative;display:inline-block;}
-  .dropdown-menu{display:none;position:absolute;top:calc(100% + 4px);left:0;background:#fff;border:1px solid var(--line);border-radius:8px;box-shadow:0 4px 14px rgba(0,0,0,.08);min-width:160px;z-index:20;overflow:hidden;}
+  .dropdown-menu{display:none;position:absolute;top:calc(100% + 4px);left:0;background:#fff;border:1px solid var(--line);border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,.14);min-width:160px;z-index:200;overflow:hidden;}
   .dropdown-menu.open{display:block;}
   .dropdown-item{padding:9px 14px;font-size:13px;cursor:pointer;white-space:nowrap;}
   .dropdown-item:hover{background:var(--paper);}
@@ -1283,6 +1283,7 @@ function renderOperatorBar(){
       <span class="muted">İşlemler bu isim altında kaydedilecek.</span>${grantNote}
       <button class="ghost small" id="themeToggleBtn">${document.body.classList.contains('theme-production') ? 'Klasik görünüme dön' : 'Üretim görünümü'}</button>
       <button class="ghost small" id="logoutBtn">Çıkış yap</button>
+      <span class="muted" style="font-size:10px;margin-left:auto;" title="Bu sürümün ne zaman oluşturulduğu — canlı sitenin en güncel dosyayı çalıştırıp çalıştırmadığını doğrulamak için.">Sürüm: 2026-09-13 07:28 UTC</span>
     </div>`;
   document.getElementById('themeToggleBtn').onclick = ()=>{
     const on = document.body.classList.toggle('theme-production');
@@ -2540,7 +2541,7 @@ function renderFileFilterListGeneric(listElId, toggleId, searchId, selectedSet, 
   const moreHtml = moreCount>0 ? `
     <div class="dropdown-item show-more-files" data-list="${listElId}" style="cursor:pointer;color:var(--indigo);font-weight:600;">Daha fazla göster (+${Math.min(10,moreCount)}, ${moreCount} kaldı)</div>` : '';
   listEl.innerHTML = manualHtml + (batches.length ? batches.map(b=>`
-    <label class="dropdown-item" style="display:flex;align-items:flex-start;gap:8px;white-space:normal;padding:8px 14px;">
+    <label class="dropdown-item" style="display:flex;align-items:flex-start;gap:8px;white-space:normal;padding:8px 14px;border-top:1px solid var(--line);">
       <input type="checkbox" class="ffc-${listElId}" data-id="${b.id}" style="margin-top:3px;flex-shrink:0;" ${selectedSet.has(b.id)?'checked':''}>
       <span style="min-width:0;">
         <span style="display:block;font-weight:500;overflow-wrap:break-word;">${cleanFileNameForDisplay(b.fileName) || 'Bilinmeyen dosya adı (kurtarılmış kayıt)'}</span>
