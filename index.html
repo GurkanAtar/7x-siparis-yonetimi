@@ -5736,7 +5736,15 @@ function renderOrders(){
       // same highlight plus an explicit text badge too — not just Kayıp
       // Kargo cases — so an incomplete record never just quietly shows a
       // blank dash with no visual flag at all.
-      const missingContactInfo = (!o.phone || !o.phone.trim()) || (!o.address || !o.address.trim());
+      // Uses the SAME shared check as the other render branch above rather
+      // than its own inline copy. This line previously tested phone/address
+      // directly with no channel scoping at all, so it flagged every
+      // Trendyol order — which never carries a phone number by platform
+      // policy — as "missing contact info". Two branches of this same
+      // function were deciding the badge with different rules, and this one
+      // is the branch that renders grouped rows, so fixes to the shared
+      // function alone never reached it.
+      const missingContactInfo = orderHasMissingContactWarning(o);
       const isLostCargoStillOpen = o.saleType === 'Kayıp Kargo' && !isLostCargoFullyResolved(o);
       if(isLostCargoStillOpen || missingContactInfo){
         tr.style.background = '#fff3e0';
