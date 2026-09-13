@@ -133,9 +133,10 @@
 
     <div id="musteriDbPanel" class="card" style="display:none;">
       <h2>Müşteri Veritabanı</h2>
-      <p class="muted" style="margin-top:-6px">Instagram, Trendyol ve Hepsiburada'daki müşterileri isim, telefon veya adrese göre arayın — kısmi eşleşme de çalışır (örn. sadece adı, sadece soyadı, veya adresin bir kısmı).</p>
+      <p class="muted" style="margin-top:-6px">Müşterileri isim, telefon veya adrese göre arayın — kısmi eşleşme de çalışır (örn. sadece adı, sadece soyadı, veya adresin bir kısmı). "Tüm Kanallar" tüm satış kanallarında birden arar; diğer sekmeler aramayı tek bir kanalla sınırlar.</p>
       <div class="entry-subtabs">
-        <div class="entry-subtab active" data-mode="ig-kurumsal">Instagram Kurumsal</div>
+        <div class="entry-subtab active" data-mode="all">Tüm Kanallar</div>
+        <div class="entry-subtab" data-mode="ig-kurumsal">Instagram Kurumsal</div>
         <div class="entry-subtab" data-mode="ig-bayi">Instagram Bayileri</div>
         <div class="entry-subtab" data-mode="trendyol-kurumsal">Trendyol Kurumsal</div>
         <div class="entry-subtab" data-mode="trendyol-bayi">Trendyol Bayileri</div>
@@ -1974,7 +1975,7 @@ document.getElementById('musteriDbBtn').onclick = ()=>{
   document.getElementById('musteriDbPanel').style.display = 'block';
   renderCustomerDbResults();
 };
-let cdbMode = 'ig-kurumsal';
+let cdbMode = 'all';
 document.querySelectorAll('.entry-subtab[data-mode]').forEach(b=>{
   b.onclick = ()=>{
     document.querySelectorAll('.entry-subtab[data-mode]').forEach(x=>x.classList.remove('active'));
@@ -1985,11 +1986,17 @@ document.querySelectorAll('.entry-subtab[data-mode]').forEach(b=>{
 });
 document.getElementById('cdbSearch').addEventListener('input', renderCustomerDbResults);
 
-// Each channel is fully separate here — Instagram Kurumsal, Instagram
-// Bayileri, Trendyol Kurumsal, Trendyol Bayileri, Hepsiburada Kurumsal,
-// Hepsiburada Bayileri — never mixed together. Sıcak Satış and İhracat stay
-// out of scope entirely, as before.
+// Each channel is fully separate in the per-channel tabs — Instagram
+// Kurumsal, Instagram Bayileri, Trendyol Kurumsal, Trendyol Bayileri,
+// Hepsiburada Kurumsal, Hepsiburada Bayileri — never mixed together.
+// "Tüm Kanallar" is the exception and searches everything at once,
+// Sıcak Satış and İhracat included: when you only know a name or half a
+// phone number and NOT which channel the person bought through, having to
+// guess the right tab first is exactly the wrong thing to ask. Results stay
+// grouped by channel either way (see the grouping key below), so a combined
+// search still shows plainly which channel each hit came through.
 function customerDbOrders(){
+  if(cdbMode === 'all') return state.orders;
   const [cat, kind] = cdbMode.split('-'); // e.g. 'ig'/'kurumsal', 'trendyol'/'bayi'
   return state.orders.filter(o=>{
     if(channelCategoryForNumbering(o.channel) !== cat) return false;
@@ -2004,8 +2011,12 @@ function renderCustomerDbResults(){
   document.getElementById('cdbDetail').innerHTML = '';
   const term = foldTurkishForSearch(document.getElementById('cdbSearch').value);
   cdbOpenIdx = null;
-  if(!term){ container.innerHTML = '<p class="muted">Aramak için isim, telefon veya adres yazın.</p>'; return; }
-  const matches = customerDbOrders().filter(o=>{
+  // An empty search box now means "show every client in this tab", not
+  // "show nothing until you type something" — switching to a channel tab
+  // is itself a request to see who's in it, the same way opening any other
+  // list in this app shows everything by default and a search box only
+  // narrows it further.
+  const matches = !term ? customerDbOrders() : customerDbOrders().filter(o=>{
     return foldTurkishForSearch(o.customerName).includes(term)
       || foldTurkishForSearch(o.phone).includes(term)
       || foldTurkishForSearch(o.address).includes(term);
@@ -2028,6 +2039,17 @@ function renderCustomerDbResults(){
     if(o.address && (!g.address || (oPlaced && gLatest && oPlaced>gLatest))) g.address = o.address;
   });
   cdbCustomerList = [...groups.values()];
+  // Alphabetical by the full customerName string, which sorts by first
+  // name first since Turkish names are stored "Ad Soyad" — a plain
+  // character-by-character comparison starts at the first name, not the
+  // surname, which is what was asked for. Applies to every tab now that an
+  // empty search shows the full list, not only to "Tüm Kanallar". Channel
+  // is the tiebreaker so the same person's multiple channel entries (only
+  // possible in "Tüm Kanallar") land next to each other.
+  cdbCustomerList.sort((a,b)=>{
+    const n = foldTurkishForSearch(a.name).localeCompare(foldTurkishForSearch(b.name), 'tr');
+    return n !== 0 ? n : foldTurkishForSearch(a.channel).localeCompare(foldTurkishForSearch(b.channel), 'tr');
+  });
   if(!cdbCustomerList.length){ container.innerHTML = '<p class="muted">Eşleşen müşteri bulunamadı.</p>'; return; }
   renderCustomerDbRows();
 }
