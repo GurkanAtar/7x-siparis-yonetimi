@@ -69,6 +69,14 @@
   .card h2{font-family:'Fraunces',serif;font-size:16px;font-weight:600;margin:0 0 12px;}
   label{display:block;font-size:12px;color:var(--ink-soft);margin:0 0 4px;}
   input,select,textarea{width:100%;padding:8px 10px;border:1px solid var(--line);border-radius:6px;background:#fff;font-size:14px;font-family:inherit;color:var(--ink);}
+  /* Checkboxes and radios must be excluded from the rule above — it's meant
+     for text-style fields, but a bare `input` selector also catches them, so
+     every checkbox was being stretched to width:100% with 8px padding and a
+     border. Inside a flex row that made the checkbox consume the entire
+     width and squeeze the label beside it down to zero, which is exactly why
+     the Dosya dropdown looked empty: the file names were always rendered,
+     just crushed to nothing. */
+  input[type="checkbox"],input[type="radio"]{width:auto;padding:0;border:none;border-radius:0;background:none;flex-shrink:0;}
   .row{display:grid;gap:10px;margin-bottom:10px;}
   .row2{grid-template-columns:1fr 1fr;}
   .row3{grid-template-columns:1fr 1fr 1fr;}
@@ -1283,7 +1291,7 @@ function renderOperatorBar(){
       <span class="muted">İşlemler bu isim altında kaydedilecek.</span>${grantNote}
       <button class="ghost small" id="themeToggleBtn">${document.body.classList.contains('theme-production') ? 'Klasik görünüme dön' : 'Üretim görünümü'}</button>
       <button class="ghost small" id="logoutBtn">Çıkış yap</button>
-      <span class="muted" style="font-size:10px;margin-left:auto;" title="Bu sürümün ne zaman oluşturulduğu — canlı sitenin en güncel dosyayı çalıştırıp çalıştırmadığını doğrulamak için.">Sürüm: 2026-09-13 07:28 UTC</span>
+      <span class="muted" style="font-size:10px;margin-left:auto;" title="Bu sürümün ne zaman oluşturulduğu — canlı sitenin en güncel dosyayı çalıştırıp çalıştırmadığını doğrulamak için.">Sürüm: 2026-09-13 07:38 UTC</span>
     </div>`;
   document.getElementById('themeToggleBtn').onclick = ()=>{
     const on = document.body.classList.toggle('theme-production');
