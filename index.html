@@ -2492,6 +2492,15 @@ function batchMatchesCategory(batch, category){
   return batchOrders.some(o=>orderMatchesCategory(o, category));
 }
 
+// Every uploaded file is stored with a random UUID prefix (added at upload
+// time to avoid collisions), which is exactly the kind of thing that made
+// this dropdown hard to scan — a screen mostly full of hex characters
+// before the actual filename even starts. Display-only: the real fileName
+// on the batch record is never touched, so nothing that reads it elsewhere
+// (exports, activity log, Supabase) is affected.
+function cleanFileNameForDisplay(fileName){
+  return (fileName||'').replace(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}_/i, '');
+}
 function renderFileFilterListGeneric(listElId, toggleId, searchId, selectedSet, category, onChange){
   const listEl = document.getElementById(listElId);
   const toggle = document.getElementById(toggleId);
@@ -2531,9 +2540,12 @@ function renderFileFilterListGeneric(listElId, toggleId, searchId, selectedSet, 
   const moreHtml = moreCount>0 ? `
     <div class="dropdown-item show-more-files" data-list="${listElId}" style="cursor:pointer;color:var(--indigo);font-weight:600;">Daha fazla göster (+${Math.min(10,moreCount)}, ${moreCount} kaldı)</div>` : '';
   listEl.innerHTML = manualHtml + (batches.length ? batches.map(b=>`
-    <label class="dropdown-item" style="display:flex;align-items:center;gap:8px;white-space:normal;">
-      <input type="checkbox" class="ffc-${listElId}" data-id="${b.id}" ${selectedSet.has(b.id)?'checked':''}>
-      <span>${b.fileName} — ${b.sheetName} (${new Date(b.savedAt).toLocaleDateString('tr-TR')}, ${b.orderCount} sipariş)</span>
+    <label class="dropdown-item" style="display:flex;align-items:flex-start;gap:8px;white-space:normal;padding:8px 14px;">
+      <input type="checkbox" class="ffc-${listElId}" data-id="${b.id}" style="margin-top:3px;flex-shrink:0;" ${selectedSet.has(b.id)?'checked':''}>
+      <span style="min-width:0;">
+        <span style="display:block;font-weight:500;overflow-wrap:break-word;">${cleanFileNameForDisplay(b.fileName)}</span>
+        <span class="muted" style="display:block;font-size:11px;margin-top:2px;">${b.sheetName} · ${new Date(b.savedAt).toLocaleDateString('tr-TR')} · ${b.orderCount} sipariş</span>
+      </span>
     </label>`).join('') : (manualHtml ? '' : '<div class="dropdown-item muted">Eşleşen dosya yok</div>')) + moreHtml;
   listEl.querySelectorAll(`.ffc-${listElId}`).forEach(cb=>{
     cb.onchange = ()=>{
@@ -2579,7 +2591,7 @@ function wireFileFilterDropdown(prefix, selectedSet, onChange){
   toggle.onclick = (e)=>{ e.stopPropagation(); menu.classList.toggle('open'); };
   menu.onclick = (e)=>e.stopPropagation();
   document.addEventListener('click', ()=>menu.classList.remove('open'));
-  search.addEventListener('input', ()=>renderFileFilterListGeneric(prefix+'FileFilterList', prefix+'FileFilterToggle', prefix+'FileFilterSearch', selectedSet, 'all', onChange));
+  search.addEventListener('input', ()=>renderFileFilterListGeneric(prefix+'FileFilterList', prefix+'FileFilterToggle', prefix+'FileFilterSearch', selectedSet, currentEntryMode, onChange));
   clear.onclick = ()=>{ selectedSet.clear(); onChange(); };
 }
 let selectedQueueFileFilterIds = new Set();
@@ -6208,7 +6220,7 @@ function numberWithPosition(num, order, item, copyIndex){
 function renderQueue(){
   const tbody = document.getElementById('queueBody');
   tbody.innerHTML='';
-  renderFileFilterListGeneric('queueFileFilterList', 'queueFileFilterToggle', 'queueFileFilterSearch', selectedQueueFileFilterIds, 'all', renderQueue);
+  renderFileFilterListGeneric('queueFileFilterList', 'queueFileFilterToggle', 'queueFileFilterSearch', selectedQueueFileFilterIds, currentEntryMode, renderQueue);
   let count = 0;
   const itemNumbers = computeItemNumbers();
   // Telefon/Adres matter for delivery-focused channels, but not for Sıcak
@@ -6240,14 +6252,34 @@ function renderQueue(){
     state.orders.filter(o=>o.items.some(i=>relevantStatuses.includes(i.status)) && channelCategoryForNumbering(o.channel)===currentEntryMode),
     selectedQueueFileFilterIds, 'queueTsFrom', 'queueTsTo'
   );
-  // Newest upload/entry at the top: state.orders accumulates in the order things
-  // were actually added (each upload's rows pushed in their original sheet
-  // order, oldest upload first) — reversing that whole sequence puts the most
-  // recent upload's block at the top, and within it, its LAST row ends up
-  // nearest the top too (since that row was the last one pushed within that
-  // batch) — exactly the nested "newest upload on top, last row of that sheet
-  // on top of its own block" pattern, with no separate sort needed.
-  const sortedOrders = ordersWithItemsHere.slice().reverse();
+  // Grouped by upload batch, most recently uploaded file's block at the
+  // top — matching Tüm Siparişler. This used to rely on state.orders
+  // still being in its original push order and just reversing that, which
+  // quietly broke on reload: the orders table is loaded with a plain
+  // .select('*') and no explicit ORDER BY, so Postgres is free to return
+  // rows in any order it likes once more than one save has touched them —
+  // exactly the "6 uploads, no longer grouped" symptom. Sorting explicitly
+  // by each order's upload batch savedAt (recorded once, at the real
+  // moment of upload, in state.uploadBatches) is immune to that: it
+  // doesn't matter what order Supabase hands the rows back in. A manual
+  // entry has no batch at all, so it uses its own recordedAt as a
+  // stand-in "batch time", which slots it in by when it was actually
+  // added rather than grouping it with an unrelated upload.
+  const batchSavedAt = new Map(state.uploadBatches.map(b=>[b.id, new Date(b.savedAt).getTime()]));
+  const orderSortTime = o=>{
+    if(o.batchId && batchSavedAt.has(o.batchId)) return batchSavedAt.get(o.batchId);
+    return o.recordedAt ? new Date(o.recordedAt).getTime() : 0;
+  };
+  const sortedOrders = ordersWithItemsHere.slice().sort((a,b)=>{
+    const t = orderSortTime(b) - orderSortTime(a);
+    if(t !== 0) return t;
+    // Same batch (or both missing one, equally) — recordedAt as the
+    // tiebreaker keeps a stable, repeatable order within the group rather
+    // than leaving ties to whatever order the array happened to be in.
+    const ra = a.recordedAt ? new Date(a.recordedAt).getTime() : 0;
+    const rb = b.recordedAt ? new Date(b.recordedAt).getTime() : 0;
+    return rb - ra;
+  });
 
   sortedOrders.forEach(o=>{
     const relevant = o.items.filter(i=>relevantStatuses.includes(i.status));
@@ -6554,7 +6586,7 @@ function splitOffOneCopy(order, bundle, newStatus, timestampField){
 function renderSort(){
   const wrap = document.getElementById('sortGroups');
   wrap.innerHTML='';
-  renderFileFilterListGeneric('sortFileFilterList', 'sortFileFilterToggle', 'sortFileFilterSearch', selectedSortFileFilterIds, 'all', renderSort);
+  renderFileFilterListGeneric('sortFileFilterList', 'sortFileFilterToggle', 'sortFileFilterSearch', selectedSortFileFilterIds, currentEntryMode, renderSort);
   const groups = {};
   let count=0;
   const seenSets = new Set();
@@ -6922,7 +6954,7 @@ function ageBadge(order, item){
 function renderProduction(){
   const wrap = document.getElementById('productionGroups');
   wrap.innerHTML='';
-  renderFileFilterListGeneric('prodFileFilterList', 'prodFileFilterToggle', 'prodFileFilterSearch', selectedProdFileFilterIds, 'all', renderProduction);
+  renderFileFilterListGeneric('prodFileFilterList', 'prodFileFilterToggle', 'prodFileFilterSearch', selectedProdFileFilterIds, currentEntryMode, renderProduction);
   const groups = {};
   let count=0;
   const seenSets = new Set();
