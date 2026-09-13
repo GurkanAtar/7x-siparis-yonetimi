@@ -2543,8 +2543,8 @@ function renderFileFilterListGeneric(listElId, toggleId, searchId, selectedSet, 
     <label class="dropdown-item" style="display:flex;align-items:flex-start;gap:8px;white-space:normal;padding:8px 14px;">
       <input type="checkbox" class="ffc-${listElId}" data-id="${b.id}" style="margin-top:3px;flex-shrink:0;" ${selectedSet.has(b.id)?'checked':''}>
       <span style="min-width:0;">
-        <span style="display:block;font-weight:500;overflow-wrap:break-word;">${cleanFileNameForDisplay(b.fileName)}</span>
-        <span class="muted" style="display:block;font-size:11px;margin-top:2px;">${b.sheetName} · ${new Date(b.savedAt).toLocaleDateString('tr-TR')} · ${b.orderCount} sipariş</span>
+        <span style="display:block;font-weight:500;overflow-wrap:break-word;">${cleanFileNameForDisplay(b.fileName) || 'Bilinmeyen dosya adı (kurtarılmış kayıt)'}</span>
+        <span class="muted" style="display:block;font-size:11px;margin-top:2px;">${b.sheetName || '—'} · ${new Date(b.savedAt).toLocaleDateString('tr-TR')} · ${b.orderCount} sipariş</span>
       </span>
     </label>`).join('') : (manualHtml ? '' : '<div class="dropdown-item muted">Eşleşen dosya yok</div>')) + moreHtml;
   listEl.querySelectorAll(`.ffc-${listElId}`).forEach(cb=>{
