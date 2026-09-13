@@ -724,14 +724,9 @@
 <div id="loginOverlay" style="display:flex;position:fixed;inset:0;background:var(--paper);z-index:300;align-items:center;justify-content:center;">
   <div style="background:var(--card);border-radius:12px;padding:32px;width:320px;box-shadow:0 8px 28px rgba(0,0,0,.2);">
     <h1 style="font-size:20px;margin:0 0 4px;">7X Group — Sipariş Merkezi</h1>
-    <p class="muted" style="margin:0 0 14px;">Devam etmek için giriş yapın</p>
-    <div style="display:flex;gap:4px;margin-bottom:14px;background:var(--paper);border-radius:8px;padding:3px;">
-      <button type="button" id="loginModeEmail" class="ghost small" style="flex:1;border:none;background:#fff;">E-posta</button>
-      <button type="button" id="loginModePhone" class="ghost small" style="flex:1;border:none;">Telefon</button>
-    </div>
+    <p class="muted" style="margin:0 0 18px;">Devam etmek için giriş yapın</p>
     <div style="display:flex;flex-direction:column;gap:10px;">
       <input id="loginEmail" type="email" placeholder="E-posta" autocomplete="username">
-      <input id="loginPhone" type="tel" placeholder="05xx xxx xx xx" autocomplete="username" style="display:none;">
       <input id="loginPassword" type="password" placeholder="Şifre" autocomplete="current-password">
       <button id="loginSubmit">Giriş yap</button>
       <span id="loginStatus" class="muted" style="min-height:16px;"></span>
@@ -795,50 +790,14 @@ function showLoginError(msg){
   el.style.color = 'var(--rust)';
 }
 
-// Turkish phone numbers get typed in every local shorthand imaginable —
-// "05xx xxx xx xx", "5xx xxx xx xx", with spaces or dashes — but Supabase's
-// phone auth requires E.164 (+90...) exactly. Normalizing here means the
-// person logging in never has to know or care about that format; they can
-// type it the way they'd say it out loud.
-function normalizePhoneForAuth(raw){
-  const digits = (raw||'').replace(/[^\d+]/g,'');
-  if(digits.startsWith('+')) return digits;
-  if(digits.startsWith('90')) return '+' + digits;
-  if(digits.startsWith('0')) return '+90' + digits.slice(1);
-  return '+90' + digits;
-}
-
-let loginMode = 'email';
-function setLoginMode(mode){
-  loginMode = mode;
-  document.getElementById('loginEmail').style.display = mode==='email' ? '' : 'none';
-  document.getElementById('loginPhone').style.display = mode==='phone' ? '' : 'none';
-  document.getElementById('loginModeEmail').style.background = mode==='email' ? '#fff' : 'transparent';
-  document.getElementById('loginModePhone').style.background = mode==='phone' ? '#fff' : 'transparent';
-  document.getElementById('loginStatus').textContent = '';
-}
-document.getElementById('loginModeEmail').onclick = ()=>setLoginMode('email');
-document.getElementById('loginModePhone').onclick = ()=>setLoginMode('phone');
-
 async function attemptLogin(){
+  const email = document.getElementById('loginEmail').value.trim();
   const password = document.getElementById('loginPassword').value;
-  let credentials;
-  if(loginMode === 'phone'){
-    const phoneRaw = document.getElementById('loginPhone').value.trim();
-    if(!phoneRaw || !password){ showLoginError('Telefon numarası ve şifre gerekli.'); return; }
-    credentials = { phone: normalizePhoneForAuth(phoneRaw), password };
-  } else {
-    const email = document.getElementById('loginEmail').value.trim();
-    if(!email || !password){ showLoginError('E-posta ve şifre gerekli.'); return; }
-    credentials = { email, password };
-  }
+  if(!email || !password){ showLoginError('E-posta ve şifre gerekli.'); return; }
   document.getElementById('loginSubmit').disabled = true;
-  const { data, error } = await sb.auth.signInWithPassword(credentials);
+  const { data, error } = await sb.auth.signInWithPassword({ email, password });
   document.getElementById('loginSubmit').disabled = false;
-  if(error){
-    showLoginError(loginMode==='phone' ? 'Giriş başarısız — telefon numarası veya şifre yanlış.' : 'Giriş başarısız — e-posta veya şifre yanlış.');
-    return;
-  }
+  if(error){ showLoginError('Giriş başarısız — e-posta veya şifre yanlış.'); return; }
   await enterApp(data.user);
 }
 
