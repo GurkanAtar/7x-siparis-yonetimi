@@ -641,6 +641,11 @@
     </div>
     <div id="overviewPrintable">
     <div class="stat-grid" id="statGrid"></div>
+    <div class="card" id="lostCargoOverviewCard" style="display:none;">
+      <h2>Kayıp Kargo</h2>
+      <p class="muted" style="margin-top:-6px">Yukarıdaki sayılara dahil değildir — bunlar gerçek yeni satış değil.</p>
+      <div class="stat-grid" id="lostCargoStatGrid"></div>
+    </div>
     <div class="card" style="margin-top:16px">
       <h2>Kanala göre</h2>
       <table><thead><tr><th>Kanal</th><th>Siparişler</th><th>Halı sayısı</th><th>Kodlandı</th><th>Basıldı</th><th>Üretildi</th></tr></thead><tbody id="channelStatsBody"></tbody></table>
@@ -648,11 +653,6 @@
     <div class="card">
       <h2>Tabana göre</h2>
       <table><thead><tr><th>Taban</th><th>Halı sayısı</th><th>Kodlandı</th><th>Basıldı</th><th>Üretildi</th></tr></thead><tbody id="tabanStatsBody"></tbody></table>
-    </div>
-    <div class="card" id="lostCargoOverviewCard" style="display:none;">
-      <h2>Kayıp Kargo</h2>
-      <p class="muted" style="margin-top:-6px">Yukarıdaki sayılara dahil değildir — bunlar gerçek yeni satış değil.</p>
-      <div class="stat-grid" id="lostCargoStatGrid"></div>
     </div>
     </div>
   </div>
@@ -1561,7 +1561,7 @@ function renderOperatorBar(){
         </select>
       </label>
       <button class="ghost small" id="logoutBtn">Çıkış yap</button>
-      <span class="muted" style="font-size:10px;margin-left:auto;" title="Bu sürümün ne zaman oluşturulduğu — canlı sitenin en güncel dosyayı çalıştırıp çalıştırmadığını doğrulamak için.">Sürüm: 2026-09-14 05:49 UTC</span>
+      <span class="muted" style="font-size:10px;margin-left:auto;" title="Bu sürümün ne zaman oluşturulduğu — canlı sitenin en güncel dosyayı çalıştırıp çalıştırmadığını doğrulamak için.">Sürüm: 2026-09-14 05:57 UTC</span>
     </div>`;
   document.getElementById('themeSelect').onchange = (e)=>{
     VALID_THEMES.forEach(t=>document.body.classList.remove(t));
@@ -3358,10 +3358,10 @@ function renderReport(){
     <h3 style="font-family:'Fraunces',serif;font-size:15px;margin:20px 0 8px;">Kayıp Kargo</h3>
     <p class="muted" style="margin-top:-4px">Yukarıdaki sayılara dahil değildir — bunlar gerçek yeni satış değil.</p>
     <div class="stat-grid">
-      <div class="stat"><div class="n">${matchingLostCargoOrders.length}</div><div class="l">Vaka</div></div>
-      <div class="stat"><div class="n">${lostCargoAwaiting}</div><div class="l">Karar bekliyor</div></div>
-      <div class="stat"><div class="n">${lostCargoFound}</div><div class="l">Sahada bulundu</div></div>
-      <div class="stat"><div class="n">${lostCargoReproducing}</div><div class="l">Yeniden üretiliyor/üretildi</div></div>
+      <div class="stat" style="background:var(--rust-bg);border-color:var(--rust);"><div class="n" style="color:var(--rust);">${matchingLostCargoOrders.length}</div><div class="l">Vaka</div></div>
+      <div class="stat" style="background:var(--rust-bg);border-color:var(--rust);"><div class="n" style="color:var(--rust);">${lostCargoAwaiting}</div><div class="l">Karar bekliyor</div></div>
+      <div class="stat" style="background:var(--rust-bg);border-color:var(--rust);"><div class="n" style="color:var(--rust);">${lostCargoFound}</div><div class="l">Sahada bulundu</div></div>
+      <div class="stat" style="background:var(--rust-bg);border-color:var(--rust);"><div class="n" style="color:var(--rust);">${lostCargoReproducing}</div><div class="l">Yeniden üretiliyor/üretildi</div></div>
     </div>` : '';
   if(!matchingOrders.length){
     el.innerHTML = '<div class="empty">Bu döneme/kanala uyan gerçek sipariş yok.</div>' + lostCargoSectionHtml;
@@ -3530,6 +3530,24 @@ function renderReport(){
     `<tr><td>${t}</td><td>${s.carpets}</td><td>${s.m2Ordered.toFixed(2)}</td><td>${s.m2Produced.toFixed(2)}</td></tr>`
   ).join('');
 
+  // Same rule and same helper as Genel Bakış's "Yeni müşteriler" stat —
+  // always relative to today's real calendar month, computed from
+  // state.orders directly rather than matchingOrders, so it stays correct
+  // regardless of whatever repFrom/repTo/repChannel filter is currently set.
+  function countNewThisMonthRep(catOrders, keyFn){
+    const keys = [...new Set(catOrders.map(keyFn))];
+    return keys.filter(k=>isNewThisRealMonth(k, catOrders, keyFn)).length;
+  }
+  const repIgBayiAll = state.orders.filter(o=>o.saleType!=='Kayıp Kargo' && channelType(o.channel)==='Instagram bayi');
+  const repTyBayiAll = state.orders.filter(o=>o.saleType!=='Kayıp Kargo' && channelType(o.channel)==='Trendyol bayi');
+  const repSicakAll = state.orders.filter(o=>o.saleType!=='Kayıp Kargo' && o.channel==='Sıcak Satış');
+  const repIhracatAll = state.orders.filter(o=>o.saleType!=='Kayıp Kargo' && o.channel==='İhracat');
+  const repNewCustomersCount =
+    countNewThisMonthRep(repIgBayiAll, o=>o.channel) +
+    countNewThisMonthRep(repTyBayiAll, o=>o.channel) +
+    countNewThisMonthRep(repSicakAll, o=>o.customerName) +
+    countNewThisMonthRep(repIhracatAll, o=>o.customerName);
+
   el.innerHTML = `
     <div class="stat-grid">
       <div class="stat"><div class="n">${matchingOrders.length}</div><div class="l">Siparişler</div></div>
@@ -3538,8 +3556,11 @@ function renderReport(){
       <div class="stat"><div class="n">${totalM2Produced.toFixed(2)}</div><div class="l">Üretilen m²</div></div>
       <div class="stat"><div class="n">${formatTL(totalSales)}</div><div class="l">Toplam Sipariş Tutarı</div></div>
       <div class="stat"><div class="n">${formatTL(totalProducedValue)}</div><div class="l">Üretilen Ürün Tutarı</div></div>
+      <div class="stat" style="background:var(--teal);border-color:var(--teal);"><div class="n" style="color:#fff;">${repNewCustomersCount}</div><div class="l" style="color:#fff;opacity:.85;">Yeni müşteriler (bu ay)</div></div>
     </div>
     <p class="muted" style="margin-top:8px">Üretilen Ürün Tutarı, sadece TÜM kalemleri üretilmiş siparişlerin tutarını sayar — kısmen üretilmiş bir siparişin tutarı, tutar sipariş bazında kayıtlı olduğundan (kalem bazında değil) bölüştürülemez ve dahil edilmez.</p>
+
+    ${lostCargoSectionHtml}
 
     ${combinedComparisonHtml}
 
@@ -3593,8 +3614,7 @@ function renderReport(){
           return `<tr><td class="ts">${itemNumbers[numKey]||'—'}</td><td>${o.date}</td><td><span class="badge-chan">${o.channel}</span></td><td>${o.customerName}</td><td>${sizeText}</td><td>${adet}</td><td>${m2Total.toFixed(2)}</td><td>${bundle[0].taban}</td><td>${pill(bundle[0].status==='sorted'?'in production':bundle[0].status)}</td></tr>`;
         }).join('');
       })()}</tbody>
-    </table>
-    ${lostCargoSectionHtml}`;
+    </table>`;
 }
 document.getElementById('runReport').onclick = renderReport;
 ['repFrom','repTo','repChannel'].forEach(id=>{
@@ -7742,7 +7762,7 @@ function renderOverview(){
       {n: found, l:'Sahada bulundu'},
       {n: reproducing, l:'Yeniden üretiliyor/üretildi'},
     ];
-    document.getElementById('lostCargoStatGrid').innerHTML = lostCargoStats.map(s=>`<div class="stat"><div class="n">${s.n}</div><div class="l">${s.l}</div></div>`).join('');
+    document.getElementById('lostCargoStatGrid').innerHTML = lostCargoStats.map(s=>`<div class="stat" style="background:var(--rust-bg);border-color:var(--rust);"><div class="n" style="color:var(--rust);">${s.n}</div><div class="l">${s.l}</div></div>`).join('');
   } else {
     lostCargoCard.style.display = 'none';
   }
