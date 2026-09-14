@@ -230,6 +230,7 @@
       <div class="entry-subtab" data-sub="sicaksatis">Sıcak Satış</div>
       <div class="entry-subtab" data-sub="ihracat">İhracat</div>
       <div class="entry-subtab" id="musteriDbBtn">Müşteri Veritabanı</div>
+      <div class="entry-subtab" id="iadelerBtn">İadeler</div>
     </div>
     <div class="entry-subtabs" id="stageSelector" style="margin-top:6px;">
       <div class="entry-subtab active" data-stage="entry">Sipariş girişi</div>
@@ -260,6 +261,15 @@
       </div>
       <div id="cdbResults" style="margin-top:14px;"></div>
       <div id="cdbDetail"></div>
+    </div>
+
+    <div id="iadelerPanel" class="card" style="display:none;">
+      <h2>İadeler</h2>
+      <p class="muted" style="margin-top:-6px">Müşteri adı, telefon veya sipariş numarasıyla arayıp, iade edilen ürünü kalem bazında işaretleyin — sebep girilmesi zorunludur. İşaretlenen kalemler siparişten silinmez, sadece iade olarak kaydedilir; Raporlar'da toplam tutardan ayrı bir satır olarak gösterilir.</p>
+      <input id="iadeSearch" placeholder="İsim, soyisim, telefon veya sipariş numarası...">
+      <div id="iadeResults" style="margin-top:14px;"></div>
+      <h3 style="font-family:'Fraunces',serif;font-size:15px;margin:24px 0 8px;">Son İadeler</h3>
+      <div id="iadeRecentList"></div>
     </div>
 
   <div id="entry" class="stage-panel active">
@@ -2490,11 +2500,14 @@ function renderCurrentStage(){
 
 document.querySelectorAll('.entry-subtab[data-sub]').forEach(t=>{
   t.onclick = ()=>{
-    // Coming back from Müşteri Veritabanı (which isn't a currentEntryMode at
-    // all — it's an independent view layered on top) — restore everything
-    // it hid, so a normal channel looks exactly like it did before.
+    // Coming back from Müşteri Veritabanı or İadeler (neither is a
+    // currentEntryMode — both are independent views layered on top) —
+    // restore everything they hid, so a normal channel looks exactly like
+    // it did before.
     document.getElementById('musteriDbBtn').classList.remove('active');
     document.getElementById('musteriDbPanel').style.display = 'none';
+    document.getElementById('iadelerBtn').classList.remove('active');
+    document.getElementById('iadelerPanel').style.display = 'none';
     document.getElementById('stageSelector').style.display = '';
     document.querySelectorAll('.entry-subtab[data-sub]').forEach(x=>x.classList.remove('active'));
     document.querySelectorAll('.entry-sub-panel[id^="entrySub-"]').forEach(x=>x.classList.remove('active'));
@@ -2537,12 +2550,30 @@ document.querySelectorAll('.entry-subtab[data-sub]').forEach(t=>{
 document.getElementById('musteriDbBtn').onclick = ()=>{
   document.querySelectorAll('.entry-subtab[data-sub]').forEach(x=>x.classList.remove('active'));
   document.getElementById('musteriDbBtn').classList.add('active');
+  document.getElementById('iadelerBtn').classList.remove('active');
+  document.getElementById('iadelerPanel').style.display = 'none';
   document.getElementById('stageSelector').style.display = 'none';
   ['entry','queue','sort','production'].forEach(id=>document.getElementById(id).classList.remove('active'));
   document.getElementById('sharedItemsCard').style.display = 'none';
   document.getElementById('lostCargoLookupCard').style.display = 'none';
   document.getElementById('musteriDbPanel').style.display = 'block';
   renderCustomerDbResults();
+};
+// İadeler — same independent-view pattern as Müşteri Veritabanı: cuts
+// across every channel (a return can come from any of them), so it isn't
+// tied to currentEntryMode either.
+document.getElementById('iadelerBtn').onclick = ()=>{
+  document.querySelectorAll('.entry-subtab[data-sub]').forEach(x=>x.classList.remove('active'));
+  document.getElementById('musteriDbBtn').classList.remove('active');
+  document.getElementById('musteriDbPanel').style.display = 'none';
+  document.getElementById('iadelerBtn').classList.add('active');
+  document.getElementById('stageSelector').style.display = 'none';
+  ['entry','queue','sort','production'].forEach(id=>document.getElementById(id).classList.remove('active'));
+  document.getElementById('sharedItemsCard').style.display = 'none';
+  document.getElementById('lostCargoLookupCard').style.display = 'none';
+  document.getElementById('iadelerPanel').style.display = 'block';
+  renderIadelerResults();
+  renderRecentIadeler();
 };
 let cdbMode = 'all';
 document.querySelectorAll('.entry-subtab[data-mode]').forEach(b=>{
@@ -2555,6 +2586,108 @@ document.querySelectorAll('.entry-subtab[data-mode]').forEach(b=>{
 });
 document.getElementById('cdbSearch').addEventListener('input', renderCustomerDbResults);
 document.getElementById('cdbSort').addEventListener('change', renderCustomerDbResults);
+
+// ---------------- İadeler ----------------
+// A return is recorded on the ITEM, not the order — an order can ship
+// several pieces and only one comes back, so the record has to say exactly
+// which piece. Marking a return never deletes anything or touches the
+// item's production status (coded/sorted/produced stay exactly as they
+// were) — item.iade is purely additive, so every other view (Baskı öncesi,
+// Ayırma, Üretim, Tüm Siparişler, Müşteri Veritabanı history) keeps working
+// unchanged; only the panels that specifically know to look at item.iade
+// (this one, and the Raporlar summary) treat it specially.
+//
+// Price is only ever recorded once per order (never per item — see the
+// note on byTaban above), so a partial return's value can't be read
+// directly off the data. It's estimated here by the same proportional-m²
+// logic Raporlar already uses elsewhere for its Ortalama Fiyat figure:
+// this item's share of the order's total m², applied to the order's total
+// price. Exact when the whole order is returned at once; an estimate for a
+// partial return, same honest caveat as everywhere else this app does it.
+function itemEstimatedValue(order, item){
+  const orderM2 = order.items.reduce((s,i)=>s+sizeToM2(i.size)*i.qty, 0);
+  if(orderM2<=0) return 0;
+  const itemM2 = sizeToM2(item.size)*item.qty;
+  return priceToNumber(order.price) * (itemM2/orderM2);
+}
+function markItemReturned(order, item, reason){
+  item.iade = {
+    reason: reason,
+    at: new Date().toISOString(),
+    by: operatorName || (currentProfile ? currentProfile.name : ''),
+    estValue: itemEstimatedValue(order, item),
+    estM2: sizeToM2(item.size) * item.qty,
+  };
+  logActivity(`İade kaydedildi: ${order.customerName} — ${item.size} ${item.taban||''} (${reason})`);
+  saveState();
+}
+let iadeOpenKey = null; // which item's reason-input is currently expanded ("orderId::itemIndex")
+function renderIadelerResults(){
+  const container = document.getElementById('iadeResults');
+  if(!container) return;
+  const term = foldTurkishForSearch(document.getElementById('iadeSearch').value);
+  if(!term){ container.innerHTML = '<p class="muted">Müşteri adı, telefon veya sipariş numarasıyla arayın.</p>'; return; }
+  const itemNumbers = computeItemNumbers();
+  const matches = state.orders.filter(o=>{
+    if(o.saleType==='Kayıp Kargo') return false; // never a real sale, nothing to return
+    if(foldTurkishForSearch(o.customerName).includes(term)) return true;
+    if(foldTurkishForSearch(o.phone).includes(term)) return true;
+    return o.items.some((item,idx)=>(itemNumbers[itemGroupKey(o,item)]||'').toLowerCase().includes(term.toLowerCase()));
+  });
+  if(!matches.length){ container.innerHTML = '<div class="empty">Eşleşen sipariş bulunamadı.</div>'; return; }
+  container.innerHTML = matches.map(o=>{
+    const rows = o.items.map((item,idx)=>{
+      const key = o.id+'::'+idx;
+      if(item.iade){
+        return `<tr><td>${item.size} ${item.taban||''}</td><td>${item.qty}</td><td colspan="2" style="color:var(--rust);font-weight:600;">İADE — ${escapeHtml(item.iade.reason)}</td><td>${formatTL(item.iade.estValue)} TL</td></tr>`;
+      }
+      const actionCell = iadeOpenKey===key
+        ? `<div style="display:flex;gap:6px;"><input class="iade-reason-input" data-key="${key}" placeholder="İade sebebi (zorunlu)" style="flex:1;"><button class="small iade-confirm" data-key="${key}">Onayla</button><button class="ghost small iade-cancel" data-key="${key}">İptal</button></div>`
+        : `<button class="ghost small iade-start" data-key="${key}">İade olarak işaretle</button>`;
+      return `<tr><td>${item.size} ${item.taban||''}</td><td>${item.qty}</td><td colspan="2">${actionCell}</td><td></td></tr>`;
+    }).join('');
+    return `<div style="margin-bottom:18px;">
+      <p style="margin:0 0 6px;"><strong>${o.customerName||'(isimsiz)'}</strong> <span class="muted">${o.date||''}</span> <span class="badge-chan">${o.channel||''}</span></p>
+      <table><thead><tr><th>Ölçü/Taban</th><th>Adet</th><th colspan="2">Durum / İşlem</th><th>Tahmini Tutar</th></tr></thead><tbody>${rows}</tbody></table>
+    </div>`;
+  }).join('');
+  container.querySelectorAll('.iade-start').forEach(b=>{
+    b.onclick = ()=>{ iadeOpenKey = b.dataset.key; renderIadelerResults(); };
+  });
+  container.querySelectorAll('.iade-cancel').forEach(b=>{
+    b.onclick = ()=>{ iadeOpenKey = null; renderIadelerResults(); };
+  });
+  container.querySelectorAll('.iade-confirm').forEach(b=>{
+    b.onclick = ()=>{
+      const key = b.dataset.key;
+      const input = container.querySelector(`.iade-reason-input[data-key="${key}"]`);
+      const reason = input.value.trim();
+      if(!reason){ input.style.borderColor = 'var(--rust)'; input.focus(); return; }
+      const [orderId, idxStr] = key.split('::');
+      const order = state.orders.find(o=>o.id===orderId);
+      if(!order) return;
+      markItemReturned(order, order.items[parseInt(idxStr)], reason);
+      iadeOpenKey = null;
+      renderIadelerResults();
+      renderRecentIadeler();
+    };
+  });
+}
+document.getElementById('iadeSearch').addEventListener('input', renderIadelerResults);
+// Every returned item across every order, most recent first — the actual
+// "don't lose the record" queue: a plain list of what came back, when, and
+// why, independent of having to remember/search for the original order.
+function renderRecentIadeler(){
+  const container = document.getElementById('iadeRecentList');
+  if(!container) return;
+  const rows = [];
+  state.orders.forEach(o=>{ o.items.forEach(item=>{ if(item.iade) rows.push({o,item}); }); });
+  if(!rows.length){ container.innerHTML = '<p class="muted">Henüz kayıtlı iade yok.</p>'; return; }
+  rows.sort((a,b)=> new Date(b.item.iade.at) - new Date(a.item.iade.at));
+  container.innerHTML = `<table><thead><tr><th>Tarih</th><th>Müşteri</th><th>Kanal</th><th>Ölçü/Taban</th><th>Sebep</th><th>Tahmini Tutar</th></tr></thead><tbody>
+    ${rows.map(({o,item})=>`<tr><td>${new Date(item.iade.at).toLocaleDateString('tr-TR')}</td><td>${o.customerName||''}</td><td><span class="badge-chan">${o.channel||''}</span></td><td>${item.size} ${item.taban||''}</td><td>${escapeHtml(item.iade.reason)}</td><td>${formatTL(item.iade.estValue)} TL</td></tr>`).join('')}
+  </tbody></table>`;
+}
 
 // Each channel is fully separate in the per-channel tabs — Instagram
 // Kurumsal, Instagram Bayileri, Trendyol Kurumsal, Trendyol Bayileri,
@@ -2665,7 +2798,7 @@ function buildCustomerDbDetailHtml(customer){
     return bt - at;
   });
   const rows = sorted.map(o=>{
-    const items = o.items.map(i=>`${i.size} ×${i.qty}`).join(', ');
+    const items = o.items.map(i=>`${i.size} ×${i.qty}${i.iade?' <span style="color:var(--rust);font-weight:600;">(İADE)</span>':''}`).join(', ');
     const priceCell = o.price ? formatTL(priceToNumber(o.price))+' TL' : '-';
     const brand = getOrderBrand(o) || 'Marka adı yok';
     return `<tr><td>${o.date||'-'}</td><td><span class="badge-chan">${o.channel}</span></td><td>${brand}</td><td>${items}</td><td>${priceCell}</td></tr>`;
@@ -3623,7 +3756,60 @@ function renderReport(){
     });
   });
 
-  const totalSales = matchingOrders.reduce((s,o)=>s+priceToNumber(o.price), 0);
+  // İadeler within this period/channel — scoped by the ORIGINAL order's
+  // date (i.e. same matchingOrders window as everything else on this
+  // report), not by when the return itself happened. That answers "how
+  // much did what I sold in this period actually net me," which is what
+  // this report is for — a return processed a month later still reduces
+  // the period it was originally sold in, not the period it came back in.
+  let iadeCount = 0, iadeValue = 0;
+  matchingOrders.forEach(o=>{
+    o.items.forEach(item=>{
+      if(item.iade){ iadeCount += 1; iadeValue += item.iade.estValue; }
+    });
+  });
+  const iadeSectionHtml = iadeCount ? `
+    <h3 style="font-family:'Fraunces',serif;font-size:15px;margin:20px 0 8px;">İadeler</h3>
+    <p class="muted" style="margin-top:-4px">Yukarıdaki Toplam Sipariş Tutarı'ndan zaten düşülmüştür — bu sadece o düşüşün detayıdır. Kısmi iadelerde tutar, kalemin sipariş içindeki m² payına göre tahmindir (fiyat sipariş bazında kayıtlı olduğundan kalem bazında kesin değildir).</p>
+    <div class="stat-grid">
+      <div class="stat" style="background:var(--rust-bg);border-color:var(--rust);"><div class="n" style="color:var(--rust);">${iadeCount}</div><div class="l" style="color:#3a3a3a;">İade edilen kalem</div></div>
+      <div class="stat" style="background:var(--rust-bg);border-color:var(--rust);"><div class="n" style="color:var(--rust);">${formatTL(iadeValue)} TL</div><div class="l" style="color:#3a3a3a;">Tahmini İade Tutarı</div></div>
+    </div>` : '';
+
+  // İade Oranı (%) per channel family — deliberately ignores the Kanal
+  // filter above (always compares every channel at once, over the same
+  // Başlangıç/Bitiş date window) since the whole point is seeing every
+  // channel's rate side by side, not just whichever one happens to be
+  // selected. Oran = bu kanalın iade tutarı ÷ bu kanalın brüt sipariş
+  // tutarı — brüt (returns-inclusive) is the correct denominator: rate is
+  // "what share of what this channel sold came back," not diluted by
+  // subtracting returns from the bottom first.
+  const dateFilteredAllChannels = state.orders.filter(o=>{
+    if(o.saleType==='Kayıp Kargo') return false;
+    if(!from && !to) return true;
+    const d = parseDMY(o.date);
+    if(!d) return false;
+    if(from && d<from) return false;
+    if(to && d>to) return false;
+    return true;
+  });
+  const iadeRateFamilies = { ig:'Instagram', trendyol:'Trendyol', hepsiburada:'Hepsiburada', sicaksatis:'Sıcak Satış', ihracat:'İhracat' };
+  const iadeRateRows = Object.keys(iadeRateFamilies).map(fam=>{
+    let gross=0, returned=0;
+    dateFilteredAllChannels.forEach(o=>{
+      if(channelCategoryForNumbering(o.channel)!==fam) return;
+      gross += priceToNumber(o.price);
+      o.items.forEach(item=>{ if(item.iade) returned += item.iade.estValue; });
+    });
+    return { label:iadeRateFamilies[fam], gross, returned, rate: gross>0 ? (returned/gross*100) : 0 };
+  }).filter(r=>r.gross>0);
+  const iadeRateSectionHtml = iadeRateRows.length ? `
+    <h3 style="font-family:'Fraunces',serif;font-size:15px;margin:20px 0 8px;">Kanala Göre İade Oranı</h3>
+    <table><thead><tr><th>Kanal</th><th>İade Oranı</th></tr></thead><tbody>
+      ${iadeRateRows.map(r=>`<tr><td>${r.label}</td><td>${r.rate.toFixed(1)}%</td></tr>`).join('')}
+    </tbody></table>` : '';
+
+  const totalSales = matchingOrders.reduce((s,o)=>s+priceToNumber(o.price), 0) - iadeValue;
   const totalProducedValue = matchingOrders.filter(o=>o.items.every(i=>i.status==='produced')).reduce((s,o)=>s+priceToNumber(o.price), 0);
 
   // Kurumsal vs Bayi comparison — reusable across Instagram, Trendyol, and
@@ -3775,6 +3961,10 @@ function renderReport(){
     <p class="muted" style="margin-top:8px">Üretilen Ürün Tutarı, sadece TÜM kalemleri üretilmiş siparişlerin tutarını sayar — kısmen üretilmiş bir siparişin tutarı, tutar sipariş bazında kayıtlı olduğundan (kalem bazında değil) bölüştürülemez ve dahil edilmez.</p>
 
     ${lostCargoSectionHtml}
+
+    ${iadeSectionHtml}
+
+    ${iadeRateSectionHtml}
 
     ${combinedComparisonHtml}
 
