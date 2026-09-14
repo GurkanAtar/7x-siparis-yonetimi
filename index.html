@@ -232,6 +232,7 @@
       <div class="entry-subtab" data-sub="ihracat">İhracat</div>
       <div class="entry-subtab" id="musteriDbBtn">Müşteri Veritabanı</div>
       <div class="entry-subtab" id="iadelerBtn">İadeler</div>
+      <div class="entry-subtab" id="waQueueBtn">WhatsApp Kuyruğu</div>
     </div>
     <div class="entry-subtabs" id="stageSelector" style="margin-top:6px;">
       <div class="entry-subtab active" data-stage="entry">Sipariş girişi</div>
@@ -271,6 +272,13 @@
       <div id="iadeResults" style="margin-top:14px;"></div>
       <h3 style="font-family:'Fraunces',serif;font-size:15px;margin:24px 0 8px;">Son İadeler</h3>
       <div id="iadeRecentList"></div>
+    </div>
+
+    <div id="waQueuePanel" class="card" style="display:none;">
+      <h2>WhatsApp Kuyruğu</h2>
+      <p class="muted" style="margin-top:-6px">"Sipariş onaylandı" kodlandığında, "Kargoya verildi" Üretim'de işaretlendiğinde otomatik kuyruğa girer — yalnızca WhatsApp bildirimi açık bir Instagram kanalına ait siparişler için. Gerçek gönderim için Meta tarafı henüz bağlanmadı; buradaki kayıtlar şimdilik doğru anda doğru içerikle kuyruğa girdiğini görmek/test etmek içindir.</p>
+      <div id="waQueueList"></div>
+      <p class="muted" id="waQueueEmpty" style="display:none;">Kuyrukta henüz mesaj yok.</p>
     </div>
 
   <div id="entry" class="stage-panel active">
@@ -860,12 +868,6 @@
       <p class="muted" style="margin-top:-6px">Supabase'teki tüm gerçek veriyi — siparişler, kanallar, marka kayıtları, ürün kataloğu, yükleme geçmişi, hesaplar ve mesajlar — tek bir dosyada indirir. Supabase'in kendi yedeklemesinden bağımsız, kendi bilgisayarınızda tutabileceğiniz ayrı bir kopya — Supabase'e hiçbir şey olmasa bile elinizde kalır. Ayda bir kez indirip saklamanız önerilir.</p>
       <button id="fullBackupBtn">Yedek dosyasını indir</button>
       <p class="muted" id="fullBackupStatus" style="margin-top:8px;"></p>
-    </div>
-    <div class="card" id="waQueueCard" style="display:none;margin-top:16px;">
-      <h2>WhatsApp Kuyruğu</h2>
-      <p class="muted" style="margin-top:-6px">"Sipariş onaylandı" kodlandığında, "Kargoya verildi" Üretim'de işaretlendiğinde otomatik kuyruğa girer — yalnızca WhatsApp bildirimi açık bir Instagram kanalına ait siparişler için. Gerçek gönderim için Meta tarafı henüz bağlanmadı; buradaki kayıtlar şimdilik doğru anda doğru içerikle kuyruğa girdiğini görmek/test etmek içindir.</p>
-      <div id="waQueueList"></div>
-      <p class="muted" id="waQueueEmpty" style="display:none;">Kuyrukta henüz mesaj yok.</p>
     </div>
     <div class="card" id="ownerDmOversightCard" style="display:none;margin-top:16px;">
       <h2>Yönetici görünümü — tüm özel mesajlar</h2>
@@ -2516,14 +2518,16 @@ function renderCurrentStage(){
 
 document.querySelectorAll('.entry-subtab[data-sub]').forEach(t=>{
   t.onclick = ()=>{
-    // Coming back from Müşteri Veritabanı or İadeler (neither is a
-    // currentEntryMode — both are independent views layered on top) —
-    // restore everything they hid, so a normal channel looks exactly like
-    // it did before.
+    // Coming back from Müşteri Veritabanı, İadeler, or WhatsApp Kuyruğu
+    // (none of these are a currentEntryMode — all three are independent
+    // views layered on top) — restore everything they hid, so a normal
+    // channel looks exactly like it did before.
     document.getElementById('musteriDbBtn').classList.remove('active');
     document.getElementById('musteriDbPanel').style.display = 'none';
     document.getElementById('iadelerBtn').classList.remove('active');
     document.getElementById('iadelerPanel').style.display = 'none';
+    document.getElementById('waQueueBtn').classList.remove('active');
+    document.getElementById('waQueuePanel').style.display = 'none';
     document.getElementById('stageSelector').style.display = '';
     document.querySelectorAll('.entry-subtab[data-sub]').forEach(x=>x.classList.remove('active'));
     document.querySelectorAll('.entry-sub-panel[id^="entrySub-"]').forEach(x=>x.classList.remove('active'));
@@ -2568,6 +2572,8 @@ document.getElementById('musteriDbBtn').onclick = ()=>{
   document.getElementById('musteriDbBtn').classList.add('active');
   document.getElementById('iadelerBtn').classList.remove('active');
   document.getElementById('iadelerPanel').style.display = 'none';
+  document.getElementById('waQueueBtn').classList.remove('active');
+  document.getElementById('waQueuePanel').style.display = 'none';
   document.getElementById('stageSelector').style.display = 'none';
   ['entry','queue','sort','production'].forEach(id=>document.getElementById(id).classList.remove('active'));
   document.getElementById('sharedItemsCard').style.display = 'none';
@@ -2583,6 +2589,8 @@ document.getElementById('iadelerBtn').onclick = ()=>{
   document.getElementById('musteriDbBtn').classList.remove('active');
   document.getElementById('musteriDbPanel').style.display = 'none';
   document.getElementById('iadelerBtn').classList.add('active');
+  document.getElementById('waQueueBtn').classList.remove('active');
+  document.getElementById('waQueuePanel').style.display = 'none';
   document.getElementById('stageSelector').style.display = 'none';
   ['entry','queue','sort','production'].forEach(id=>document.getElementById(id).classList.remove('active'));
   document.getElementById('sharedItemsCard').style.display = 'none';
@@ -2590,6 +2598,25 @@ document.getElementById('iadelerBtn').onclick = ()=>{
   document.getElementById('iadelerPanel').style.display = 'block';
   renderIadelerResults();
   renderRecentIadeler();
+};
+// WhatsApp Kuyruğu — moved here from Hesabım & Yetkiler (was owner-only
+// there); as a normal Sipariş Merkezi subtab it's visible to every team
+// member now, same as İadeler and Müşteri Veritabanı — this is order
+// communication status, not exclusive financial data like the backup card
+// it used to sit next to.
+document.getElementById('waQueueBtn').onclick = ()=>{
+  document.querySelectorAll('.entry-subtab[data-sub]').forEach(x=>x.classList.remove('active'));
+  document.getElementById('musteriDbBtn').classList.remove('active');
+  document.getElementById('musteriDbPanel').style.display = 'none';
+  document.getElementById('iadelerBtn').classList.remove('active');
+  document.getElementById('iadelerPanel').style.display = 'none';
+  document.getElementById('waQueueBtn').classList.add('active');
+  document.getElementById('stageSelector').style.display = 'none';
+  ['entry','queue','sort','production'].forEach(id=>document.getElementById(id).classList.remove('active'));
+  document.getElementById('sharedItemsCard').style.display = 'none';
+  document.getElementById('lostCargoLookupCard').style.display = 'none';
+  document.getElementById('waQueuePanel').style.display = 'block';
+  renderWaQueue();
 };
 let cdbMode = 'all';
 document.querySelectorAll('.entry-subtab[data-mode]').forEach(b=>{
@@ -4564,8 +4591,6 @@ function renderUsers(){
   // panel below it — this is a whole-business export, not a routine action
   // any team member should be triggering.
   document.getElementById('fullBackupCard').style.display = isOwner ? '' : 'none';
-  document.getElementById('waQueueCard').style.display = isOwner ? '' : 'none';
-  if(isOwner) renderWaQueue();
 
   const roleLabels = { owner:'Yönetici', sales:'Satış', production:'Üretim', finance:'Finans' };
   const myRow = `
