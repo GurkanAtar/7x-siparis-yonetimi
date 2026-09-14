@@ -8,6 +8,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 <style>
   :root{
@@ -3683,26 +3684,8 @@ function renderReport(){
     if(to && d > to) return false;
     return true;
   });
-  // Same date/channel window, but ONLY Kayıp Kargo orders — reported in its
-  // own section further down rather than folded into the real sales figures
-  // above, exactly why they were excluded from matchingOrders in the first
-  // place.
-  const matchingLostCargoOrders = state.orders.filter(o=>{
-    if(o.saleType!=='Kayıp Kargo') return false;
-    if(chanFilter && o.channel !== chanFilter) return false;
-    if(!from && !to) return true;
-    const d = parseDMY(o.date);
-    if(!d) return false;
-    if(from && d < from) return false;
-    if(to && d > to) return false;
-    return true;
-  });
-
   const el = document.getElementById('reportResults');
-  // A period/channel with only Kayıp Kargo cases and zero real orders still
-  // has something worth showing (the Kayıp Kargo section itself) — so this
-  // only bails out completely when BOTH are empty.
-  if(!matchingOrders.length && !matchingLostCargoOrders.length){
+  if(!matchingOrders.length){
     el.innerHTML = '<div class="empty">Bu döneme/kanala uyan sipariş yok.</div>';
     return;
   }
@@ -3710,25 +3693,6 @@ function renderReport(){
   // Kayıp Kargo order can mix items across different resolutions (some
   // found, some genuinely reproduced), so this can't be summarized at the
   // order level the way the main stats above are.
-  let lostCargoAwaiting=0, lostCargoFound=0, lostCargoReproducing=0;
-  matchingLostCargoOrders.forEach(o=>{
-    lostCargoAwaiting += countCarpets(o.items.filter(i=>i.status==='pending'));
-    lostCargoFound += countCarpets(o.items.filter(i=>i.status==='lostcargo-found'));
-    lostCargoReproducing += countCarpets(o.items.filter(i=>i.status==='coded'||i.status==='sorted'||i.status==='produced'));
-  });
-  const lostCargoSectionHtml = matchingLostCargoOrders.length ? `
-    <h3 style="font-family:'Fraunces',serif;font-size:15px;margin:20px 0 8px;">Kayıp Kargo</h3>
-    <p class="muted" style="margin-top:-4px">Yukarıdaki sayılara dahil değildir — bunlar gerçek yeni satış değil.</p>
-    <div class="stat-grid">
-      <div class="stat" style="background:var(--rust-bg);border-color:var(--rust);"><div class="n" style="color:var(--rust);">${matchingLostCargoOrders.length}</div><div class="l" style="color:#3a3a3a;">Vaka</div></div>
-      <div class="stat" style="background:var(--rust-bg);border-color:var(--rust);"><div class="n" style="color:var(--rust);">${lostCargoAwaiting}</div><div class="l" style="color:#3a3a3a;">Karar bekliyor</div></div>
-      <div class="stat" style="background:var(--rust-bg);border-color:var(--rust);"><div class="n" style="color:var(--rust);">${lostCargoFound}</div><div class="l" style="color:#3a3a3a;">Sahada bulundu</div></div>
-      <div class="stat" style="background:var(--rust-bg);border-color:var(--rust);"><div class="n" style="color:var(--rust);">${lostCargoReproducing}</div><div class="l" style="color:#3a3a3a;">Yeniden üretiliyor/üretildi</div></div>
-    </div>` : '';
-  if(!matchingOrders.length){
-    el.innerHTML = '<div class="empty">Bu döneme/kanala uyan gerçek sipariş yok.</div>' + lostCargoSectionHtml;
-    return;
-  }
 
   const itemNumbers = computeItemNumbers();
   let totalM2Ordered = 0, totalM2Produced = 0, totalCarpets = 0;
@@ -3945,10 +3909,10 @@ function renderReport(){
     `<tr><td>${t}</td><td>${s.carpets}</td><td>${s.m2Ordered.toFixed(2)}</td><td>${s.m2Produced.toFixed(2)}</td></tr>`
   ).join('');
 
-  // Same rule and same helper as Genel Bakış's "Yeni müşteriler" stat —
-  // always relative to today's real calendar month, computed from
-  // state.orders directly rather than matchingOrders, so it stays correct
-  // regardless of whatever repFrom/repTo/repChannel filter is currently set.
+  // "New this month" — always relative to today's real calendar month,
+  // computed from state.orders directly rather than matchingOrders, so it
+  // stays correct regardless of whatever repFrom/repTo/repChannel filter is
+  // currently set.
   function countNewThisMonthRep(catOrders, keyFn){
     const keys = [...new Set(catOrders.map(keyFn))];
     return keys.filter(k=>isNewThisRealMonth(k, catOrders, keyFn)).length;
@@ -3999,8 +3963,6 @@ function renderReport(){
       <div class="stat" style="background:var(--teal);border-color:var(--teal);"><div class="n" style="color:#fff;">${formatTL(repNewCustomersRevenue)} TL</div><div class="l" style="color:#fff;opacity:.85;">Yeni müşterilerden ciro (bu ay)</div></div>
     </div>
     <p class="muted" style="margin-top:8px">Üretilen Ürün Tutarı, sadece TÜM kalemleri üretilmiş siparişlerin tutarını sayar — kısmen üretilmiş bir siparişin tutarı, tutar sipariş bazında kayıtlı olduğundan (kalem bazında değil) bölüştürülemez ve dahil edilmez.</p>
-
-    ${lostCargoSectionHtml}
 
     ${iadeSectionHtml}
 
@@ -4071,6 +4033,14 @@ document.getElementById('runReport').onclick = renderReport;
 // controls change. Kayıp Kargo is excluded everywhere here, same rule as
 // every other report in the app: it was never a real sale.
 const CHANNEL_FAMILY_LABELS = { ig:'Instagram', trendyol:'Trendyol', hepsiburada:'Hepsiburada', sicaksatis:'Sıcak Satış', ihracat:'İhracat' };
+// Registered once, globally, but OFF by default — only the Kanal Dağılımı
+// pie chart turns it on explicitly (see below). Without this default-off,
+// every other chart (line/bar) would also try to print a label on each
+// point/bar, which isn't wanted there.
+if(typeof Chart!=='undefined' && typeof ChartDataLabels!=='undefined'){
+  Chart.register(ChartDataLabels);
+  Chart.defaults.set('plugins.datalabels', { display:false });
+}
 const CHANNEL_FAMILY_COLORS = { ig:'#B14A33', trendyol:'#3C4A6B', hepsiburada:'#4C8067', sicaksatis:'#C79A3A', ihracat:'#7A5A9E' };
 let trendCharts = {}; // Chart.js instances, keyed by chart id, so a re-render destroys the old one first instead of stacking duplicates on the same canvas
 
@@ -4227,7 +4197,19 @@ function renderChannelMixChart(){
         const total = nonZero.reduce((s,f)=>s+totals[f],0);
         const pct = total ? Math.round(ctx.parsed/total*100) : 0;
         return `${ctx.label}: ${formatTL(ctx.parsed)} TL (${pct}%)`;
-      } } } } }
+      } } },
+      datalabels: {
+        display: true,
+        color: '#fff',
+        font: { weight: '600', size: 12 },
+        formatter: (value) => {
+          const total = nonZero.reduce((s,f)=>s+totals[f],0);
+          const pct = total ? Math.round(value/total*100) : 0;
+          // Skip printing a label on a sliver too thin to hold readable
+          // text — the tooltip still has the exact number on hover.
+          return pct>=4 ? pct+'%' : '';
+        },
+      } } }
   });
 }
 
@@ -8674,31 +8656,12 @@ function renderOverview(){
   const carpetsPending = orders.reduce((s,o)=>s+countCarpets(o.items.filter(i=>i.status==='pending')), 0);
   const carpetsSorted = orders.reduce((s,o)=>s+countCarpets(o.items.filter(i=>i.status==='sorted')), 0);
   const carpetsProduced = orders.reduce((s,o)=>s+countCarpets(o.items.filter(i=>i.status==='produced')), 0);
-  // New customers this month — same rule as Raporlar's YENİ badges, and for
-  // the same reason computed from state.orders directly rather than from
-  // the ovFrom/ovTo-filtered `orders` above: whether someone is new is
-  // always relative to today's real calendar month, never to whatever date
-  // range this screen happens to be filtered to right now.
-  function countNewThisMonth(catOrders, keyFn){
-    const keys = [...new Set(catOrders.map(keyFn))];
-    return keys.filter(k=>isNewThisRealMonth(k, catOrders, keyFn)).length;
-  }
-  const igBayiAllOrders = state.orders.filter(o=>o.saleType!=='Kayıp Kargo' && channelType(o.channel)==='Instagram bayi');
-  const tyBayiAllOrders = state.orders.filter(o=>o.saleType!=='Kayıp Kargo' && channelType(o.channel)==='Trendyol bayi');
-  const sicakAllOrders = state.orders.filter(o=>o.saleType!=='Kayıp Kargo' && o.channel==='Sıcak Satış');
-  const ihracatAllOrders = state.orders.filter(o=>o.saleType!=='Kayıp Kargo' && o.channel==='İhracat');
-  const newCustomersCount =
-    countNewThisMonth(igBayiAllOrders, o=>o.channel) +
-    countNewThisMonth(tyBayiAllOrders, o=>o.channel) +
-    countNewThisMonth(sicakAllOrders, o=>o.customerName) +
-    countNewThisMonth(ihracatAllOrders, o=>o.customerName);
   const stats = [
     {n: orders.length, l:'Siparişler'},
     {n: totalCarpetCount, l:'Halı sayısı'},
     {n: carpetsPending, l:'Kod bekliyor'},
     {n: carpetsSorted, l:'Üretimde'},
     {n: carpetsProduced, l:'Üretildi'},
-    {n: newCustomersCount, l:'Yeni müşteriler (bu ay)', highlight:true},
   ];
   document.getElementById('statGrid').innerHTML = stats.map(s=>`<div class="stat"${s.highlight?' style="background:var(--teal);border-color:var(--teal);"':''}><div class="n"${s.highlight?' style="color:#fff;"':''}>${s.n}</div><div class="l"${s.highlight?' style="color:#fff;opacity:.85;"':''}>${s.l}</div></div>`).join('');
 
