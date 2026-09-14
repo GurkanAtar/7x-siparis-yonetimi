@@ -1344,7 +1344,7 @@ function renderOperatorBar(){
         </select>
       </label>
       <button class="ghost small" id="logoutBtn">Çıkış yap</button>
-      <span class="muted" style="font-size:10px;margin-left:auto;" title="Bu sürümün ne zaman oluşturulduğu — canlı sitenin en güncel dosyayı çalıştırıp çalıştırmadığını doğrulamak için.">Sürüm: 2026-09-13 16:37 UTC</span>
+      <span class="muted" style="font-size:10px;margin-left:auto;" title="Bu sürümün ne zaman oluşturulduğu — canlı sitenin en güncel dosyayı çalıştırıp çalıştırmadığını doğrulamak için.">Sürüm: 2026-09-13 16:44 UTC</span>
     </div>`;
   document.getElementById('themeSelect').onchange = (e)=>{
     VALID_THEMES.forEach(t=>document.body.classList.remove(t));
@@ -4442,7 +4442,16 @@ async function extractRowImages(zip, sheetName, rowOffset){
       rowImages[row] = rowImages[row] || [];
       rowImages[row].push(dataUrl);
     }
-  }catch(e){ console.error('image extraction failed', e); }
+  }catch(e){
+    // Previously just console.error — invisible to whoever is actually
+    // uploading, who would only ever see "0 tasarım fotoğrafı eşleştirildi"
+    // with no way to tell "there genuinely were no embedded photos" apart
+    // from "extraction broke on this specific file's structure". Recording
+    // the reason on the return value lets the upload status message show it
+    // instead of failing silently.
+    console.error('image extraction failed', e);
+    rowImages._error = e.message || String(e);
+  }
   return rowImages;
 }
 
@@ -4634,6 +4643,13 @@ document.getElementById('fileInput').onchange = async (e)=>{
     const imgWarning = itemsWithoutImage
       ? ` <strong style="color:var(--rust)">⚠️ ${itemsWithoutImage} kalemde fotoğraf yok</strong> — Baskı öncesi'nde bu kalemler için elle fotoğraf eklemeniz gerekecek.`
       : '';
+    // Distinguishes "this sheet genuinely has no embedded photos" from
+    // "photo extraction broke while reading this file" — the two used to
+    // look identical (both landed on 0 matched), so there was no way to
+    // tell whether nothing was wrong or something needed fixing.
+    const imgErrorWarning = rowImages._error
+      ? ` <strong style="color:var(--rust)">⚠️ Fotoğraf çıkarma sırasında bir hata oluştu (${rowImages._error}) — dosyadaki gömülü fotoğraflar okunamadı.</strong>`
+      : '';
     if(!parsed.length){
       showUploadError(
         {status:'uploadStatus', preview:'uploadPreview', input:'fileInput', inputName:'fileInputName'},
@@ -4641,7 +4657,7 @@ document.getElementById('fileInput').onchange = async (e)=>{
       );
       return;
     }
-    document.getElementById('uploadStatus').innerHTML = `"${found.name}" sayfasından ${parsed.length} sipariş okundu, ${imagesFound} tasarım fotoğrafı satırlarla eşleştirildi.${skipNote}${imgWarning} Aşağıda gözden geçirin, sonra kaydedin.`;
+    document.getElementById('uploadStatus').innerHTML = `"${found.name}" sayfasından ${parsed.length} sipariş okundu, ${imagesFound} tasarım fotoğrafı satırlarla eşleştirildi.${skipNote}${imgErrorWarning}${imgWarning} Aşağıda gözden geçirin, sonra kaydedin.`;
     renderUploadPreview();
   }catch(err){
     showUploadError(
