@@ -776,6 +776,12 @@
       <p class="muted" style="margin-top:-6px">Giriş, e-posta ve şifre ile yapılır — gerçek hesaplar Supabase üzerinden yönetilir. Silme ve 24 saatten eski düzenleme gibi işlemler için yönetici geçici yetki verebilir.</p>
       <div id="adminPanel"></div>
     </div>
+    <div class="card" id="fullBackupCard" style="display:none;margin-top:16px;">
+      <h2>Tüm veriyi yedekle</h2>
+      <p class="muted" style="margin-top:-6px">Supabase'teki tüm gerçek veriyi — siparişler, kanallar, marka kayıtları, ürün kataloğu, yükleme geçmişi, hesaplar ve mesajlar — tek bir dosyada indirir. Supabase'in kendi yedeklemesinden bağımsız, kendi bilgisayarınızda tutabileceğiniz ayrı bir kopya — Supabase'e hiçbir şey olmasa bile elinizde kalır. Ayda bir kez indirip saklamanız önerilir.</p>
+      <button id="fullBackupBtn">Yedek dosyasını indir</button>
+      <p class="muted" id="fullBackupStatus" style="margin-top:8px;"></p>
+    </div>
     <div class="card" id="ownerDmOversightCard" style="display:none;margin-top:16px;">
       <h2>Yönetici görünümü — tüm özel mesajlar</h2>
       <p class="muted" style="margin-top:-6px">İki kişi seçin, aralarındaki özel mesajları görüntüleyin. Bu görünüm salt okunurdur — buradan mesaj gönderilemez.</p>
@@ -1020,6 +1026,59 @@ document.getElementById('ownerDmViewBtn').onclick = ()=>{
       <div style="font-size:11px;color:var(--ink-soft);">${profileName(m.sender_id).replace(' (siz)','')} — ${new Date(m.created_at).toLocaleString('tr-TR')}</div>
       <div style="font-size:13px;">${escapeHtml(m.content)}</div>
     </div>`).join('') : '<p class="muted">Bu iki kişi arasında mesaj yok.</p>';
+};
+
+// Pulls every real table fresh from Supabase — not from in-memory state,
+// which could be stale or missing something another device saved since
+// this browser last loaded — and bundles it into one downloadable JSON
+// file. This is deliberately independent of Supabase's own daily backups:
+// the whole point is a copy that still exists even if something happened
+// to the Supabase project itself, not just protection against an accidental
+// delete inside it.
+document.getElementById('fullBackupBtn').onclick = async ()=>{
+  const btn = document.getElementById('fullBackupBtn');
+  const status = document.getElementById('fullBackupStatus');
+  btn.disabled = true;
+  status.textContent = 'Supabase\'ten güncel veri alınıyor…';
+  try{
+    const [ordersRes, batchesRes, appStateRes, profilesRes, messagesRes] = await Promise.all([
+      sb.from('orders').select('*'),
+      sb.from('upload_batches').select('*'),
+      sb.from('app_state').select('*'),
+      sb.from('profiles').select('*'),
+      sb.from('messages').select('*'),
+    ]);
+    const firstError = [ordersRes, batchesRes, appStateRes, profilesRes, messagesRes].find(r=>r.error);
+    if(firstError){
+      status.textContent = 'Yedek alınamadı: ' + firstError.error.message;
+      btn.disabled = false;
+      return;
+    }
+    const backup = {
+      exportedAt: new Date().toISOString(),
+      exportedBy: currentProfile ? (currentProfile.name || currentUser.email) : '',
+      orders: ordersRes.data || [],
+      upload_batches: batchesRes.data || [],
+      app_state: appStateRes.data || [],
+      profiles: profilesRes.data || [],
+      messages: messagesRes.data || [],
+    };
+    const blob = new Blob([JSON.stringify(backup, null, 2)], {type:'application/json'});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    const stamp = new Date().toISOString().slice(0,10);
+    a.href = url;
+    a.download = `7x-group-yedek-${stamp}.json`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+    status.textContent = `İndirildi — ${backup.orders.length} sipariş, ${backup.upload_batches.length} yükleme kaydı dahil (${new Date().toLocaleTimeString('tr-TR')}).`;
+  }catch(err){
+    console.error('backup failed', err);
+    status.textContent = 'Yedek alınamadı — bağlantınızı kontrol edip tekrar deneyin.';
+  }
+  btn.disabled = false;
 };
 
 function showMessageToast(m){
@@ -1595,7 +1654,7 @@ function renderOperatorBar(){
         </select>
       </label>
       <button class="ghost small" id="logoutBtn">Çıkış yap</button>
-      <span class="muted" style="font-size:10px;margin-left:auto;" title="Bu sürümün ne zaman oluşturulduğu — canlı sitenin en güncel dosyayı çalıştırıp çalıştırmadığını doğrulamak için.">Sürüm: 2026-09-14 06:02 UTC</span>
+      <span class="muted" style="font-size:10px;margin-left:auto;" title="Bu sürümün ne zaman oluşturulduğu — canlı sitenin en güncel dosyayı çalıştırıp çalıştırmadığını doğrulamak için.">Sürüm: 2026-09-14 06:16 UTC</span>
     </div>`;
   document.getElementById('themeSelect').onchange = (e)=>{
     VALID_THEMES.forEach(t=>document.body.classList.remove(t));
@@ -3909,6 +3968,10 @@ function renderUsers(){
   const el = document.getElementById('adminPanel');
   if(!el) return;
   const isOwner = currentProfile && currentProfile.role === 'owner';
+  // Full data backup is owner-only, same reasoning as the DM oversight
+  // panel below it — this is a whole-business export, not a routine action
+  // any team member should be triggering.
+  document.getElementById('fullBackupCard').style.display = isOwner ? '' : 'none';
 
   const roleLabels = { owner:'Yönetici', sales:'Satış', production:'Üretim', finance:'Finans' };
   const myRow = `
