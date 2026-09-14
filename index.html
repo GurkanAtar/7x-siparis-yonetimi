@@ -1701,7 +1701,7 @@ function showPinModal(labelText){
     };
   });
 }
-let state = { orders: [], uploadBatches: [], activityLog: [], setTemplates: [], commonSizes: ['160x220','180x270','200x300'], productCatalog: {}, channelMerges: [], channels: [
+let state = { orders: [], uploadBatches: [], activityLog: [], setTemplates: [], commonSizes: ['160x220','180x270','200x300'], productCatalog: {}, channelMerges: [], photoBackfillHistory: [], channels: [
   {name:'qatalina', type:'Instagram kurumsal'},
   {name:'7xhome', type:'Instagram kurumsal'},
   {name:'Carpetra Home', type:'Instagram kurumsal'},
@@ -1954,6 +1954,7 @@ async function loadState(){
       });
       state.setTemplates = loaded.setTemplates || [];
       state.channelMerges = loaded.channelMerges || [];
+      state.photoBackfillHistory = loaded.photoBackfillHistory || [];
       state.lastBackupAt = loaded.lastBackupAt || null;
       state.commonSizes = (loaded.commonSizes && loaded.commonSizes.length) ? loaded.commonSizes : state.commonSizes;
       state.productCatalog = loaded.productCatalog || {};
@@ -2211,6 +2212,7 @@ function saveState(){
         productCatalog: state.productCatalog,
         channels: state.channels,
         channelMerges: state.channelMerges,
+        photoBackfillHistory: state.photoBackfillHistory,
         currentEntryMode: state.currentEntryMode,
         currentStageMode: state.currentStageMode,
         lastBackupAt: state.lastBackupAt,
@@ -5637,7 +5639,18 @@ document.getElementById('photoBackfillInput').onchange = async (e)=>{
   const file = e.target.files[0];
   if(!file) return;
   const statusEl = document.getElementById('photoBackfillStatus');
-  statusEl.textContent = 'Okunuyor…';
+  // Unlike the main order upload, a repeat filename here is NOT blocked —
+  // this action is safe to re-run on purpose (e.g. re-selecting the same
+  // file after a storage problem is fixed, to actually get photos to stick
+  // this time). Blocking it outright would have stopped exactly that
+  // legitimate recovery. Just a heads-up instead, so a genuine accidental
+  // re-select is at least visible before it runs.
+  const norm = (file.name||'').trim().toLocaleLowerCase('tr');
+  const priorUse = (state.photoBackfillHistory||[]).find(h=>h.fileName===norm);
+  const warningHtml = priorUse
+    ? `<p style="color:var(--amber);font-weight:600;margin:0 0 6px;">⚠ "${file.name}" bu ekrana daha önce ${new Date(priorUse.at).toLocaleString('tr-TR')} tarihinde yüklenmişti. Devam etmek güvenlidir — sadece hâlâ eksik olan fotoğraflar doldurulur, zaten fotoğrafı olan kalemlere dokunulmaz.</p>`
+    : '';
+  statusEl.innerHTML = warningHtml + 'Okunuyor…';
   const buf = await file.arrayBuffer();
   try{
     const wb = XLSX.read(buf, {type:'array'});
@@ -5688,9 +5701,14 @@ document.getElementById('photoBackfillInput').onchange = async (e)=>{
     }
     if(ordersUpdated>0){
       logActivity(`Fotoğraflar geri yüklendi: "${file.name}" — ${ordersUpdated} sipariş, ${itemsBackfilled} kalem güncellendi (yeni sipariş oluşturulmadı)`);
-      saveState(); render();
     }
-    statusEl.innerHTML = `Dosyada fotoğraflı ${rowsWithPhoto} satır bulundu. ${ordersMatched} sipariş isim+tarihe göre eşleşti, ${ordersUpdated} siparişte eksik fotoğraf dolduruldu (${itemsBackfilled} kalem). Zaten fotoğrafı olan kalemlere dokunulmadı.`;
+    // Recorded regardless of whether anything actually changed this time —
+    // the point is remembering "this file was used here before" for next
+    // time's warning, not just successful runs.
+    state.photoBackfillHistory = (state.photoBackfillHistory||[]).filter(h=>h.fileName!==norm);
+    state.photoBackfillHistory.push({ fileName: norm, at: new Date().toISOString() });
+    saveState(); render();
+    statusEl.innerHTML = warningHtml + `Dosyada fotoğraflı ${rowsWithPhoto} satır bulundu. ${ordersMatched} sipariş isim+tarihe göre eşleşti, ${ordersUpdated} siparişte eksik fotoğraf dolduruldu (${itemsBackfilled} kalem). Zaten fotoğrafı olan kalemlere dokunulmadı.`;
     document.getElementById('photoBackfillInput').value = '';
   }catch(err){
     console.error('photo backfill failed', err);
