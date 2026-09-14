@@ -192,6 +192,10 @@
   <span id="saveErrorBannerText">⚠️ Son değişiklik kaydedilemedi — bağlantı veya depolama sorunu olabilir. Verileriniz kaybolmuş olabilir. Sayfayı kapatmadan/yenilemeden önce bağlantınızı kontrol edip tekrar deneyin.</span>
   <button id="saveErrorBannerDismiss" style="margin-left:14px;background:rgba(255,255,255,.2);color:#fff;border:1px solid rgba(255,255,255,.4);border-radius:6px;padding:3px 10px;cursor:pointer;font-size:13px;">Kapat</button>
 </div>
+<div id="backupNudgeBanner" style="display:none;position:sticky;top:0;z-index:499;background:var(--amber);color:#fff;padding:12px 16px;text-align:center;font-weight:600;font-family:'Inter',sans-serif;font-size:14px;">
+  📦 Bu ay henüz tüm veri yedeği alınmadı — bir sorun olsa tek koruma bu. Aşağıdaki düğmeyle şimdi indirin.
+  <button id="backupNudgeBtn" style="margin-left:14px;background:rgba(255,255,255,.22);color:#fff;border:1px solid rgba(255,255,255,.45);border-radius:6px;padding:3px 10px;cursor:pointer;font-size:13px;">Şimdi Yedekle</button>
+</div>
 <div id="undoToast" style="display:none;position:fixed;bottom:24px;left:50%;transform:translateX(-50%);z-index:600;background:#1e293b;color:#fff;padding:12px 18px;border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,.25);align-items:center;gap:14px;font-family:'IBM Plex Sans',sans-serif;font-size:13px;max-width:90vw;">
   <span id="undoToastText"></span>
   <button id="undoToastBtn" style="background:#fff;color:#1e293b;border:none;border-radius:6px;padding:6px 12px;cursor:pointer;font-size:13px;font-weight:600;flex-shrink:0;">Geri al</button>
@@ -770,7 +774,9 @@
             <div style="flex:1;"><label>Başlangıç</label><input type="date" id="chanMixFrom"></div>
             <div style="flex:1;"><label>Bitiş</label><input type="date" id="chanMixTo"></div>
           </div>
-          <canvas id="chartChannelMix" height="220"></canvas>
+          <div style="max-width:300px;margin:0 auto;">
+            <canvas id="chartChannelMix"></canvas>
+          </div>
         </div>
       </div>
     </div>
@@ -1090,11 +1096,14 @@ document.getElementById('ownerDmViewBtn').onclick = ()=>{
 // the whole point is a copy that still exists even if something happened
 // to the Supabase project itself, not just protection against an accidental
 // delete inside it.
-document.getElementById('fullBackupBtn').onclick = async ()=>{
-  const btn = document.getElementById('fullBackupBtn');
-  const status = document.getElementById('fullBackupStatus');
-  btn.disabled = true;
-  status.textContent = 'Supabase\'ten güncel veri alınıyor…';
+// Shared by both the full backup card (Hesabım & Yetkiler) and the
+// month-start nudge banner — one implementation of "download everything and
+// remember that it happened," rather than two copies that could drift.
+// onStatus is optional; callers that don't have a status line to update
+// (the banner) can omit it.
+async function performBackup(onStatus){
+  const notify = onStatus || function(){};
+  notify('Supabase\'ten güncel veri alınıyor…');
   try{
     const [ordersRes, batchesRes, appStateRes, profilesRes, messagesRes] = await Promise.all([
       sb.from('orders').select('*'),
@@ -1105,9 +1114,8 @@ document.getElementById('fullBackupBtn').onclick = async ()=>{
     ]);
     const firstError = [ordersRes, batchesRes, appStateRes, profilesRes, messagesRes].find(r=>r.error);
     if(firstError){
-      status.textContent = 'Yedek alınamadı: ' + firstError.error.message;
-      btn.disabled = false;
-      return;
+      notify('Yedek alınamadı: ' + firstError.error.message);
+      return false;
     }
     const backup = {
       exportedAt: new Date().toISOString(),
@@ -1128,13 +1136,46 @@ document.getElementById('fullBackupBtn').onclick = async ()=>{
     a.click();
     a.remove();
     URL.revokeObjectURL(url);
-    status.textContent = `İndirildi — ${backup.orders.length} sipariş, ${backup.upload_batches.length} yükleme kaydı dahil (${new Date().toLocaleTimeString('tr-TR')}).`;
+    // Recorded in the shared app_state row (not per-browser/localStorage) so
+    // the month-start nudge reflects whether ANYONE on the team backed up
+    // this month, not just this one device.
+    state.lastBackupAt = new Date().toISOString();
+    saveState();
+    updateBackupNudgeBanner();
+    notify(`İndirildi — ${backup.orders.length} sipariş, ${backup.upload_batches.length} yükleme kaydı dahil (${new Date().toLocaleTimeString('tr-TR')}).`);
+    return true;
   }catch(err){
     console.error('backup failed', err);
-    status.textContent = 'Yedek alınamadı — bağlantınızı kontrol edip tekrar deneyin.';
+    notify('Yedek alınamadı — bağlantınızı kontrol edip tekrar deneyin.');
+    return false;
   }
+}
+document.getElementById('fullBackupBtn').onclick = async ()=>{
+  const btn = document.getElementById('fullBackupBtn');
+  const status = document.getElementById('fullBackupStatus');
+  btn.disabled = true;
+  await performBackup(t=>status.textContent=t);
   btn.disabled = false;
 };
+// Month-start nudge — persistent (no dismiss button on purpose) until an
+// actual backup succeeds, at which point it hides itself and stays hidden
+// until the calendar rolls into a new month with no backup on file yet.
+document.getElementById('backupNudgeBtn').onclick = async ()=>{
+  const btn = document.getElementById('backupNudgeBtn');
+  btn.disabled = true; btn.textContent = 'İndiriliyor…';
+  await performBackup();
+  btn.disabled = false; btn.textContent = 'Şimdi Yedekle';
+};
+function updateBackupNudgeBanner(){
+  const banner = document.getElementById('backupNudgeBanner');
+  if(!banner) return;
+  const today = new Date();
+  const backedUpThisMonth = state.lastBackupAt && (()=>{
+    const d = new Date(state.lastBackupAt);
+    return d.getFullYear()===today.getFullYear() && d.getMonth()===today.getMonth();
+  })();
+  banner.style.display = backedUpThisMonth ? 'none' : 'block';
+}
 
 function showMessageToast(m){
   const el = document.getElementById('messageToast');
@@ -1897,6 +1938,7 @@ async function loadState(){
       });
       state.setTemplates = loaded.setTemplates || [];
       state.channelMerges = loaded.channelMerges || [];
+      state.lastBackupAt = loaded.lastBackupAt || null;
       state.commonSizes = (loaded.commonSizes && loaded.commonSizes.length) ? loaded.commonSizes : state.commonSizes;
       state.productCatalog = loaded.productCatalog || {};
       // Which channel and which of the four operational stages (Sipariş
@@ -2054,6 +2096,7 @@ async function loadState(){
   if(currentEntryMode==='ihracat' && currentStageMode==='sort') currentStageMode = 'queue';
   document.querySelectorAll('.entry-subtab[data-stage]').forEach(x=>x.classList.toggle('active', x.dataset.stage===currentStageMode));
   document.querySelectorAll('.stage-panel').forEach(x=>x.classList.toggle('active', x.id===currentStageMode));
+  updateBackupNudgeBanner();
   render();
   // Persist any reconstructed batch records right away, so they're no longer
   // "orphaned" the next time anyone loads the app — this only actually
@@ -2154,6 +2197,7 @@ function saveState(){
         channelMerges: state.channelMerges,
         currentEntryMode: state.currentEntryMode,
         currentStageMode: state.currentStageMode,
+        lastBackupAt: state.lastBackupAt,
       };
       const { error: appErr } = await sb.from('app_state').update({ data: stripImages(rest), updated_at: new Date().toISOString() }).eq('id','global');
       if(appErr) throw appErr;
@@ -3942,7 +3986,7 @@ function renderChannelMixChart(){
     type:'pie',
     data:{ labels: nonZero.map(f=>CHANNEL_FAMILY_LABELS[f]),
       datasets:[{ data: nonZero.map(f=>totals[f]), backgroundColor: nonZero.map(f=>CHANNEL_FAMILY_COLORS[f]) }] },
-    options:{ responsive:true, plugins:{ legend:{position:'bottom'},
+    options:{ responsive:true, aspectRatio:1, plugins:{ legend:{position:'bottom'},
       tooltip:{ callbacks:{ label: ctx => {
         const total = nonZero.reduce((s,f)=>s+totals[f],0);
         const pct = total ? Math.round(ctx.parsed/total*100) : 0;
