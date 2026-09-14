@@ -3963,6 +3963,30 @@ function renderReport(){
     countNewThisMonthRep(repSicakAll, o=>o.customerName) +
     countNewThisMonthRep(repIhracatAll, o=>o.customerName);
 
+  // Same "new this real calendar month" customers as the count above, but
+  // summing every order THEY placed within that same month (not just the
+  // value of their first order) — answers "how much did new customers
+  // bring in this month," not just "how many were new."
+  function newCustomerRevenueThisMonthRep(catOrders, keyFn){
+    const today = new Date();
+    const monthStart = new Date(today.getFullYear(), today.getMonth(), 1);
+    const monthEnd = new Date(today.getFullYear(), today.getMonth()+1, 0, 23,59,59,999);
+    const keys = [...new Set(catOrders.map(keyFn))];
+    const newKeys = new Set(keys.filter(k=>isNewThisRealMonth(k, catOrders, keyFn)));
+    let total = 0;
+    catOrders.forEach(o=>{
+      if(!newKeys.has(keyFn(o))) return;
+      const d = parseDMY(o.date);
+      if(d && d>=monthStart && d<=monthEnd) total += priceToNumber(o.price);
+    });
+    return total;
+  }
+  const repNewCustomersRevenue =
+    newCustomerRevenueThisMonthRep(repIgBayiAll, o=>o.channel) +
+    newCustomerRevenueThisMonthRep(repTyBayiAll, o=>o.channel) +
+    newCustomerRevenueThisMonthRep(repSicakAll, o=>o.customerName) +
+    newCustomerRevenueThisMonthRep(repIhracatAll, o=>o.customerName);
+
   el.innerHTML = `
     <div class="stat-grid">
       <div class="stat"><div class="n">${matchingOrders.length}</div><div class="l">Siparişler</div></div>
@@ -3972,6 +3996,7 @@ function renderReport(){
       <div class="stat"><div class="n">${formatTL(totalSales)}</div><div class="l">Toplam Sipariş Tutarı</div></div>
       <div class="stat"><div class="n">${formatTL(totalProducedValue)}</div><div class="l">Üretilen Ürün Tutarı</div></div>
       <div class="stat" style="background:var(--teal);border-color:var(--teal);"><div class="n" style="color:#fff;">${repNewCustomersCount}</div><div class="l" style="color:#fff;opacity:.85;">Yeni müşteriler (bu ay)</div></div>
+      <div class="stat" style="background:var(--teal);border-color:var(--teal);"><div class="n" style="color:#fff;">${formatTL(repNewCustomersRevenue)} TL</div><div class="l" style="color:#fff;opacity:.85;">Yeni müşterilerden ciro (bu ay)</div></div>
     </div>
     <p class="muted" style="margin-top:8px">Üretilen Ürün Tutarı, sadece TÜM kalemleri üretilmiş siparişlerin tutarını sayar — kısmen üretilmiş bir siparişin tutarı, tutar sipariş bazında kayıtlı olduğundan (kalem bazında değil) bölüştürülemez ve dahil edilmez.</p>
 
