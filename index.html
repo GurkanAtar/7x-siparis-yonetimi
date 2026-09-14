@@ -7,6 +7,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:wght@500;600&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@500&family=Archivo:wght@500;600;700&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.4/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 <style>
   :root{
@@ -265,6 +266,14 @@
         </div>
         <div id="uploadPreview"></div>
         <div id="uploadLog"></div>
+      </div>
+
+      <div class="card" id="photoBackfillCard">
+        <h2>Fotoğrafları geri yükle</h2>
+        <p class="muted" style="margin-top:-6px">Zaten kaydedilmiş siparişlerin fotoğrafı eksikse (örn. bu özellik henüz düzeltilmeden önce yüklendiyse), aynı Excel dosyasını buradan tekrar seçin. Yeni sipariş OLUŞTURMAZ — sadece isim ve tarihe göre eşleşen mevcut siparişlerin eksik fotoğraflarını doldurur. Kod, durum, üretim ilerlemesi gibi hiçbir şeye dokunmaz.</p>
+        <label for="photoBackfillInput" style="cursor:pointer;display:inline-flex;align-items:center;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;font-size:13px;color:#000;background:#f0f0f0;border:1px solid #767676;border-radius:3px;padding:2px 10px;">Dosya seç</label>
+        <input type="file" id="photoBackfillInput" accept=".xlsx,.xls" style="display:none;">
+        <span class="muted" id="photoBackfillStatus"></span>
       </div>
 
       <div class="card" id="manualEntryCard-ig">
@@ -733,6 +742,33 @@
 
   <div id="reports" class="panel">
     <div class="card">
+      <h2>Trendler</h2>
+      <p class="muted" style="margin-top:-6px">Zaman içindeki gidişat — Kayıp Kargo vakaları hariç, gerçek satışlar üzerinden hesaplanır. Aşağıdaki Raporlar bölümündeki tarih/kanal filtresinden bağımsızdır.</p>
+      <div class="trend-grid" style="display:grid;grid-template-columns:1fr 1fr;gap:28px;margin-top:16px;">
+        <div>
+          <h3 style="font-family:'Fraunces',serif;font-size:15px;margin:0 0 10px;">Aylık Gelir (son 12 ay)</h3>
+          <canvas id="chartRevenueMonthly" height="220"></canvas>
+        </div>
+        <div>
+          <h3 style="font-family:'Fraunces',serif;font-size:15px;margin:0 0 10px;">Haftalık Gidişat (son 12 hafta)</h3>
+          <canvas id="chartWeeklyTrend" height="220"></canvas>
+        </div>
+        <div>
+          <h3 style="font-family:'Fraunces',serif;font-size:15px;margin:0 0 10px;">Bu Ay / Geçen Yıl Aynı Ay</h3>
+          <canvas id="chartMonthlyComparison" height="220"></canvas>
+        </div>
+        <div>
+          <h3 style="font-family:'Fraunces',serif;font-size:15px;margin:0 0 10px;">Kanal Dağılımı (gelire göre)</h3>
+          <div class="row row3" style="margin-bottom:10px;">
+            <div><label>Aralık</label><select id="chanMixGranularity"><option value="week">Haftalık</option><option value="month" selected>Aylık</option></select></div>
+            <div><label>Başlangıç</label><input type="date" id="chanMixFrom"></div>
+            <div><label>Bitiş</label><input type="date" id="chanMixTo"></div>
+          </div>
+          <canvas id="chartChannelMix" height="220"></canvas>
+        </div>
+      </div>
+    </div>
+    <div class="card" style="margin-top:16px;">
       <h2>Raporlar <button class="ghost small print-btn" data-print="reports" style="margin-left:8px;font-weight:normal;font-family:'Inter',sans-serif;font-size:12px;">Listeyi yazdır</button> <button class="ghost small excel-btn" data-excel="reports" style="font-weight:normal;font-family:'Inter',sans-serif;font-size:12px;">Excel'e aktar</button></h2>
       <p class="muted" style="margin-top:-6px">Seçilen bir zaman aralığı için taban tipine ve satış kanalına göre kırılım: sipariş edilen m², üretilen m², toplam sipariş tutarı, üretilen ürün tutarı. Sistemde kayıtlı her kanal ve taban otomatik olarak listeye girer — ileride eklenecek yeni kanallar dahil.</p>
       <div class="row row3">
@@ -1654,7 +1690,7 @@ function renderOperatorBar(){
         </select>
       </label>
       <button class="ghost small" id="logoutBtn">Çıkış yap</button>
-      <span class="muted" style="font-size:10px;margin-left:auto;" title="Bu sürümün ne zaman oluşturulduğu — canlı sitenin en güncel dosyayı çalıştırıp çalıştırmadığını doğrulamak için.">Sürüm: 2026-09-14 06:16 UTC</span>
+      <span class="muted" style="font-size:10px;margin-left:auto;" title="Bu sürümün ne zaman oluşturulduğu — canlı sitenin en güncel dosyayı çalıştırıp çalıştırmadığını doğrulamak için.">Sürüm: 2026-09-14 07:06 UTC</span>
     </div>`;
   document.getElementById('themeSelect').onchange = (e)=>{
     VALID_THEMES.forEach(t=>document.body.classList.remove(t));
@@ -2007,10 +2043,17 @@ async function loadState(){
 }
 let saveTimer = null;
 function stripImages(obj){
-  // Design-photo base64 data is kept in memory for this session only — excluded
-  // from what gets persisted, since embedding several photos in one saved record
-  // is far too large for a normal database row. Order/status data always persists.
-  return JSON.parse(JSON.stringify(obj, (key, value) => key==='images' ? undefined : value));
+  // Historically stripped "images" entirely before every save, since design
+  // photos used to be kept as base64 data — far too large for a normal
+  // database row, and thrown away on every reload as a result (see the
+  // conversation that led to fixing this). Photos are now uploaded to
+  // Supabase Storage at the moment they're created, so item.images holds
+  // short public URLs, not raw image data — safe to persist normally, so
+  // this is now a plain deep-clone with nothing actually filtered out. Kept
+  // as its own named function (rather than inlined) so every call site
+  // below doesn't need touching if a future field ever needs the same
+  // treatment images used to get.
+  return JSON.parse(JSON.stringify(obj));
 }
 function saveState(){
   // Debounce rapid, successive calls (e.g. deleting several rows quickly) into a
@@ -2347,6 +2390,10 @@ document.querySelectorAll('.tab').forEach(t=>{
     document.querySelectorAll('.panel').forEach(x=>x.classList.remove('active'));
     t.classList.add('active');
     document.getElementById(t.dataset.tab).classList.add('active');
+    // Charts need the canvas visible (non-zero size) to size themselves
+    // correctly, and should reflect the latest data every time this tab is
+    // opened — re-render on every click rather than once at load.
+    if(t.dataset.tab==='reports' && typeof renderTrendCharts==='function') renderTrendCharts();
   };
 });
 
@@ -3710,6 +3757,183 @@ document.getElementById('runReport').onclick = renderReport;
   document.getElementById(id).addEventListener('change', renderReport);
 });
 
+// ---------------- Trendler (Raporlar charts) ----------------
+// Independent of the Raporlar filter form above — always computed fresh
+// from state.orders whenever the Raporlar tab is opened or the channel-mix
+// controls change. Kayıp Kargo is excluded everywhere here, same rule as
+// every other report in the app: it was never a real sale.
+const CHANNEL_FAMILY_LABELS = { ig:'Instagram', trendyol:'Trendyol', hepsiburada:'Hepsiburada', sicaksatis:'Sıcak Satış', ihracat:'İhracat' };
+const CHANNEL_FAMILY_COLORS = { ig:'#B14A33', trendyol:'#3C4A6B', hepsiburada:'#4C8067', sicaksatis:'#C79A3A', ihracat:'#7A5A9E' };
+let trendCharts = {}; // Chart.js instances, keyed by chart id, so a re-render destroys the old one first instead of stacking duplicates on the same canvas
+
+function realSalesOrders(){
+  return state.orders.filter(o=>o.saleType!=='Kayıp Kargo');
+}
+function monthKey(d){ return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0'); }
+function monthLabel(d){ return d.toLocaleDateString('tr-TR',{month:'short',year:'2-digit'}); }
+// Monday of the week containing d (local midnight) — used as both the
+// grouping key and the label source for weekly buckets, so "which week" is
+// decided identically everywhere.
+function weekStart(d){
+  const x = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  const day = x.getDay(); // 0=Sun..6=Sat
+  x.setDate(x.getDate() + (day===0 ? -6 : 1-day));
+  return x;
+}
+function weekKey(d){ const w=weekStart(d); return w.getFullYear()+'-'+String(w.getMonth()+1).padStart(2,'0')+'-'+String(w.getDate()).padStart(2,'0'); }
+function weekLabel(d){ return weekStart(d).toLocaleDateString('tr-TR',{day:'2-digit',month:'2-digit'}); }
+function destroyTrendChart(id){ if(trendCharts[id]){ trendCharts[id].destroy(); delete trendCharts[id]; } }
+
+// 1) Revenue by month — trailing 12 real calendar months, ending this month.
+function renderRevenueMonthlyChart(){
+  const canvas = document.getElementById('chartRevenueMonthly');
+  if(!canvas || typeof Chart==='undefined') return;
+  const today = new Date();
+  const months = [];
+  for(let i=11;i>=0;i--) months.push(new Date(today.getFullYear(), today.getMonth()-i, 1));
+  const totals = months.map(m=>{
+    const key = monthKey(m);
+    return realSalesOrders().reduce((s,o)=>{
+      const d = parseDMY(o.date);
+      return (d && monthKey(d)===key) ? s+priceToNumber(o.price) : s;
+    }, 0);
+  });
+  destroyTrendChart('revenueMonthly');
+  trendCharts.revenueMonthly = new Chart(canvas.getContext('2d'), {
+    type:'line',
+    data:{ labels: months.map(monthLabel), datasets:[{
+      label:'Gelir (TL)', data: totals, borderColor:'#3C4A6B', backgroundColor:'rgba(60,74,107,.12)',
+      fill:true, tension:.25, pointRadius:3,
+    }] },
+    options:{ responsive:true, plugins:{legend:{display:false}},
+      scales:{ y:{ beginAtZero:true, ticks:{callback:v=>formatTL(v)+' TL'} } } }
+  });
+}
+
+// 2) Weekly trend — last 12 Monday-start weeks: order count as bars, revenue
+// as a line on a secondary axis (very different scales, so one shared axis
+// would flatten one of the two into an unreadable line).
+function renderWeeklyTrendChart(){
+  const canvas = document.getElementById('chartWeeklyTrend');
+  if(!canvas || typeof Chart==='undefined') return;
+  const thisWeekStart = weekStart(new Date());
+  const weeks = [];
+  for(let i=11;i>=0;i--){ const w=new Date(thisWeekStart); w.setDate(w.getDate()-7*i); weeks.push(w); }
+  const counts = weeks.map(()=>0), revenues = weeks.map(()=>0);
+  const idxByKey = {}; weeks.forEach((w,i)=>idxByKey[weekKey(w)]=i);
+  realSalesOrders().forEach(o=>{
+    const d = parseDMY(o.date); if(!d) return;
+    const idx = idxByKey[weekKey(d)]; if(idx===undefined) return;
+    counts[idx]+=1; revenues[idx]+=priceToNumber(o.price);
+  });
+  destroyTrendChart('weeklyTrend');
+  trendCharts.weeklyTrend = new Chart(canvas.getContext('2d'), {
+    data:{ labels: weeks.map(weekLabel), datasets:[
+      { type:'bar', label:'Sipariş sayısı', data:counts, backgroundColor:'rgba(60,74,107,.55)', yAxisID:'y' },
+      { type:'line', label:'Gelir (TL)', data:revenues, borderColor:'#B14A33', backgroundColor:'#B14A33', yAxisID:'y1', tension:.25, pointRadius:3 },
+    ] },
+    options:{ responsive:true, interaction:{mode:'index',intersect:false},
+      scales:{
+        y:{ position:'left', beginAtZero:true, title:{display:true,text:'Sipariş sayısı'} },
+        y1:{ position:'right', beginAtZero:true, grid:{drawOnChartArea:false}, ticks:{callback:v=>formatTL(v)+' TL'} },
+      }
+    }
+  });
+}
+
+// 3) This real calendar month vs the same calendar month last year —
+// revenue and order count side by side, so a seasonal comparison doesn't
+// require mentally recalling last year's numbers.
+function renderMonthlyComparisonChart(){
+  const canvas = document.getElementById('chartMonthlyComparison');
+  if(!canvas || typeof Chart==='undefined') return;
+  const today = new Date();
+  const thisStart = new Date(today.getFullYear(), today.getMonth(), 1);
+  const thisEnd = new Date(today.getFullYear(), today.getMonth()+1, 0, 23,59,59,999);
+  const lastStart = new Date(today.getFullYear()-1, today.getMonth(), 1);
+  const lastEnd = new Date(today.getFullYear()-1, today.getMonth()+1, 0, 23,59,59,999);
+  function statsBetween(from,to){
+    let revenue=0, count=0;
+    realSalesOrders().forEach(o=>{
+      const d = parseDMY(o.date); if(!d || d<from || d>to) return;
+      revenue += priceToNumber(o.price); count += 1;
+    });
+    return {revenue, count};
+  }
+  const cur = statsBetween(thisStart, thisEnd);
+  const prev = statsBetween(lastStart, lastEnd);
+  const monthName = today.toLocaleDateString('tr-TR',{month:'long'});
+  destroyTrendChart('monthlyComparison');
+  trendCharts.monthlyComparison = new Chart(canvas.getContext('2d'), {
+    type:'bar',
+    data:{ labels:['Gelir (TL)','Sipariş sayısı'],
+      datasets:[
+        { label:`${monthName} ${today.getFullYear()}`, data:[cur.revenue, cur.count], backgroundColor:'#3C4A6B' },
+        { label:`${monthName} ${today.getFullYear()-1}`, data:[prev.revenue, prev.count], backgroundColor:'#DAD5C8' },
+      ]
+    },
+    options:{ responsive:true, plugins:{legend:{position:'bottom'}} }
+  });
+}
+
+// 4) Channel mix over time — stacked bars by revenue, weekly or monthly
+// buckets, over a selectable date range (defaults to the trailing 6 months
+// when left blank). Empty buckets are still included (not skipped) so a
+// quiet week/month shows as zero rather than silently shifting every later
+// bucket to the left.
+function renderChannelMixChart(){
+  const canvas = document.getElementById('chartChannelMix');
+  if(!canvas || typeof Chart==='undefined') return;
+  const granularity = document.getElementById('chanMixGranularity').value; // 'week' | 'month'
+  const fromVal = document.getElementById('chanMixFrom').value;
+  const toVal = document.getElementById('chanMixTo').value;
+  const today = new Date();
+  const to = toVal ? (()=>{ const [y,m,d]=toVal.split('-').map(Number); return new Date(y,m-1,d,23,59,59,999); })() : today;
+  const from = fromVal ? (()=>{ const [y,m,d]=fromVal.split('-').map(Number); return new Date(y,m-1,d); })()
+    : new Date(to.getFullYear(), to.getMonth()-5, 1);
+
+  const keyFn = granularity==='week' ? weekKey : monthKey;
+  const labelFn = granularity==='week' ? weekLabel : monthLabel;
+  const buckets = [];
+  if(granularity==='week'){
+    let cursor = weekStart(from); const end = weekStart(to);
+    while(cursor<=end){ buckets.push({key:weekKey(cursor), label:weekLabel(cursor)}); cursor=new Date(cursor); cursor.setDate(cursor.getDate()+7); }
+  } else {
+    let cursor = new Date(from.getFullYear(), from.getMonth(), 1); const end = new Date(to.getFullYear(), to.getMonth(), 1);
+    while(cursor<=end){ buckets.push({key:monthKey(cursor), label:monthLabel(cursor)}); cursor=new Date(cursor.getFullYear(), cursor.getMonth()+1, 1); }
+  }
+  const bucketIndex = {}; buckets.forEach((b,i)=>bucketIndex[b.key]=i);
+  const families = Object.keys(CHANNEL_FAMILY_LABELS);
+  const seriesData = {}; families.forEach(f=>seriesData[f]=buckets.map(()=>0));
+
+  realSalesOrders().forEach(o=>{
+    const d = parseDMY(o.date); if(!d || d<from || d>to) return;
+    const idx = bucketIndex[keyFn(d)]; if(idx===undefined) return;
+    const fam = channelCategoryForNumbering(o.channel);
+    seriesData[fam][idx] += priceToNumber(o.price);
+  });
+
+  destroyTrendChart('channelMix');
+  trendCharts.channelMix = new Chart(canvas.getContext('2d'), {
+    type:'bar',
+    data:{ labels: buckets.map(b=>b.label),
+      datasets: families.map(f=>({ label: CHANNEL_FAMILY_LABELS[f], data: seriesData[f], backgroundColor: CHANNEL_FAMILY_COLORS[f], stack:'mix' })) },
+    options:{ responsive:true, plugins:{legend:{position:'bottom'}},
+      scales:{ x:{stacked:true}, y:{stacked:true, beginAtZero:true, ticks:{callback:v=>formatTL(v)+' TL'}} } }
+  });
+}
+
+function renderTrendCharts(){
+  renderRevenueMonthlyChart();
+  renderWeeklyTrendChart();
+  renderMonthlyComparisonChart();
+  renderChannelMixChart();
+}
+['chanMixGranularity','chanMixFrom','chanMixTo'].forEach(id=>{
+  const el = document.getElementById(id);
+  if(el) el.addEventListener('change', renderChannelMixChart);
+});
+
 function addItemLine(vals){
   vals = vals || {};
   const id = 'il'+(itemLineCount++);
@@ -3766,13 +3990,19 @@ function addItemLine(vals){
   imgInput.onchange = ()=>{
     const f = imgInput.files[0]; if(!f) return;
     const r = new FileReader();
-    r.onload = (ev)=>{
-      itemImages[id] = [ev.target.result];
+    r.onload = async (ev)=>{
+      const localPreview = ev.target.result;
+      itemImages[id] = [localPreview];
       imgLabel.innerHTML = '';
-      imgLabel.style.backgroundImage = `url(${ev.target.result})`;
+      imgLabel.style.backgroundImage = `url(${localPreview})`;
       imgLabel.style.backgroundSize = 'cover';
       imgLabel.style.border = '1px solid var(--line)';
       div.querySelector('.upload-photo-label').textContent = 'Fotoğraf eklendi';
+      // Instant preview above uses the local data URL; the durable Storage
+      // URL swaps in once the upload finishes, which is what actually gets
+      // saved when this order is submitted.
+      const uploadedUrl = await uploadImageToStorage(localPreview);
+      itemImages[id] = [uploadedUrl];
     };
     r.readAsDataURL(f);
   };
@@ -3856,13 +4086,16 @@ function addItemSet(n, presetSizes, presetName, presetTaban, presetFringe, prese
   imgInput.onchange = ()=>{
     const f = imgInput.files[0]; if(!f) return;
     const r = new FileReader();
-    r.onload = (ev)=>{
-      itemImages[setId] = [ev.target.result];
+    r.onload = async (ev)=>{
+      const localPreview = ev.target.result;
+      itemImages[setId] = [localPreview];
       imgLabel.innerHTML = '';
-      imgLabel.style.backgroundImage = `url(${ev.target.result})`;
+      imgLabel.style.backgroundImage = `url(${localPreview})`;
       imgLabel.style.backgroundSize = 'cover';
       imgLabel.style.border = '1px solid var(--line)';
       div.querySelector('.upload-photo-label').textContent = 'Fotoğraf eklendi';
+      const uploadedUrl = await uploadImageToStorage(localPreview);
+      itemImages[setId] = [uploadedUrl];
     };
     r.readAsDataURL(f);
   };
@@ -4756,6 +4989,29 @@ function excelDateToStr(raw){
   return s; // unrecognized format — leave exactly as typed rather than guess
 }
 
+// Uploads a data URL to the order-photos Storage bucket and returns its
+// public URL. This is what actually makes a photo survive a page reload or
+// reach a different team member's browser — a data URL only ever exists in
+// the memory of the one browser that created it, and used to be stripped
+// out before every save entirely (see stripImages, now unused for images).
+// Falls back to returning the data URL itself if the upload fails, so a
+// temporary network hiccup during upload degrades to "works this session
+// only" rather than losing the photo outright.
+async function uploadImageToStorage(dataUrl){
+  try{
+    const res = await fetch(dataUrl);
+    const blob = await res.blob();
+    const ext = blob.type === 'image/png' ? 'png' : 'jpg';
+    const path = `${crypto.randomUUID()}.${ext}`;
+    const { error } = await sb.storage.from('order-photos').upload(path, blob, { contentType: blob.type });
+    if(error){ console.error('storage upload failed', error); return dataUrl; }
+    const { data } = sb.storage.from('order-photos').getPublicUrl(path);
+    return data.publicUrl;
+  }catch(e){
+    console.error('storage upload failed', e);
+    return dataUrl;
+  }
+}
 async function downscaleImageDataUrl(base64, mime, maxDim){
   // Shrinks a design photo to a reasonable thumbnail size before it ever enters
   // memory as a data URL — some real-world exports carry 600KB+ photos per row,
@@ -4778,10 +5034,11 @@ async function downscaleImageDataUrl(base64, mime, maxDim){
     canvas.width = width; canvas.height = height;
     const ctx = canvas.getContext('2d');
     ctx.drawImage(bitmap, 0, 0, width, height);
-    return canvas.toDataURL('image/jpeg', 0.72);
+    const dataUrl = canvas.toDataURL('image/jpeg', 0.72);
+    return await uploadImageToStorage(dataUrl);
   }catch(e){
     console.error('image downscale failed, using original', e);
-    return `data:${mime};base64,${base64}`;
+    return await uploadImageToStorage(`data:${mime};base64,${base64}`);
   }
 }
 
@@ -5054,6 +5311,77 @@ document.getElementById('fileInput').onchange = async (e)=>{
       {status:'uploadStatus', preview:'uploadPreview', input:'fileInput', inputName:'fileInputName'},
       'Dosya okunamadı — sütun başlıklarını kontrol edin.'
     );
+  }
+};
+
+// Backfills missing photos onto ALREADY-SAVED Instagram orders — deliberately
+// separate from the main upload above, and never creates a new order or
+// touches an existing one's code/status/price/production progress. Matches
+// each sheet row to an existing order purely by (normalized customer name,
+// order date), then fills in any item on that order that has no photo yet.
+// An order that already has a photo on every item is left completely alone.
+document.getElementById('photoBackfillInput').onchange = async (e)=>{
+  const file = e.target.files[0];
+  if(!file) return;
+  const statusEl = document.getElementById('photoBackfillStatus');
+  statusEl.textContent = 'Okunuyor…';
+  const buf = await file.arrayBuffer();
+  try{
+    const wb = XLSX.read(buf, {type:'array'});
+    const found = findOrderSheet(wb);
+    if(!found){
+      statusEl.innerHTML = '<strong style="color:var(--rust)">Bu dosyada beklenen sütunlar bulunamadı (İSİM SOYİSİM, ÖLÇÜ).</strong>';
+      return;
+    }
+    const zip = await JSZip.loadAsync(buf);
+    const sheetRef = wb.Sheets[found.name]['!ref'] || 'A1';
+    const startRowMatch = sheetRef.match(/^[A-Z]+(\d+)/);
+    const rowOffset = startRowMatch ? parseInt(startRowMatch[1]) - 1 : 0;
+    const rowImages = await extractRowImages(zip, found.name, rowOffset);
+    if(rowImages._error){
+      statusEl.innerHTML = `<strong style="color:var(--rust)">Fotoğraf çıkarma sırasında hata oluştu (${rowImages._error}).</strong>`;
+      return;
+    }
+    const { grid, headers } = found;
+    const col = (h)=>headers.indexOf(h);
+    let rowsWithPhoto=0, ordersMatched=0, ordersUpdated=0, itemsBackfilled=0;
+    for(let r=1; r<grid.length; r++){
+      const imgs = rowImages[r];
+      if(!imgs || !imgs.length) continue;
+      rowsWithPhoto++;
+      const row = grid[r];
+      const get = (h)=>{ const i=col(h); return i>-1 ? (row[i]!==undefined?row[i]:'') : ''; };
+      const name = get('İSİM SOYİSİM').toString().trim();
+      const dateStr = excelDateToStr(get('TARİH'));
+      if(!name || !dateStr) continue;
+      const matchedOrders = state.orders.filter(o=>
+        channelCategoryForNumbering(o.channel)==='ig' &&
+        normText(o.customerName)===normText(name) &&
+        o.date===dateStr
+      );
+      if(!matchedOrders.length) continue;
+      ordersMatched++;
+      let thisOrderUpdated = false;
+      matchedOrders.forEach(o=>{
+        o.items.forEach(item=>{
+          if(!item.images || !item.images.length){
+            item.images = imgs;
+            itemsBackfilled++;
+            thisOrderUpdated = true;
+          }
+        });
+      });
+      if(thisOrderUpdated) ordersUpdated++;
+    }
+    if(ordersUpdated>0){
+      logActivity(`Fotoğraflar geri yüklendi: "${file.name}" — ${ordersUpdated} sipariş, ${itemsBackfilled} kalem güncellendi (yeni sipariş oluşturulmadı)`);
+      saveState(); render();
+    }
+    statusEl.innerHTML = `Dosyada fotoğraflı ${rowsWithPhoto} satır bulundu. ${ordersMatched} sipariş isim+tarihe göre eşleşti, ${ordersUpdated} siparişte eksik fotoğraf dolduruldu (${itemsBackfilled} kalem). Zaten fotoğrafı olan kalemlere dokunulmadı.`;
+    document.getElementById('photoBackfillInput').value = '';
+  }catch(err){
+    console.error('photo backfill failed', err);
+    statusEl.innerHTML = '<strong style="color:var(--rust)">Dosya okunamadı.</strong>';
   }
 };
 
@@ -7000,9 +7328,10 @@ function wireQueueHandlers(tbody){
       let auth = null;
       if(!withinDay){ auth = await requireAdmin('Bu siparişin fotoğrafını 24 saatten sonra değiştirme'); if(!auth){ inp.value=''; return; } }
       const r = new FileReader();
-      r.onload = (ev)=>{
+      r.onload = async (ev)=>{
+        const uploadedUrl = await uploadImageToStorage(ev.target.result);
         const ids = inp.dataset.ids.split(',');
-        order.items.filter(i=>ids.includes(i.id)).forEach(i=>{ i.images = [ev.target.result]; });
+        order.items.filter(i=>ids.includes(i.id)).forEach(i=>{ i.images = [uploadedUrl]; });
         logActivity(`Fotoğraf elle yüklendi — ${order.customerName}`, auth==='pin' ? 'Admin' : undefined);
         saveState(); render();
       };
