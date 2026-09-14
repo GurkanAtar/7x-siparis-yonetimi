@@ -648,6 +648,13 @@
     </div>
     </div>
 
+    <div class="card" id="shippedReadyCard">
+      <h2>Kargoya Hazır Siparişler</h2>
+      <p class="muted" style="margin-top:-6px">Tüm kalemleri üretilmiş ama henüz "Kargoya verildi" olarak işaretlenmemiş siparişler. WhatsApp bildirimi açık bir Instagram kanalına aitse, bu işaret mesaj kuyruğunu da tetikler.</p>
+      <div id="shippedReadyList"></div>
+      <div class="empty" id="shippedReadyEmpty" style="display:none">Kargoya hazır bekleyen sipariş yok.</div>
+    </div>
+
     <div id="prodSub-ihracat" class="entry-sub-panel">
     <div class="card">
       <h2>İhracat Üretimi <button class="ghost small print-btn" data-print="exportProduction" style="margin-left:8px;font-weight:normal;font-family:'Inter',sans-serif;font-size:12px;">Listeyi yazdır</button> <button class="ghost small excel-btn" data-excel="exportProduction" style="font-weight:normal;font-family:'Inter',sans-serif;font-size:12px;">Excel'e aktar</button></h2>
@@ -852,6 +859,12 @@
       <p class="muted" style="margin-top:-6px">Supabase'teki tüm gerçek veriyi — siparişler, kanallar, marka kayıtları, ürün kataloğu, yükleme geçmişi, hesaplar ve mesajlar — tek bir dosyada indirir. Supabase'in kendi yedeklemesinden bağımsız, kendi bilgisayarınızda tutabileceğiniz ayrı bir kopya — Supabase'e hiçbir şey olmasa bile elinizde kalır. Ayda bir kez indirip saklamanız önerilir.</p>
       <button id="fullBackupBtn">Yedek dosyasını indir</button>
       <p class="muted" id="fullBackupStatus" style="margin-top:8px;"></p>
+    </div>
+    <div class="card" id="waQueueCard" style="display:none;margin-top:16px;">
+      <h2>WhatsApp Kuyruğu</h2>
+      <p class="muted" style="margin-top:-6px">"Sipariş onaylandı" kodlandığında, "Kargoya verildi" Üretim'de işaretlendiğinde otomatik kuyruğa girer — yalnızca WhatsApp bildirimi açık bir Instagram kanalına ait siparişler için. Gerçek gönderim için Meta tarafı henüz bağlanmadı; buradaki kayıtlar şimdilik doğru anda doğru içerikle kuyruğa girdiğini görmek/test etmek içindir.</p>
+      <div id="waQueueList"></div>
+      <p class="muted" id="waQueueEmpty" style="display:none;">Kuyrukta henüz mesaj yok.</p>
     </div>
     <div class="card" id="ownerDmOversightCard" style="display:none;margin-top:16px;">
       <h2>Yönetici görünümü — tüm özel mesajlar</h2>
@@ -2649,7 +2662,7 @@ function renderIadelerResults(){
       return `<tr><td>${item.size} ${item.taban||''}</td><td>${item.qty}</td><td colspan="2">${actionCell}</td><td></td></tr>`;
     }).join('');
     return `<div style="margin-bottom:18px;">
-      <p style="margin:0 0 6px;"><strong>${o.customerName||'(isimsiz)'}</strong> <span class="muted">${o.date||''}</span> <span class="badge-chan">${o.channel||''}</span></p>
+      <p style="margin:0 0 6px;"><strong>${o.customerName||'(isimsiz)'}</strong> <span class="muted">${o.date||''}</span> ${chanBadgeHtml(o.channel)}</p>
       <table><thead><tr><th>Ölçü/Taban</th><th>Adet</th><th colspan="2">Durum / İşlem</th><th>Tahmini Tutar</th></tr></thead><tbody>${rows}</tbody></table>
     </div>`;
   }).join('');
@@ -2687,7 +2700,7 @@ function renderRecentIadeler(){
   if(!rows.length){ container.innerHTML = '<p class="muted">Henüz kayıtlı iade yok.</p>'; return; }
   rows.sort((a,b)=> new Date(b.item.iade.at) - new Date(a.item.iade.at));
   container.innerHTML = `<table><thead><tr><th>Tarih</th><th>Müşteri</th><th>Kanal</th><th>Ölçü/Taban</th><th>Sebep</th><th>Tahmini Tutar</th></tr></thead><tbody>
-    ${rows.map(({o,item})=>`<tr><td>${new Date(item.iade.at).toLocaleDateString('tr-TR')}</td><td>${o.customerName||''}</td><td><span class="badge-chan">${o.channel||''}</span></td><td>${item.size} ${item.taban||''}</td><td>${escapeHtml(item.iade.reason)}</td><td>${formatTL(item.iade.estValue)} TL</td></tr>`).join('')}
+    ${rows.map(({o,item})=>`<tr><td>${new Date(item.iade.at).toLocaleDateString('tr-TR')}</td><td>${o.customerName||''}</td><td>${chanBadgeHtml(o.channel)}</td><td>${item.size} ${item.taban||''}</td><td>${escapeHtml(item.iade.reason)}</td><td>${formatTL(item.iade.estValue)} TL</td></tr>`).join('')}
   </tbody></table>`;
 }
 
@@ -2774,7 +2787,7 @@ function renderCustomerDbRows(){
     <div style="display:flex;justify-content:space-between;align-items:flex-start;padding:10px 0;border-top:1px solid var(--line);gap:12px;">
       <div>
         <strong>${g.name||'(isimsiz)'}</strong> <span class="muted">${g.phone?('— '+g.phone):''}</span>
-        <span class="badge-chan" style="margin-left:6px;">${g.channel||''}</span><br>
+        ${chanBadgeHtml(g.channel).replace('<span class="badge-chan">','<span class="badge-chan" style="margin-left:6px;">')}<br>
         <span class="muted" style="font-size:12px;">${g.address||''}</span>
       </div>
       <div style="text-align:right;white-space:nowrap;">
@@ -2803,7 +2816,7 @@ function buildCustomerDbDetailHtml(customer){
     const items = o.items.map(i=>`${i.size} ×${i.qty}${i.iade?' <span style="color:var(--rust);font-weight:600;">(İADE)</span>':''}`).join(', ');
     const priceCell = o.price ? formatTL(priceToNumber(o.price))+' TL' : '-';
     const brand = getOrderBrand(o) || 'Marka adı yok';
-    return `<tr><td>${o.date||'-'}</td><td><span class="badge-chan">${o.channel}</span></td><td>${brand}</td><td>${items}</td><td>${priceCell}</td></tr>`;
+    return `<tr><td>${o.date||'-'}</td><td>${chanBadgeHtml(o.channel)}</td><td>${brand}</td><td>${items}</td><td>${priceCell}</td></tr>`;
   }).join('');
   return `
     <div style="background:var(--paper);border-radius:8px;padding:10px 14px;margin:4px 0 10px;">
@@ -4017,7 +4030,7 @@ function renderReport(){
           const adet = isCollapsiblePair(bundle) ? (bundle[0].qty||1) : bundle.reduce((s,i)=>s+i.qty,0);
           const m2Total = group.reduce((s,g)=>s+g.m2, 0);
           const numKey = itemGroupKey(o, bundle[0]);
-          return `<tr><td class="ts">${itemNumbers[numKey]||'—'}</td><td>${o.date}</td><td><span class="badge-chan">${o.channel}</span></td><td>${o.customerName}</td><td>${sizeText}</td><td>${adet}</td><td>${m2Total.toFixed(2)}</td><td>${bundle[0].taban}</td><td>${pill(bundle[0].status==='sorted'?'in production':bundle[0].status)}</td></tr>`;
+          return `<tr><td class="ts">${itemNumbers[numKey]||'—'}</td><td>${o.date}</td><td>${chanBadgeHtml(o.channel)}</td><td>${o.customerName}</td><td>${sizeText}</td><td>${adet}</td><td>${m2Total.toFixed(2)}</td><td>${bundle[0].taban}</td><td>${pill(bundle[0].status==='sorted'?'in production':bundle[0].status)}</td></tr>`;
         }).join('');
       })()}</tbody>
     </table>`;
@@ -4240,7 +4253,7 @@ function renderTopCustomers(){
   const ranked = [...groups.values()].filter(g=>g.tutar>0).sort((a,b)=>b.tutar-a.tutar).slice(0,10);
   if(!ranked.length){ el.innerHTML = '<div class="empty">Bu döneme uyan sipariş yok.</div>'; return; }
   el.innerHTML = `<table><thead><tr><th>#</th><th>Müşteri</th><th>Kanal(lar)</th><th>Sipariş sayısı</th><th>Toplam Tutar</th></tr></thead><tbody>
-    ${ranked.map((g,i)=>`<tr><td>${i+1}</td><td>${g.name}</td><td>${[...g.channels].map(c=>`<span class="badge-chan">${c}</span>`).join(' ')}</td><td>${g.count}</td><td>${formatTL(g.tutar)} TL</td></tr>`).join('')}
+    ${ranked.map((g,i)=>`<tr><td>${i+1}</td><td>${g.name}</td><td>${[...g.channels].map(c=>chanBadgeHtml(c)).join(' ')}</td><td>${g.count}</td><td>${formatTL(g.tutar)} TL</td></tr>`).join('')}
   </tbody></table>`;
 }
 document.getElementById('topCustPeriod').addEventListener('change', renderTopCustomers);
@@ -4512,6 +4525,30 @@ function renderSetTemplates(){
   renderTemplateMenu();
 }
 
+// Every queued WhatsApp message across every order, most recent first —
+// lets the triggers be verified (right order, right moment, right content)
+// before any real Meta connection exists to actually send them.
+function renderWaQueue(){
+  const wrap = document.getElementById('waQueueList');
+  if(!wrap) return;
+  const rows = [];
+  state.orders.forEach(o=>{ (o.whatsappMessages||[]).forEach(m=>rows.push({o,m})); });
+  document.getElementById('waQueueEmpty').style.display = rows.length ? 'none' : 'block';
+  if(!rows.length){ wrap.innerHTML = ''; return; }
+  rows.sort((a,b)=> new Date(b.m.createdAt) - new Date(a.m.createdAt));
+  const typeLabels = { confirmed:'Sipariş onaylandı', shipped:'Kargoya verildi' };
+  const statusColors = { pending:'var(--amber)', sent:'var(--forest)', failed:'var(--rust)' };
+  wrap.innerHTML = `<table><thead><tr><th>Tarih</th><th>Müşteri</th><th>Kanal</th><th>Mesaj</th><th>Sipariş No</th><th>Durum</th></tr></thead><tbody>
+    ${rows.map(({o,m})=>`<tr>
+      <td>${new Date(m.createdAt).toLocaleString('tr-TR')}</td>
+      <td>${o.customerName||''}</td>
+      <td>${chanBadgeHtml(o.channel)}</td>
+      <td>${typeLabels[m.type]||m.type}</td>
+      <td>${m.templateParams && m.templateParams.orderNo || '-'}</td>
+      <td style="color:${statusColors[m.status]||'inherit'};font-weight:600;">${m.status}</td>
+    </tr>`).join('')}
+  </tbody></table>`;
+}
 function renderUsers(){
   const el = document.getElementById('adminPanel');
   if(!el) return;
@@ -4520,6 +4557,8 @@ function renderUsers(){
   // panel below it — this is a whole-business export, not a routine action
   // any team member should be triggering.
   document.getElementById('fullBackupCard').style.display = isOwner ? '' : 'none';
+  document.getElementById('waQueueCard').style.display = isOwner ? '' : 'none';
+  if(isOwner) renderWaQueue();
 
   const roleLabels = { owner:'Yönetici', sales:'Satış', production:'Üretim', finance:'Finans' };
   const myRow = `
@@ -6559,6 +6598,89 @@ function getAllItemGroups(){
 // position in one shared pool. Trendyol keeps its own separate permanent
 // 1001+ scheme untouched (handled entirely outside this map).
 const NUMBERING_PREFIX = { ig:'IG-', sicaksatis:'SS-', ihracat:'EXP-', hepsiburada:'HB-' };
+
+// ---------------- Channel + account letter codes ----------------
+// A short, permanent, letter-only code per channel (e.g. IGQA, TY7X) —
+// completely separate from the day-digit production numbering above. Shown
+// as a small tag next to the channel badge everywhere a badge already
+// appears, and used to pick which registered WhatsApp number a message
+// sends from. Generated once, the moment a channel is created (whichever
+// of the many places in this app that happens — manual entry here, or
+// auto-registration from an upload/order), then never changes.
+const CHANNEL_CODE_CATEGORY_PREFIX = { ig:'IG', trendyol:'TY', hepsiburada:'HB', sicaksatis:'SS', ihracat:'IH' };
+// The 7 channels that already existed when this system was introduced —
+// exact values as decided, rather than letting the generic derivation
+// below (which wouldn't reliably reproduce "7X" from "7xhome", for
+// instance) guess something close-but-different for them.
+const CHANNEL_CODE_SEEDS = {
+  'qatalina': 'QA',
+  '7xhome': '7X',
+  'carpetra home': 'CH',
+  'bursa toptan': 'BT',
+  'ty-7x group': '7X',
+  'ty-carpetra': 'CA',
+  'hb-7x group': '7X',
+};
+function stripToLettersDigits(s){
+  return (s||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'')
+    .replace(/ı/gi,'i').toUpperCase().replace(/[^A-Z0-9]/g,'');
+}
+// First letter of the first word + first letter of the last word (e.g.
+// "Ahmet Şahin" -> "AS") — used for dealers, Sıcak Satış, and İhracat,
+// where there's no fixed brand name to derive letters from, only a person's
+// name. Sıcak Satış names carry a " — Şehir" suffix (see addChannel below)
+// that's stripped first so the city never leaks into the initials.
+function dealerInitials(name){
+  const clean = (name||'').split(' — ')[0].trim();
+  const words = clean.split(/\s+/).filter(Boolean);
+  if(!words.length) return 'XX';
+  if(words.length===1) return (stripToLettersDigits(words[0])+'XX').slice(0,2);
+  const first = stripToLettersDigits(words[0]).charAt(0) || 'X';
+  const last = stripToLettersDigits(words[words.length-1]).charAt(0) || 'X';
+  return first + last;
+}
+function generateChannelCode(channel){
+  const category = channelCategoryForNumbering(channel.name);
+  const prefix = CHANNEL_CODE_CATEGORY_PREFIX[category] || 'XX';
+  const seeded = CHANNEL_CODE_SEEDS[normText(channel.name)];
+  const isDealerLike = seeded===undefined && ((channel.type||'').endsWith('bayi') || category==='sicaksatis' || category==='ihracat');
+  const accountPart = seeded !== undefined ? seeded
+    : isDealerLike ? dealerInitials(channel.name)
+    : (stripToLettersDigits(channel.name)+'XX').slice(0,2);
+  return prefix + accountPart;
+}
+// Backfills a .code onto any channel that doesn't have one yet — called at
+// the top of every render(), so this covers every way a channel can come
+// into existence (manual entry here, or any of the several auto-registration
+// paths elsewhere in the app) with one single check, rather than needing to
+// remember to generate a code at each of those separate places. Collisions
+// (two different dealers naturally producing the same 2 letters) get a
+// numeric suffix, assigned once and then permanent, same as the base code.
+function ensureAllChannelCodes(){
+  const used = new Set(state.channels.filter(c=>c.code).map(c=>c.code));
+  let changed = false;
+  state.channels.forEach(c=>{
+    if(c.code) return;
+    const base = generateChannelCode(c);
+    let code = base, suffix = 2;
+    while(used.has(code)){ code = base + suffix; suffix++; }
+    c.code = code;
+    used.add(code);
+    changed = true;
+  });
+  return changed;
+}
+// Small HTML tag showing a channel's code, meant to sit right next to its
+// existing badge-chan pill — kept as one shared helper so every one of the
+// several places a channel badge is printed stays visually consistent.
+function chanCodeTagHtml(channelName){
+  const chan = state.channels.find(c=>normText(c.name)===normText(channelName));
+  if(!chan || !chan.code) return '';
+  return `<span style="font-size:10px;background:var(--paper);color:var(--ink-soft);border:1px solid var(--line);padding:1px 6px;border-radius:5px;margin-left:4px;font-family:'IBM Plex Mono',monospace;">${chan.code}</span>`;
+}
+function chanBadgeHtml(channelName){
+  return `<span class="badge-chan">${channelName||''}</span>${chanCodeTagHtml(channelName)}`;
+}
 // Shared by both the row highlight/badge and the list's sort order, so the
 // two can never disagree about which orders count as "missing contact
 // info" — scoped to Instagram specifically, since Trendyol/Hepsiburada never
@@ -6704,6 +6826,63 @@ function computeItemNumbers(){
     numbers[g.groupKey] = bucketNumbers[g.order.id+'::'+dateKey];
   });
   return numbers;
+}
+
+// ---------------- WhatsApp order-status messages ----------------
+// Queued directly on the order itself (order.whatsappMessages) rather than
+// a separate table — orders already save as one row each, so a queued
+// message rides along on the exact same save path as everything else about
+// that order; no new table needed. Actually SENDING still requires Meta
+// credentials + the serverless function this app doesn't have wired up
+// yet — until then, entries sit here as 'pending', visible in the
+// WhatsApp Kuyruğu panel, so the trigger logic itself (does the right
+// message queue at the right moment, with the right content) can be seen
+// and confirmed before any real message is capable of going out.
+//
+// Only Instagram Kurumsal/Bayi channels that have been explicitly switched
+// on (channel.waEnabled) send anything — every other channel/category, and
+// every Instagram channel that hasn't been opted in, is silently skipped.
+function whatsAppEligible(order){
+  if(channelCategoryForNumbering(order.channel)!=='ig') return false;
+  if(!order.phone) return false;
+  const chan = state.channels.find(c=>normText(c.name)===normText(order.channel));
+  return !!(chan && chan.waEnabled);
+}
+function enqueueWhatsAppMessage(order, type, templateParams){
+  order.whatsappMessages = order.whatsappMessages || [];
+  // Never queue the same message type twice for the same order — e.g. a
+  // multi-item order coded piece by piece should only trigger "confirmed"
+  // once, on whichever piece happens to be coded first, not again for
+  // every later piece.
+  if(order.whatsappMessages.some(m=>m.type===type)) return;
+  order.whatsappMessages.push({
+    id: uid(), type, status:'pending',
+    to: order.phone || '', templateParams,
+    createdAt: new Date().toISOString(), sentAt: null, error: null,
+  });
+}
+// Message 1 — fires the moment an order's FIRST item gets coded (this is
+// deliberately called from inside confirmCode(), not at order entry —
+// see the numbering decision this reuses). Reuses the same order-level
+// number already shown in Baskı öncesi/Ayırma/Üretim (e.g. "IG-305") —
+// no separate reference number, and no item-position suffix (-1/2, -2/2).
+function maybeEnqueueConfirmedMessage(order, codedGroupFirstItem){
+  if(!whatsAppEligible(order)) return;
+  const numbers = computeItemNumbers();
+  const orderNo = numbers[itemGroupKey(order, codedGroupFirstItem)] || '';
+  if(!orderNo) return; // number not resolvable yet (shouldn't normally happen right after coding)
+  enqueueWhatsAppMessage(order, 'confirmed', { name: order.customerName||'', orderNo });
+}
+// Message 2 — fires from the "Kargoya verildi" action once every item on
+// the order is produced. Looks up the same order-level number rather than
+// storing its own copy, so it always reflects whatever was actually
+// assigned at coding time.
+function maybeEnqueueShippedMessage(order){
+  if(!whatsAppEligible(order)) return;
+  const numbers = computeItemNumbers();
+  const firstCoded = order.items.find(i=>i.code || i.codedAt);
+  const orderNo = firstCoded ? (numbers[itemGroupKey(order, firstCoded)] || '') : '';
+  enqueueWhatsAppMessage(order, 'shipped', { name: order.customerName||'', orderNo });
 }
 
 function isGroupCarriedOver(group){
@@ -6885,7 +7064,7 @@ function renderOrders(){
       }
       const missingContactBadge = missingContactInfo
         ? ' <span class="pill" style="background:var(--rust);color:#fff;">İletişim bilgisi eksik</span>' : '';
-      tr.innerHTML = `<td>${numCell}</td><td>${o.date||'-'}</td><td><span class="badge-chan">${o.channel}</span></td>
+      tr.innerHTML = `<td>${numCell}</td><td>${o.date||'-'}</td><td>${chanBadgeHtml(o.channel)}</td>
         <td>${o.customerName}${missingContactBadge}</td><td>${o.phone||'-'}</td><td>${o.address||'-'}</td>
         <td>${sizeCell}</td><td>${tabanCell}</td><td>${fringeCell}</td><td>${shapeCell}</td>
         <td>${groupCarpetCount}</td>
@@ -7041,7 +7220,7 @@ function renderOrders(){
         ? formatTL(priceToNumber(group[0].pricePerM2))+' TL'
         : (impliedPriceM2!==null ? formatTL(impliedPriceM2)+' TL' : '-');
       if(gi===0){
-        tr.innerHTML = `<td>${numCell}</td><td rowspan="${rowspan}">${o.date||'-'}</td><td rowspan="${rowspan}"><span class="badge-chan">${o.channel}</span></td>
+        tr.innerHTML = `<td>${numCell}</td><td rowspan="${rowspan}">${o.date||'-'}</td><td rowspan="${rowspan}">${chanBadgeHtml(o.channel)}</td>
           <td rowspan="${rowspan}">${o.customerName}${missingContactBadge}</td><td rowspan="${rowspan}">${o.phone||'-'}</td><td rowspan="${rowspan}">${o.address||'-'}</td>
           <td>${sizeCell}</td><td>${tabanCell}</td><td>${fringeCell}</td><td>${shapeCell}</td>
           <td>${groupCarpetCount}</td>
@@ -7617,7 +7796,7 @@ function renderQueue(){
       }
 
       if(gi===0){
-        tr.innerHTML = `<td>${numCell}</td><td rowspan="${rowspan}">${o.date||'-'}</td><td rowspan="${rowspan}"><span class="badge-chan">${o.channel}</span></td>
+        tr.innerHTML = `<td>${numCell}</td><td rowspan="${rowspan}">${o.date||'-'}</td><td rowspan="${rowspan}">${chanBadgeHtml(o.channel)}</td>
           <td rowspan="${rowspan}">${o.customerName}</td>${hidePhoneAdres ? '' : `<td rowspan="${rowspan}">${o.phone||'-'}</td><td rowspan="${rowspan}">${o.address||'-'}</td>`}${hidePhoneAdres ? `<td>${groupCarpetCount}</td>` : ''}
           <td>${sizeCell}</td>
           <td rowspan="${rowspan}">${o.price||'-'}</td><td rowspan="${rowspan}">${o.prepaidAmount||'-'}</td><td rowspan="${rowspan}">${collectCell}</td>
@@ -7693,6 +7872,11 @@ function wireQueueHandlers(tbody){
       assignTrendyolNumberIfNeeded(order);
       logActivity(`Kodlandı "${label}" — ${order.customerName} → ${code}${lostCargoTag}`);
     }
+    // whatsAppEligible() already filters this down to Instagram + opted-in
+    // channels only — safe to call unconditionally on every coding action,
+    // İhracat included, since it'll just no-op for anything that doesn't
+    // qualify.
+    maybeEnqueueConfirmedMessage(order, group[0]);
     saveState(); render();
   }
   tbody.querySelectorAll('.confirm-code').forEach(b=>{
@@ -8290,6 +8474,42 @@ function renderProduction(){
     };
   });
   renderExportProduction();
+  renderShippedReady();
+}
+
+// Orders where every item is produced but shippedAt hasn't been set yet —
+// a simple manual stand-in for cargo-company integration, built so that
+// integration later only has to swap what SETS shippedAt (the cargo
+// company's own system, instead of a click here) without touching
+// anything downstream that reacts to it (the WhatsApp message included).
+function renderShippedReady(){
+  const wrap = document.getElementById('shippedReadyList');
+  if(!wrap) return;
+  const ready = state.orders.filter(o=>
+    o.items.length && o.items.every(i=>i.status==='produced') && !o.shippedAt && o.saleType!=='Kayıp Kargo'
+  ).sort((a,b)=>{
+    const ad = a.items.reduce((m,i)=>i.producedAt && (!m||i.producedAt<m) ? i.producedAt : m, null);
+    const bd = b.items.reduce((m,i)=>i.producedAt && (!m||i.producedAt<m) ? i.producedAt : m, null);
+    return (ad||'').localeCompare(bd||'');
+  });
+  document.getElementById('shippedReadyEmpty').style.display = ready.length ? 'none' : 'block';
+  wrap.innerHTML = ready.map(o=>{
+    const sizes = o.items.map(i=>`${i.size} ×${i.qty}`).join(', ');
+    return `<div class="tag" style="display:flex;align-items:center;justify-content:space-between;width:100%;">
+      <span>${chanBadgeHtml(o.channel)} <strong>${o.customerName||''}</strong> — ${sizes}</span>
+      <button class="ghost small mark-shipped" data-oid="${o.id}">Kargoya verildi</button>
+    </div>`;
+  }).join('');
+  wrap.querySelectorAll('.mark-shipped').forEach(b=>{
+    b.onclick = ()=>{
+      const order = state.orders.find(o=>o.id===b.dataset.oid);
+      if(!order) return;
+      order.shippedAt = new Date().toISOString();
+      logActivity(`Kargoya verildi olarak işaretlendi: ${order.customerName} (${order.channel})`);
+      maybeEnqueueShippedMessage(order);
+      saveState(); render();
+    };
+  });
 }
 
 function renderExportProduction(){
@@ -8541,8 +8761,41 @@ function renderChannels(){
   document.getElementById('channelTags').innerHTML = filtered.length ? filtered.map(c=>{
     const idx = state.channels.indexOf(c);
     const markaNote = c.marka ? ` <span class="muted">(Marka: ${c.marka})</span>` : '';
-    return `<span class="tag">${c.name}${markaNote} <button class="ghost small del-channel" data-idx="${idx}" style="margin-left:6px">×</button></span>`;
+    const codeInput = `<input class="chan-code-edit" data-idx="${idx}" value="${c.code||''}" maxlength="6" style="width:64px;font-family:'IBM Plex Mono',monospace;font-size:11px;padding:2px 6px;margin-left:8px;" title="Kanal kodu — WhatsApp mesajları ve kanal etiketleri bu kodu kullanır">`;
+    // WhatsApp bildirimi toggle only makes sense for Instagram channels
+    // (kurumsal or bayi) — that's the only category these messages go out
+    // to at all, per the scope decided earlier. Off by default for every
+    // channel, switched on manually per account/dealer.
+    const waToggle = c.type.startsWith('Instagram')
+      ? `<label style="display:inline-flex;align-items:center;gap:4px;margin-left:10px;font-size:11px;color:var(--ink-soft);"><input type="checkbox" class="chan-wa-toggle" data-idx="${idx}" ${c.waEnabled?'checked':''}> WA bildirimi</label>`
+      : '';
+    return `<span class="tag">${c.name}${markaNote}${codeInput}${waToggle} <button class="ghost small del-channel" data-idx="${idx}" style="margin-left:6px">×</button></span>`;
   }).join('') : `<p class="muted">"${filterType}" türünde henüz kanal yok.</p>`;
+  document.querySelectorAll('.chan-code-edit').forEach(inp=>{
+    inp.onchange = ()=>{
+      const c = state.channels[parseInt(inp.dataset.idx)];
+      const newCode = stripToLettersDigits(inp.value).slice(0,6);
+      if(!newCode){ inp.value = c.code||''; return; }
+      const collision = state.channels.some(other=>other!==c && other.code===newCode);
+      if(collision){
+        showMessage(`"${newCode}" kodu zaten başka bir kanalda kullanılıyor — farklı bir kod girin.`);
+        inp.value = c.code||'';
+        return;
+      }
+      logActivity(`Kanal kodu değiştirildi: "${c.name}" — "${c.code||''}" → "${newCode}"`);
+      c.code = newCode;
+      inp.value = newCode;
+      saveState(); render();
+    };
+  });
+  document.querySelectorAll('.chan-wa-toggle').forEach(cb=>{
+    cb.onchange = ()=>{
+      const c = state.channels[parseInt(cb.dataset.idx)];
+      c.waEnabled = cb.checked;
+      logActivity(`WhatsApp bildirimi ${cb.checked?'açıldı':'kapatıldı'}: "${c.name}"`);
+      saveState();
+    };
+  });
   document.querySelectorAll('.del-channel').forEach(b=>{
     b.onclick = async ()=>{
       const c = state.channels[parseInt(b.dataset.idx)];
@@ -8750,6 +9003,10 @@ function renderLog(){
 }
 
 function render(){
+  // Backfills any channel missing its letter code (new ones, and every
+  // existing one the first time this update loads) — cheap no-op check
+  // once everything already has a code.
+  if(ensureAllChannelCodes()) saveState();
   renderOrders(); renderExportOrders(); renderQueue(); renderSort(); renderProduction(); renderOverview(); renderChannels(); renderUploadLog(); renderTrendyolUploadLog(); renderLog(); renderSetTemplates(); renderCommonSizes(); renderUsers(); renderOperatorBar(); renderReport(); renderCatalogInfo();
   wireImageLightbox();
 }
