@@ -7,7 +7,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:wght@500;600&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@500&family=Archivo:wght@500;600;700&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 <style>
   :root{
@@ -759,10 +759,9 @@
         </div>
         <div>
           <h3 style="font-family:'Fraunces',serif;font-size:15px;margin:0 0 10px;">Kanal Dağılımı (gelire göre)</h3>
-          <div class="row row3" style="margin-bottom:10px;">
-            <div><label>Aralık</label><select id="chanMixGranularity"><option value="week">Haftalık</option><option value="month" selected>Aylık</option></select></div>
-            <div><label>Başlangıç</label><input type="date" id="chanMixFrom"></div>
-            <div><label>Bitiş</label><input type="date" id="chanMixTo"></div>
+          <div class="row" style="margin-bottom:10px;gap:12px;">
+            <div style="flex:1;"><label>Başlangıç</label><input type="date" id="chanMixFrom"></div>
+            <div style="flex:1;"><label>Bitiş</label><input type="date" id="chanMixTo"></div>
           </div>
           <canvas id="chartChannelMix" height="220"></canvas>
         </div>
@@ -3876,15 +3875,14 @@ function renderMonthlyComparisonChart(){
   });
 }
 
-// 4) Channel mix over time — stacked bars by revenue, weekly or monthly
-// buckets, over a selectable date range (defaults to the trailing 6 months
-// when left blank). Empty buckets are still included (not skipped) so a
-// quiet week/month shows as zero rather than silently shifting every later
-// bucket to the left.
+// 4) Channel mix — pie chart of each channel family's share of total revenue
+// over a selectable date range (defaults to the trailing 6 months when left
+// blank). A single snapshot, not a trend over time — use the date range to
+// compare different periods by re-reading the pie, rather than one chart
+// trying to show both share and time at once.
 function renderChannelMixChart(){
   const canvas = document.getElementById('chartChannelMix');
   if(!canvas || typeof Chart==='undefined') return;
-  const granularity = document.getElementById('chanMixGranularity').value; // 'week' | 'month'
   const fromVal = document.getElementById('chanMixFrom').value;
   const toVal = document.getElementById('chanMixTo').value;
   const today = new Date();
@@ -3892,44 +3890,54 @@ function renderChannelMixChart(){
   const from = fromVal ? (()=>{ const [y,m,d]=fromVal.split('-').map(Number); return new Date(y,m-1,d); })()
     : new Date(to.getFullYear(), to.getMonth()-5, 1);
 
-  const keyFn = granularity==='week' ? weekKey : monthKey;
-  const labelFn = granularity==='week' ? weekLabel : monthLabel;
-  const buckets = [];
-  if(granularity==='week'){
-    let cursor = weekStart(from); const end = weekStart(to);
-    while(cursor<=end){ buckets.push({key:weekKey(cursor), label:weekLabel(cursor)}); cursor=new Date(cursor); cursor.setDate(cursor.getDate()+7); }
-  } else {
-    let cursor = new Date(from.getFullYear(), from.getMonth(), 1); const end = new Date(to.getFullYear(), to.getMonth(), 1);
-    while(cursor<=end){ buckets.push({key:monthKey(cursor), label:monthLabel(cursor)}); cursor=new Date(cursor.getFullYear(), cursor.getMonth()+1, 1); }
-  }
-  const bucketIndex = {}; buckets.forEach((b,i)=>bucketIndex[b.key]=i);
   const families = Object.keys(CHANNEL_FAMILY_LABELS);
-  const seriesData = {}; families.forEach(f=>seriesData[f]=buckets.map(()=>0));
-
+  const totals = {}; families.forEach(f=>totals[f]=0);
   realSalesOrders().forEach(o=>{
     const d = parseDMY(o.date); if(!d || d<from || d>to) return;
-    const idx = bucketIndex[keyFn(d)]; if(idx===undefined) return;
     const fam = channelCategoryForNumbering(o.channel);
-    seriesData[fam][idx] += priceToNumber(o.price);
+    totals[fam] += priceToNumber(o.price);
   });
 
+  // Families with zero revenue in this range are dropped from the pie
+  // itself (a 0% slice adds nothing but legend clutter) rather than shown
+  // as an invisible sliver.
+  const nonZero = families.filter(f=>totals[f]>0);
   destroyTrendChart('channelMix');
+  if(!nonZero.length){
+    // Chart.js renders nothing useful with an all-zero dataset — leave a
+    // clear message instead of a blank canvas.
+    canvas.getContext('2d').clearRect(0,0,canvas.width,canvas.height);
+    return;
+  }
   trendCharts.channelMix = new Chart(canvas.getContext('2d'), {
-    type:'bar',
-    data:{ labels: buckets.map(b=>b.label),
-      datasets: families.map(f=>({ label: CHANNEL_FAMILY_LABELS[f], data: seriesData[f], backgroundColor: CHANNEL_FAMILY_COLORS[f], stack:'mix' })) },
-    options:{ responsive:true, plugins:{legend:{position:'bottom'}},
-      scales:{ x:{stacked:true}, y:{stacked:true, beginAtZero:true, ticks:{callback:v=>formatTL(v)+' TL'}} } }
+    type:'pie',
+    data:{ labels: nonZero.map(f=>CHANNEL_FAMILY_LABELS[f]),
+      datasets:[{ data: nonZero.map(f=>totals[f]), backgroundColor: nonZero.map(f=>CHANNEL_FAMILY_COLORS[f]) }] },
+    options:{ responsive:true, plugins:{ legend:{position:'bottom'},
+      tooltip:{ callbacks:{ label: ctx => {
+        const total = nonZero.reduce((s,f)=>s+totals[f],0);
+        const pct = total ? Math.round(ctx.parsed/total*100) : 0;
+        return `${ctx.label}: ${formatTL(ctx.parsed)} TL (${pct}%)`;
+      } } } } }
   });
 }
 
 function renderTrendCharts(){
+  if(typeof Chart==='undefined'){
+    const grid = document.querySelector('.trend-grid');
+    if(grid && !document.getElementById('chartLoadError')){
+      grid.insertAdjacentHTML('beforebegin', '<p id="chartLoadError" style="color:var(--rust);font-weight:600;">⚠ Grafik kütüphanesi (Chart.js) yüklenemedi — internet bağlantınızı veya reklam engelleyici/eklenti ayarlarınızı kontrol edip sayfayı yenileyin.</p>');
+    }
+    return;
+  }
+  const existingError = document.getElementById('chartLoadError');
+  if(existingError) existingError.remove();
   renderRevenueMonthlyChart();
   renderWeeklyTrendChart();
   renderMonthlyComparisonChart();
   renderChannelMixChart();
 }
-['chanMixGranularity','chanMixFrom','chanMixTo'].forEach(id=>{
+['chanMixFrom','chanMixTo'].forEach(id=>{
   const el = document.getElementById(id);
   if(el) el.addEventListener('change', renderChannelMixChart);
 });
