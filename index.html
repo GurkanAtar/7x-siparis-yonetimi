@@ -1166,9 +1166,15 @@ document.getElementById('backupNudgeBtn').onclick = async ()=>{
   await performBackup();
   btn.disabled = false; btn.textContent = 'Şimdi Yedekle';
 };
+// Same access rule as the full backup card in Hesabım & Yetkiler — the
+// backup is a whole-business data export, meant to stay in the owner's
+// hands only, so the nudge should never even appear for a non-owner
+// account (there'd be nothing for them to do about it anyway).
 function updateBackupNudgeBanner(){
   const banner = document.getElementById('backupNudgeBanner');
   if(!banner) return;
+  const isOwner = currentProfile && currentProfile.role === 'owner';
+  if(!isOwner){ banner.style.display = 'none'; return; }
   const today = new Date();
   const backedUpThisMonth = state.lastBackupAt && (()=>{
     const d = new Date(state.lastBackupAt);
