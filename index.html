@@ -191,6 +191,17 @@
   <span id="saveErrorBannerText">⚠️ Son değişiklik kaydedilemedi — bağlantı veya depolama sorunu olabilir. Verileriniz kaybolmuş olabilir. Sayfayı kapatmadan/yenilemeden önce bağlantınızı kontrol edip tekrar deneyin.</span>
   <button id="saveErrorBannerDismiss" style="margin-left:14px;background:rgba(255,255,255,.2);color:#fff;border:1px solid rgba(255,255,255,.4);border-radius:6px;padding:3px 10px;cursor:pointer;font-size:13px;">Kapat</button>
 </div>
+<div id="undoToast" style="display:none;position:fixed;bottom:24px;left:50%;transform:translateX(-50%);z-index:600;background:#1e293b;color:#fff;padding:12px 18px;border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,.25);align-items:center;gap:14px;font-family:'IBM Plex Sans',sans-serif;font-size:13px;max-width:90vw;">
+  <span id="undoToastText"></span>
+  <button id="undoToastBtn" style="background:#fff;color:#1e293b;border:none;border-radius:6px;padding:6px 12px;cursor:pointer;font-size:13px;font-weight:600;flex-shrink:0;">Geri al</button>
+</div>
+<div id="messageToast" style="display:none;position:fixed;top:24px;right:24px;z-index:600;background:#FBFAF6;border:1px solid #DAD5C8;border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,.18);padding:14px 16px;width:300px;cursor:pointer;flex-direction:column;font-family:'IBM Plex Sans',sans-serif;">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
+    <span id="messageToastTag" style="font-size:11px;font-weight:600;color:#3C4A6B;background:#E8EAF2;padding:2px 8px;border-radius:20px;"></span>
+  </div>
+  <p id="messageToastSender" style="margin:0 0 2px;font-size:13px;font-weight:600;color:#2A2622"></p>
+  <p id="messageToastPreview" style="margin:0;font-size:13px;color:#2A2622;line-height:1.4;"></p>
+</div>
 <div class="wrap">
   <h1>Sipariş Merkezi — Faz 1</h1>
   <p class="sub">Instagram kurumsal hesapları &middot; giriş → baskı kodu → taban ayırma → genel bakış</p>
@@ -203,6 +214,7 @@
     <div class="tab" data-tab="setrecord">Halı Set ve Ölçü Kayıt</div>
     <div class="tab" data-tab="log">İşlem kayıtları</div>
     <div class="tab" data-tab="reports">Raporlar</div>
+    <div class="tab" data-tab="messages">Mesajlar <span id="unreadBadge" style="display:none;background:var(--rust);color:#fff;border-radius:10px;padding:1px 7px;font-size:11px;margin-left:4px;"></span></div>
     <div class="tab" data-tab="auth">Hesabım &amp; Yetkiler</div>
   </div>
 
@@ -735,6 +747,33 @@
     </div>
   </div>
 
+  <div id="messages" class="panel">
+    <div class="card" style="display:grid;grid-template-columns:220px 1fr;gap:0;padding:0;overflow:hidden;">
+      <div style="border-right:1px solid var(--line);padding:14px;">
+        <h2 style="font-size:16px;margin:0 0 10px;">Mesajlar</h2>
+        <div id="conversationList"></div>
+      </div>
+      <div style="display:flex;flex-direction:column;height:560px;">
+        <div id="messageThreadHeader" style="padding:14px 18px;border-bottom:1px solid var(--line);font-weight:600;"></div>
+        <div id="messageThread" style="flex:1;overflow-y:auto;padding:14px 18px;display:flex;flex-direction:column;gap:10px;"></div>
+        <div style="display:flex;gap:8px;padding:12px 18px;border-top:1px solid var(--line);">
+          <input id="messageComposeInput" placeholder="Mesaj yazın...">
+          <button id="messageSendBtn" style="width:auto;flex-shrink:0;">Gönder</button>
+        </div>
+      </div>
+    </div>
+    <div class="card" id="ownerDmOversightCard" style="display:none;margin-top:16px;">
+      <h2>Yönetici görünümü — tüm özel mesajlar</h2>
+      <p class="muted" style="margin-top:-6px">İki kişi seçin, aralarındaki özel mesajları görüntüleyin. Bu görünüm salt okunurdur — buradan mesaj gönderilemez.</p>
+      <div class="row" style="gap:10px;margin-bottom:10px;align-items:flex-end;">
+        <div style="flex:1;"><label>Kişi 1</label><select id="ownerDmPersonA"></select></div>
+        <div style="flex:1;"><label>Kişi 2</label><select id="ownerDmPersonB"></select></div>
+        <button id="ownerDmViewBtn" style="width:auto;">Görüntüle</button>
+      </div>
+      <div id="ownerDmThread" style="max-height:400px;overflow-y:auto;"></div>
+    </div>
+  </div>
+
   <div id="auth" class="panel">
     <div class="card">
       <h2>Hesabım &amp; Yetkiler</h2>
@@ -832,6 +871,182 @@ async function fetchProfileAndGrants(){
   activeGrants = grants || [];
 }
 
+// ---------- Mesajlar: team channel + DMs, live via Supabase Realtime ----------
+// Every message this account is allowed to see, per the messages_select RLS
+// policy: team-channel messages (recipient_id null) for everyone, a DM for
+// its sender/recipient, and EVERY DM for the owner (oversight). That last
+// part is exactly why allMessages can safely double as the source for the
+// owner's "view any pair's DMs" panel below — Postgres already filtered it
+// down to only what this account may see before it ever reaches this array.
+let allMessages = [];
+let currentConversation = 'team'; // 'team', or the other person's user id for a DM
+let lastReadAt = {}; // conversation key -> Date, resets the unread dot/badge when a thread is opened. In-memory only (per browser session) — deliberately not persisted, since "unread" is a lightweight nudge, not an audit record.
+let messagesChannel = null;
+
+async function loadMessages(){
+  const { data, error } = await sb.from('messages').select('*').order('created_at', {ascending:true});
+  if(error){ console.error('messages load failed', error); return; }
+  allMessages = data || [];
+  renderMessages();
+}
+
+// From MY point of view: a team message's key is always 'team'; a DM's key
+// is whichever side of it ISN'T me. Returns null for a DM between two OTHER
+// people — never shown as "my" conversation, only ever surfaced through the
+// owner's dedicated oversight picker further down, which bypasses this
+// function entirely and filters allMessages directly by the two chosen ids.
+function conversationKey(m){
+  if(!m.recipient_id) return 'team';
+  if(m.sender_id === currentUser.id) return m.recipient_id;
+  if(m.recipient_id === currentUser.id) return m.sender_id;
+  return null;
+}
+function profileName(id){
+  if(id === currentUser.id) return (currentProfile.name || currentUser.email) + ' (siz)';
+  const p = allProfiles.find(x=>x.id===id);
+  return p ? (p.name || '(isimsiz)') : 'Bilinmeyen kullanıcı';
+}
+// Chat is the one place in this app where another person's free-typed text
+// gets rendered back via innerHTML for everyone else to see live — unlike a
+// customer name or note (typed by one operator, read by the same team,
+// rarely adversarial), a message is the most likely spot for something
+// HTML-like to land by accident or otherwise, so it's escaped explicitly
+// here rather than relying on the rest of the app's existing convention.
+function escapeHtml(s){
+  const div = document.createElement('div');
+  div.textContent = s;
+  return div.innerHTML;
+}
+
+function renderConversationList(){
+  const el = document.getElementById('conversationList');
+  const teamUnread = allMessages.some(m=>!m.recipient_id && m.sender_id!==currentUser.id && new Date(m.created_at) > (lastReadAt.team || new Date(0)));
+  let html = `<div class="conv-item" data-conv="team" style="padding:8px 10px;border-radius:6px;cursor:pointer;margin-bottom:4px;${currentConversation==='team'?'background:var(--paper);font-weight:600;':''}">Ekip Kanalı${teamUnread?' <span style="color:var(--rust)">●</span>':''}</div>`;
+  allProfiles.filter(p=>p.id!==currentUser.id).forEach(p=>{
+    const unread = allMessages.some(m=>conversationKey(m)===p.id && m.sender_id===p.id && new Date(m.created_at) > (lastReadAt[p.id] || new Date(0)));
+    html += `<div class="conv-item" data-conv="${p.id}" style="padding:8px 10px;border-radius:6px;cursor:pointer;margin-bottom:4px;${currentConversation===p.id?'background:var(--paper);font-weight:600;':''}">${p.name||'(isimsiz)'}${unread?' <span style="color:var(--rust)">●</span>':''}</div>`;
+  });
+  el.innerHTML = html;
+  el.querySelectorAll('.conv-item').forEach(d=>{
+    d.onclick = ()=>{ currentConversation = d.dataset.conv; lastReadAt[currentConversation] = new Date(); renderMessages(); };
+  });
+}
+function renderThread(){
+  const header = document.getElementById('messageThreadHeader');
+  const thread = document.getElementById('messageThread');
+  header.textContent = currentConversation==='team' ? 'Ekip Kanalı' : profileName(currentConversation);
+  const relevant = allMessages.filter(m=>conversationKey(m)===currentConversation);
+  thread.innerHTML = relevant.length ? relevant.map(m=>{
+    const mine = m.sender_id===currentUser.id;
+    const senderLabel = currentConversation==='team' ? `<div style="font-size:11px;color:var(--ink-soft);margin-bottom:2px;">${profileName(m.sender_id).replace(' (siz)','')}</div>` : '';
+    return `<div style="align-self:${mine?'flex-end':'flex-start'};max-width:70%;">
+      ${senderLabel}
+      <div style="background:${mine?'var(--indigo)':'var(--paper)'};color:${mine?'#fff':'var(--ink)'};padding:8px 12px;border-radius:10px;font-size:13px;">${escapeHtml(m.content)}</div>
+      <div style="font-size:10px;color:var(--ink-soft);margin-top:2px;text-align:${mine?'right':'left'};">${new Date(m.created_at).toLocaleString('tr-TR')}</div>
+    </div>`;
+  }).join('') : '<p class="muted">Henüz mesaj yok.</p>';
+  thread.scrollTop = thread.scrollHeight;
+}
+function updateUnreadBadge(){
+  const badge = document.getElementById('unreadBadge');
+  const totalUnread = allMessages.filter(m=>{
+    const key = conversationKey(m);
+    if(key===null || m.sender_id===currentUser.id) return false;
+    return new Date(m.created_at) > (lastReadAt[key] || new Date(0));
+  }).length;
+  badge.style.display = totalUnread>0 ? '' : 'none';
+  if(totalUnread>0) badge.textContent = totalUnread;
+}
+function renderOwnerDmOversight(){
+  const isOwner = currentProfile && currentProfile.role==='owner';
+  document.getElementById('ownerDmOversightCard').style.display = isOwner ? '' : 'none';
+  if(!isOwner) return;
+  const selA = document.getElementById('ownerDmPersonA');
+  const selB = document.getElementById('ownerDmPersonB');
+  const optsHtml = allProfiles.map(p=>`<option value="${p.id}">${p.name||'(isimsiz)'}</option>`).join('');
+  // Only rebuilt once (not every render) so an in-progress selection doesn't
+  // get reset back to the first option every time a new message arrives.
+  if(!selA.dataset.built){ selA.innerHTML = optsHtml; selA.dataset.built = '1'; }
+  if(!selB.dataset.built){ selB.innerHTML = optsHtml; if(allProfiles.length>1) selB.selectedIndex = 1; selB.dataset.built = '1'; }
+}
+function renderMessages(){
+  renderConversationList();
+  renderThread();
+  updateUnreadBadge();
+  renderOwnerDmOversight();
+}
+
+document.getElementById('messageSendBtn').onclick = sendMessage;
+document.getElementById('messageComposeInput').addEventListener('keydown', (e)=>{ if(e.key==='Enter') sendMessage(); });
+async function sendMessage(){
+  const input = document.getElementById('messageComposeInput');
+  const content = input.value.trim();
+  if(!content) return;
+  const recipient_id = currentConversation==='team' ? null : currentConversation;
+  input.value = '';
+  const { error } = await sb.from('messages').insert({ sender_id: currentUser.id, recipient_id, content });
+  if(error) showMessage('Mesaj gönderilemedi: ' + error.message);
+  // No local push here — the Realtime subscription below delivers this same
+  // insert back to us (and everyone else) within a fraction of a second, so
+  // adding it twice would just double it up on screen once that arrives.
+}
+
+document.getElementById('ownerDmViewBtn').onclick = ()=>{
+  const a = document.getElementById('ownerDmPersonA').value;
+  const b = document.getElementById('ownerDmPersonB').value;
+  if(a===b){ showMessage('Farklı iki kişi seçin.'); return; }
+  const thread = allMessages.filter(m=>m.recipient_id && ((m.sender_id===a && m.recipient_id===b) || (m.sender_id===b && m.recipient_id===a)));
+  const el = document.getElementById('ownerDmThread');
+  el.innerHTML = thread.length ? thread.map(m=>`
+    <div style="margin-bottom:8px;">
+      <div style="font-size:11px;color:var(--ink-soft);">${profileName(m.sender_id).replace(' (siz)','')} — ${new Date(m.created_at).toLocaleString('tr-TR')}</div>
+      <div style="font-size:13px;">${escapeHtml(m.content)}</div>
+    </div>`).join('') : '<p class="muted">Bu iki kişi arasında mesaj yok.</p>';
+};
+
+function showMessageToast(m){
+  const el = document.getElementById('messageToast');
+  document.getElementById('messageToastTag').textContent = m.recipient_id ? 'Özel mesaj' : 'Ekip kanalı';
+  document.getElementById('messageToastSender').textContent = profileName(m.sender_id).replace(' (siz)','');
+  document.getElementById('messageToastPreview').textContent = m.content.length>90 ? m.content.slice(0,90)+'…' : m.content;
+  el.style.display = 'flex';
+  el.dataset.conv = conversationKey(m);
+  clearTimeout(el._hideTimer);
+  el._hideTimer = setTimeout(()=>{ el.style.display = 'none'; }, 8000);
+}
+
+// Live delivery via Supabase Realtime (a WebSocket subscription, not
+// polling) — requires "messages" to be added to the supabase_realtime
+// publication, which is part of the one-time SQL setup for this table.
+function subscribeToMessages(){
+  if(messagesChannel) return;
+  messagesChannel = sb.channel('messages-realtime')
+    .on('postgres_changes', {event:'INSERT', schema:'public', table:'messages'}, (payload)=>{
+      const m = payload.new;
+      allMessages.push(m);
+      const key = conversationKey(m);
+      const isMine = m.sender_id===currentUser.id;
+      const messagesTabOpen = document.getElementById('messages').classList.contains('active');
+      if(!isMine && key!==null){
+        if(messagesTabOpen && currentConversation===key) lastReadAt[key] = new Date();
+        else showMessageToast(m);
+      }
+      if(messagesTabOpen) renderMessages(); else updateUnreadBadge();
+    })
+    .subscribe();
+}
+document.getElementById('messageToast').onclick = ()=>{
+  const el = document.getElementById('messageToast');
+  const conv = el.dataset.conv;
+  el.style.display = 'none';
+  document.querySelector('.tab[data-tab="messages"]').click();
+  if(conv && conv!=='null'){
+    currentConversation = conv;
+    lastReadAt[conv] = new Date();
+    renderMessages();
+  }
+};
+
 function showLoginError(msg){
   const el = document.getElementById('loginStatus');
   el.textContent = msg;
@@ -855,6 +1070,8 @@ async function enterApp(user){
   operatorName = currentProfile.name || currentUser.email;
   document.getElementById('loginOverlay').style.display = 'none';
   await loadState();
+  await loadMessages();
+  subscribeToMessages();
 }
 
 document.getElementById('loginSubmit').onclick = attemptLogin;
@@ -1344,7 +1561,7 @@ function renderOperatorBar(){
         </select>
       </label>
       <button class="ghost small" id="logoutBtn">Çıkış yap</button>
-      <span class="muted" style="font-size:10px;margin-left:auto;" title="Bu sürümün ne zaman oluşturulduğu — canlı sitenin en güncel dosyayı çalıştırıp çalıştırmadığını doğrulamak için.">Sürüm: 2026-09-13 16:44 UTC</span>
+      <span class="muted" style="font-size:10px;margin-left:auto;" title="Bu sürümün ne zaman oluşturulduğu — canlı sitenin en güncel dosyayı çalıştırıp çalıştırmadığını doğrulamak için.">Sürüm: 2026-09-14 05:49 UTC</span>
     </div>`;
   document.getElementById('themeSelect').onchange = (e)=>{
     VALID_THEMES.forEach(t=>document.body.classList.remove(t));
@@ -1385,6 +1602,34 @@ async function requireDeleteAuth(actionLabel, order){
   const ageMs = order && order.recordedAt ? (Date.now() - new Date(order.recordedAt).getTime()) : Infinity;
   if(ageMs < 24*3600*1000) return 'fresh';
   return requireAdmin(actionLabel);
+}
+
+// Shared "undo" toast for every delete action in the app — appears for 10
+// seconds after something is deleted, with a Geri al button that reverses
+// exactly that one deletion. Only one toast is ever active at a time: a new
+// delete replaces whatever undo window was still open, since letting two
+// stack would make it ambiguous which "Geri al" undoes which action, and
+// the person who just deleted something new is very unlikely to still want
+// to undo an older one first.
+let pendingUndo = null;
+function showUndoToast(message, restoreFn){
+  if(pendingUndo) clearTimeout(pendingUndo.timeoutId);
+  const el = document.getElementById('undoToast');
+  document.getElementById('undoToastText').textContent = message;
+  el.style.display = 'flex';
+  const timeoutId = setTimeout(()=>{
+    pendingUndo = null;
+    el.style.display = 'none';
+  }, 10000);
+  pendingUndo = { timeoutId, restore: restoreFn };
+  document.getElementById('undoToastBtn').onclick = ()=>{
+    if(!pendingUndo) return;
+    clearTimeout(pendingUndo.timeoutId);
+    const restore = pendingUndo.restore;
+    pendingUndo = null;
+    el.style.display = 'none';
+    restore();
+  };
 }
 
 function logActivity(action, byOverride){
@@ -2009,6 +2254,10 @@ document.querySelectorAll('.tab').forEach(t=>{
     document.querySelectorAll('.panel').forEach(x=>x.classList.remove('active'));
     t.classList.add('active');
     document.getElementById(t.dataset.tab).classList.add('active');
+    if(t.dataset.tab==='messages'){
+      lastReadAt[currentConversation] = new Date();
+      renderMessages();
+    }
   };
 });
 
@@ -3203,13 +3452,26 @@ function renderReport(){
   // Bold subtotal row for the whole group, followed by one indented row per
   // individual account/customer within it (alphabetical, Turkish collation),
   // so the table shows not just each group's total but every member in it.
-  function groupBlock(groupLabel, orders, keyFn){
+  // allTimeOrders (when given) is the SAME category's orders with NO date
+  // filter applied — needed because "new" has to be judged against someone's
+  // true first-ever order, checked against today's real calendar month (see
+  // isNewThisRealMonth), never against whatever window the report happens
+  // to be filtered to. Only passed for bayi/named-customer groups (never
+  // Kurumsal — those are the business's own fixed shops, not individual
+  // customers who could be "new").
+  function groupBlock(groupLabel, orders, keyFn, allTimeOrders){
     if(!orders.length) return '';
     const byKey = {};
     orders.forEach(o=>{ const k = keyFn(o); (byKey[k] = byKey[k]||[]).push(o); });
     const subtotal = statRow(groupLabel, statsForOrders(orders), false);
     const individualRows = Object.keys(byKey).sort((a,b)=>a.localeCompare(b,'tr'))
-      .map(k=>statRow(k, statsForOrders(byKey[k]), true)).join('');
+      .map(k=>{
+        const isNew = allTimeOrders && isNewThisRealMonth(k, allTimeOrders, keyFn);
+        const newBadge = isNew
+          ? ' <span style="background:var(--teal);color:#fff;border-radius:20px;padding:1px 8px;font-size:10px;font-weight:700;margin-left:6px;">YENİ</span>'
+          : '';
+        return statRow(k + newBadge, statsForOrders(byKey[k]), true);
+      }).join('');
     return subtotal + individualRows;
   }
   // Instagram/Trendyol/Hepsiburada: a family-wide Toplam row, then Kurumsal
@@ -3221,9 +3483,10 @@ function renderReport(){
     const allOrders = corpOrders.concat(bayiOrders);
     if(!allOrders.length) return { html:'', m2:0 };
     const totalStats = statsForOrders(allOrders);
+    const allTimeBayiOrders = state.orders.filter(o=>o.saleType!=='Kayıp Kargo' && channelType(o.channel)===bayiType);
     const html = statRow(`${familyLabel} Toplam`, totalStats, false)
       + groupBlock(`${familyLabel} Kurumsal`, corpOrders, o=>o.channel)
-      + groupBlock(`${familyLabel} Bayiler`, bayiOrders, o=>o.channel);
+      + groupBlock(`${familyLabel} Bayiler`, bayiOrders, o=>o.channel, allTimeBayiOrders);
     return { html, m2: totalStats.m2Ordered };
   }
   // Sıcak Satış and İhracat are entirely dealer-based with no Kurumsal side —
@@ -3233,7 +3496,8 @@ function renderReport(){
   function dealerOnlyBlock(label, channelLiteral){
     const orders = matchingOrders.filter(o=>o.channel===channelLiteral);
     if(!orders.length) return { html:'', m2:0 };
-    const html = groupBlock(`${label} Bayileri`, orders, o=>o.customerName);
+    const allTimeOrders = state.orders.filter(o=>o.saleType!=='Kayıp Kargo' && o.channel===channelLiteral);
+    const html = groupBlock(`${label} Bayileri`, orders, o=>o.customerName, allTimeOrders);
     return { html, m2: statsForOrders(orders).m2Ordered };
   }
   // Renders nothing at all if none of these groups have any orders. Only
@@ -3620,12 +3884,22 @@ function renderUsers(){
   // happens directly in Supabase (Authentication → Users, then a matching
   // row in profiles) — this panel only manages temporary permissions for
   // accounts that already exist.
+  const GRANT_DURATIONS = [
+    { minutes: 30, label: '30 dakika' },
+    { minutes: 60, label: '1 saat' },
+    { minutes: 240, label: '4 saat' },
+    { minutes: 480, label: '8 saat' },
+    { minutes: 1440, label: '24 saat' },
+  ];
   const otherProfiles = allProfiles.filter(p=>p.id !== currentUser.id);
   const profileRows = otherProfiles.map(p=>{
     const grant = activeGrants.find(g=>g.user_id===p.id);
     const grantNote = grant
       ? `<span class="tag">Geçici yetki — ${Math.max(0,Math.round((new Date(grant.expires_at).getTime()-Date.now())/60000))} dk kaldı <button class="ghost small revoke-grant" data-id="${p.id}" style="margin-left:6px">Geri al</button></span>`
-      : `<button class="ghost small grant-temp" data-id="${p.id}">1 saatlik yetki ver</button>`;
+      : `<select class="grant-duration" data-id="${p.id}" style="width:auto;padding:4px 8px;font-size:12px;">
+           ${GRANT_DURATIONS.map(d=>`<option value="${d.minutes}"${d.minutes===60?' selected':''}>${d.label}</option>`).join('')}
+         </select>
+         <button class="ghost small grant-temp" data-id="${p.id}">Yetki ver</button>`;
     return `
     <div class="row" style="grid-template-columns:1fr auto auto;display:grid;gap:8px;align-items:center;margin-bottom:8px;">
       <span>${p.name||'(isimsiz)'} — <span class="muted">${roleLabels[p.role]||p.role}</span></span>
@@ -3635,7 +3909,7 @@ function renderUsers(){
 
   el.innerHTML = myRow + `
     <h3 style="font-family:'Fraunces',serif;font-size:15px;margin:0 0 8px;">Ekip &amp; geçici yetkiler</h3>
-    <p class="muted" style="margin-top:-4px">Silme ve 24 saatten eski düzenleme gibi yönetici işlemleri için, seçilen kişiye 1 saatliğine yetki verir. Süre dolunca otomatik biter. Yeni hesap eklemek Supabase panelinden yapılır.</p>
+    <p class="muted" style="margin-top:-4px">Silme ve 24 saatten eski düzenleme gibi yönetici işlemleri için, seçilen kişiye seçtiğiniz süre kadar yetki verir. Süre dolunca otomatik biter. Yeni hesap eklemek Supabase panelinden yapılır.</p>
     ${profileRows}
   `;
 
@@ -3643,10 +3917,13 @@ function renderUsers(){
     b.onclick = async ()=>{
       const userId = b.dataset.id;
       const target = allProfiles.find(p=>p.id===userId);
-      const expiresAt = new Date(Date.now() + 60*60*1000).toISOString();
+      const durationSelect = el.querySelector(`.grant-duration[data-id="${userId}"]`);
+      const minutes = durationSelect ? parseInt(durationSelect.value) : 60;
+      const durationLabel = (GRANT_DURATIONS.find(d=>d.minutes===minutes) || {label: `${minutes} dakika`}).label;
+      const expiresAt = new Date(Date.now() + minutes*60*1000).toISOString();
       const { error } = await sb.from('delete_grants').insert({ user_id: userId, granted_by: currentUser.id, expires_at: expiresAt });
       if(error){ showMessage('Yetki verilemedi: ' + error.message); return; }
-      logActivity(`"${target ? target.name : userId}" kullanıcısına 1 saatlik geçici yönetici yetkisi verildi`, 'Admin');
+      logActivity(`"${target ? target.name : userId}" kullanıcısına ${durationLabel} geçici yönetici yetkisi verildi`, 'Admin');
       await fetchProfileAndGrants();
       render();
     };
@@ -5209,9 +5486,15 @@ document.getElementById('tyCatalogClear').onclick = async ()=>{
   if(!entries.length){ showMessage('Katalog zaten boş.'); return; }
   const auth = await requireAdmin(`Ürün görsel kataloğunu temizleme (${entries.length} ürün silinecek)`);
   if(!auth) return;
+  const savedCatalog = state.productCatalog;
   state.productCatalog = {};
   logActivity(`Ürün görsel kataloğu temizlendi (${entries.length} ürün silindi).`, auth==='pin' ? 'Admin' : undefined);
   saveState(); render();
+  showUndoToast(`Ürün görsel kataloğu temizlendi (${entries.length} ürün)`, ()=>{
+    state.productCatalog = savedCatalog;
+    logActivity(`Silme geri alındı: ürün görsel kataloğu (${entries.length} ürün)`, auth==='pin' ? 'Admin' : undefined);
+    saveState(); render();
+  });
 };
 
 function renderUploadPreview(){
@@ -5370,6 +5653,12 @@ function renderUploadLog(){
       state.uploadBatches = state.uploadBatches.filter(x=>x.id!==batch.id);
       logActivity(`Yükleme silindi: "${batch.fileName}" (${batchOrders.length} sipariş birden kaldırıldı)`, auth==='pin' ? 'Admin' : undefined);
       saveState(); render();
+      showUndoToast(`"${batch.fileName}" yüklemesi silindi (${batchOrders.length} sipariş)`, ()=>{
+        state.uploadBatches.push(batch);
+        state.orders.push(...batchOrders);
+        logActivity(`Silme geri alındı: "${batch.fileName}" yüklemesi (${batchOrders.length} sipariş)`, auth==='pin' ? 'Admin' : undefined);
+        saveState(); render();
+      });
     };
   });
   wireUploadLogShowMore(el, 'uploadLog', renderUploadLog);
@@ -5395,6 +5684,12 @@ function renderTrendyolUploadLog(){
       state.uploadBatches = state.uploadBatches.filter(x=>x.id!==batch.id);
       logActivity(`Yükleme silindi: "${batch.fileName}" (${batchOrders.length} sipariş birden kaldırıldı)`, auth==='pin' ? 'Admin' : undefined);
       saveState(); render();
+      showUndoToast(`"${batch.fileName}" yüklemesi silindi (${batchOrders.length} sipariş)`, ()=>{
+        state.uploadBatches.push(batch);
+        state.orders.push(...batchOrders);
+        logActivity(`Silme geri alındı: "${batch.fileName}" yüklemesi (${batchOrders.length} sipariş)`, auth==='pin' ? 'Admin' : undefined);
+        saveState(); render();
+      });
     };
   });
   wireUploadLogShowMore(el, 'tyUploadLog', renderTrendyolUploadLog);
@@ -5430,6 +5725,29 @@ function parseDMY(dateStr){
   const m = dateStr.match(/^(\d{1,2})\.(\d{1,2})\.(\d{4})$/);
   if(!m) return null;
   return new Date(parseInt(m[3]), parseInt(m[2])-1, parseInt(m[1]));
+}
+
+// A customer/dealer counts as "new" if and only if their first-ever order
+// (searched across their FULL history, never just whatever's currently
+// visible) falls within the CURRENT real calendar month — always relative
+// to today, never to whichever historical date range a report or view
+// happens to be filtered to right now. Browsing a January–August report in
+// September still correctly shows nobody as "new": being new is a fact
+// about right now, not about whatever window you're currently looking at.
+// Someone whose first order really was in March, even if that row is
+// visible in a Jan–Aug filtered view, is not "new" today and won't be
+// flagged — only this month's actual first-timers ever are.
+function isNewThisRealMonth(key, allTimeOrdersInCategory, keyFn){
+  const today = new Date();
+  const monthStart = new Date(today.getFullYear(), today.getMonth(), 1);
+  const monthEnd = new Date(today.getFullYear(), today.getMonth()+1, 0, 23,59,59,999);
+  let earliest = null;
+  allTimeOrdersInCategory.forEach(o=>{
+    if(keyFn(o)!==key) return;
+    const d = parseDMY(o.date);
+    if(d && (!earliest || d<earliest)) earliest = d;
+  });
+  return !!(earliest && earliest>=monthStart && earliest<=monthEnd);
 }
 
 function channelPriorityIndex(channelName){
@@ -6010,6 +6328,13 @@ function wireOrdersRowHandlers(tbody){
       if(!auth) return;
       if(order) logActivity(`Sipariş silindi: ${order.customerName} (${order.channel})`, auth==='pin' ? 'Admin' : undefined);
       state.orders = state.orders.filter(o=>o.id!==b.dataset.id); saveState(); render();
+      if(order){
+        showUndoToast(`"${order.customerName}" siparişi silindi`, ()=>{
+          state.orders.push(order);
+          logActivity(`Silme geri alındı: sipariş — ${order.customerName}`, auth==='pin' ? 'Admin' : undefined);
+          saveState(); render();
+        });
+      }
     };
   });
   // Flat-list Sil (Sıcak Satış): removes just this one line item, not every
@@ -6024,17 +6349,35 @@ function wireOrdersRowHandlers(tbody){
       if(!auth) return;
       if(!order) return;
       const ids = b.dataset.ids.split(',');
+      // Captured before mutating order.items below — needed to restore
+      // correctly either way this goes: if only some items were removed,
+      // this puts the rest back; if it was the last item and the whole
+      // order got removed, this is what order.items gets set back to.
+      const originalItems = order.items.slice();
       const removed = order.items.filter(i=>ids.includes(i.id));
       const label = removed.length>1 ? `${displaySetLabel(removed[0].setLabel)} (${removed.length} parça)` : removed[0].size;
       order.items = order.items.filter(i=>!ids.includes(i.id));
+      let orderFullyRemoved = false;
       if(order.items.length){
         logActivity(`Kalem silindi: ${label} — ${order.customerName}`, auth==='pin' ? 'Admin' : undefined);
       } else {
         // Nothing left on this order at all — remove the empty order record too.
+        orderFullyRemoved = true;
         state.orders = state.orders.filter(o=>o.id!==order.id);
         logActivity(`Kalem silindi (son kalemdi, sipariş kaldırıldı): ${label} — ${order.customerName}`, auth==='pin' ? 'Admin' : undefined);
       }
       saveState(); render();
+      showUndoToast(`"${label}" kalemi silindi — ${order.customerName}`, ()=>{
+        if(orderFullyRemoved){
+          order.items = originalItems;
+          state.orders.push(order);
+        } else {
+          const stillThere = state.orders.find(o=>o.id===order.id);
+          if(stillThere) stillThere.items = originalItems;
+        }
+        logActivity(`Silme geri alındı: kalem — ${order.customerName}`, auth==='pin' ? 'Admin' : undefined);
+        saveState(); render();
+      });
     };
   });
 }
@@ -6202,16 +6545,30 @@ function renderExportOrders(){
       if(!auth) return;
       if(!order) return;
       const ids = b.dataset.ids.split(',');
+      const originalItems = order.items.slice();
       const removed = order.items.filter(i=>ids.includes(i.id));
       const label = removed.length>1 ? `${displaySetLabel(removed[0].setLabel)} (${removed.length} parça)` : removed[0].size;
       order.items = order.items.filter(i=>!ids.includes(i.id));
+      let orderFullyRemoved = false;
       if(order.items.length){
         logActivity(`Kalem silindi: ${label} — ${order.customerName}`, auth==='pin' ? 'Admin' : undefined);
       } else {
+        orderFullyRemoved = true;
         state.orders = state.orders.filter(o=>o.id!==order.id);
         logActivity(`Kalem silindi (son kalemdi, sipariş kaldırıldı): ${label} — ${order.customerName}`, auth==='pin' ? 'Admin' : undefined);
       }
       saveState(); render();
+      showUndoToast(`"${label}" kalemi silindi — ${order.customerName}`, ()=>{
+        if(orderFullyRemoved){
+          order.items = originalItems;
+          state.orders.push(order);
+        } else {
+          const stillThere = state.orders.find(o=>o.id===order.id);
+          if(stillThere) stillThere.items = originalItems;
+        }
+        logActivity(`Silme geri alındı: kalem — ${order.customerName}`, auth==='pin' ? 'Admin' : undefined);
+        saveState(); render();
+      });
     };
   });
   // Grand total across every buyer — now includes Toplam Tutar too (unlike
@@ -7299,14 +7656,33 @@ function renderOverview(){
   const carpetsPending = orders.reduce((s,o)=>s+countCarpets(o.items.filter(i=>i.status==='pending')), 0);
   const carpetsSorted = orders.reduce((s,o)=>s+countCarpets(o.items.filter(i=>i.status==='sorted')), 0);
   const carpetsProduced = orders.reduce((s,o)=>s+countCarpets(o.items.filter(i=>i.status==='produced')), 0);
+  // New customers this month — same rule as Raporlar's YENİ badges, and for
+  // the same reason computed from state.orders directly rather than from
+  // the ovFrom/ovTo-filtered `orders` above: whether someone is new is
+  // always relative to today's real calendar month, never to whatever date
+  // range this screen happens to be filtered to right now.
+  function countNewThisMonth(catOrders, keyFn){
+    const keys = [...new Set(catOrders.map(keyFn))];
+    return keys.filter(k=>isNewThisRealMonth(k, catOrders, keyFn)).length;
+  }
+  const igBayiAllOrders = state.orders.filter(o=>o.saleType!=='Kayıp Kargo' && channelType(o.channel)==='Instagram bayi');
+  const tyBayiAllOrders = state.orders.filter(o=>o.saleType!=='Kayıp Kargo' && channelType(o.channel)==='Trendyol bayi');
+  const sicakAllOrders = state.orders.filter(o=>o.saleType!=='Kayıp Kargo' && o.channel==='Sıcak Satış');
+  const ihracatAllOrders = state.orders.filter(o=>o.saleType!=='Kayıp Kargo' && o.channel==='İhracat');
+  const newCustomersCount =
+    countNewThisMonth(igBayiAllOrders, o=>o.channel) +
+    countNewThisMonth(tyBayiAllOrders, o=>o.channel) +
+    countNewThisMonth(sicakAllOrders, o=>o.customerName) +
+    countNewThisMonth(ihracatAllOrders, o=>o.customerName);
   const stats = [
     {n: orders.length, l:'Siparişler'},
     {n: totalCarpetCount, l:'Halı sayısı'},
     {n: carpetsPending, l:'Kod bekliyor'},
     {n: carpetsSorted, l:'Üretimde'},
     {n: carpetsProduced, l:'Üretildi'},
+    {n: newCustomersCount, l:'Yeni müşteriler (bu ay)', highlight:true},
   ];
-  document.getElementById('statGrid').innerHTML = stats.map(s=>`<div class="stat"><div class="n">${s.n}</div><div class="l">${s.l}</div></div>`).join('');
+  document.getElementById('statGrid').innerHTML = stats.map(s=>`<div class="stat"${s.highlight?' style="background:var(--teal);border-color:var(--teal);"':''}><div class="n"${s.highlight?' style="color:#fff;"':''}>${s.n}</div><div class="l"${s.highlight?' style="color:#fff;opacity:.85;"':''}>${s.l}</div></div>`).join('');
 
   const byChan = {};
   orders.forEach(o=>{
@@ -7407,6 +7783,11 @@ function renderChannels(){
       logActivity(`Kanal kaldırıldı: "${c.name}" (bu ad altındaki mevcut siparişler etkilenmez, ${orderCount} sipariş vardı)`, auth==='pin' ? 'Admin' : undefined);
       state.channels.splice(parseInt(b.dataset.idx),1);
       saveState(); render();
+      showUndoToast(`"${c.name}" kanalı silindi`, ()=>{
+        state.channels.push(c);
+        logActivity(`Silme geri alındı: "${c.name}" kanalı`, auth==='pin' ? 'Admin' : undefined);
+        saveState(); render();
+      });
     };
   });
   // The merge dropdowns use the whole FAMILY (Instagram/Trendyol/etc.), not
