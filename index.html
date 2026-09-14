@@ -214,7 +214,6 @@
     <div class="tab" data-tab="setrecord">Halı Set ve Ölçü Kayıt</div>
     <div class="tab" data-tab="log">İşlem kayıtları</div>
     <div class="tab" data-tab="reports">Raporlar</div>
-    <div class="tab" data-tab="messages">Mesajlar <span id="unreadBadge" style="display:none;background:var(--rust);color:#fff;border-radius:10px;padding:1px 7px;font-size:11px;margin-left:4px;"></span></div>
     <div class="tab" data-tab="auth">Hesabım &amp; Yetkiler</div>
   </div>
 
@@ -747,20 +746,35 @@
     </div>
   </div>
 
-  <div id="messages" class="panel">
-    <div class="card" style="display:grid;grid-template-columns:220px 1fr;gap:0;padding:0;overflow:hidden;">
-      <div style="border-right:1px solid var(--line);padding:14px;">
-        <h2 style="font-size:16px;margin:0 0 10px;">Mesajlar</h2>
+  <div id="messageFloatToggle" style="position:fixed;bottom:22px;right:22px;z-index:400;width:52px;height:52px;border-radius:50%;background:var(--indigo);color:#fff;display:flex;align-items:center;justify-content:center;cursor:pointer;box-shadow:0 4px 14px rgba(0,0,0,.2);font-size:22px;">
+    💬
+    <span id="unreadBadge" style="display:none;position:absolute;top:-4px;right:-4px;background:var(--rust);color:#fff;border-radius:10px;padding:1px 6px;font-size:11px;font-weight:700;border:2px solid var(--paper);"></span>
+  </div>
+  <div id="messageFloatBox" style="display:none;position:fixed;bottom:84px;right:22px;z-index:400;width:640px;max-width:92vw;background:var(--card);border:1px solid var(--line);border-radius:12px;box-shadow:0 12px 32px rgba(0,0,0,.22);overflow:hidden;">
+    <div style="display:grid;grid-template-columns:190px 1fr;">
+      <div style="border-right:1px solid var(--line);padding:12px;background:var(--paper);">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+          <h2 style="font-size:14px;margin:0;">Mesajlar</h2>
+          <span id="messageFloatClose" style="cursor:pointer;color:var(--ink-soft);font-size:16px;">×</span>
+        </div>
         <div id="conversationList"></div>
       </div>
-      <div style="display:flex;flex-direction:column;height:560px;">
-        <div id="messageThreadHeader" style="padding:14px 18px;border-bottom:1px solid var(--line);font-weight:600;"></div>
-        <div id="messageThread" style="flex:1;overflow-y:auto;padding:14px 18px;display:flex;flex-direction:column;gap:10px;"></div>
-        <div style="display:flex;gap:8px;padding:12px 18px;border-top:1px solid var(--line);">
+      <div style="display:flex;flex-direction:column;height:420px;">
+        <div id="messageThreadHeader" style="padding:12px 16px;border-bottom:1px solid var(--line);font-weight:600;font-size:13px;"></div>
+        <div id="messageThread" style="flex:1;overflow-y:auto;padding:12px 16px;display:flex;flex-direction:column;gap:10px;"></div>
+        <div style="display:flex;gap:8px;padding:10px 14px;border-top:1px solid var(--line);">
           <input id="messageComposeInput" placeholder="Mesaj yazın...">
           <button id="messageSendBtn" style="width:auto;flex-shrink:0;">Gönder</button>
         </div>
       </div>
+    </div>
+  </div>
+
+  <div id="auth" class="panel">
+    <div class="card">
+      <h2>Hesabım &amp; Yetkiler</h2>
+      <p class="muted" style="margin-top:-6px">Giriş, e-posta ve şifre ile yapılır — gerçek hesaplar Supabase üzerinden yönetilir. Silme ve 24 saatten eski düzenleme gibi işlemler için yönetici geçici yetki verebilir.</p>
+      <div id="adminPanel"></div>
     </div>
     <div class="card" id="ownerDmOversightCard" style="display:none;margin-top:16px;">
       <h2>Yönetici görünümü — tüm özel mesajlar</h2>
@@ -771,14 +785,6 @@
         <button id="ownerDmViewBtn" style="width:auto;">Görüntüle</button>
       </div>
       <div id="ownerDmThread" style="max-height:400px;overflow-y:auto;"></div>
-    </div>
-  </div>
-
-  <div id="auth" class="panel">
-    <div class="card">
-      <h2>Hesabım &amp; Yetkiler</h2>
-      <p class="muted" style="margin-top:-6px">Giriş, e-posta ve şifre ile yapılır — gerçek hesaplar Supabase üzerinden yönetilir. Silme ve 24 saatten eski düzenleme gibi işlemler için yönetici geçici yetki verebilir.</p>
-      <div id="adminPanel"></div>
     </div>
   </div>
 </div>
@@ -920,11 +926,23 @@ function escapeHtml(s){
 
 function renderConversationList(){
   const el = document.getElementById('conversationList');
+  // Unread conversations get a real color treatment — a tinted background
+  // and a colored left edge — not just a small dot, so "who hasn't been
+  // answered yet" is visible at a glance rather than something you have to
+  // look closely to notice. The currently open conversation always gets its
+  // own distinct (neutral) highlight instead, since once you're looking at
+  // it, it's no longer meaningfully "unread" even in the instant before
+  // lastReadAt updates.
+  const rowStyle = (isActive, isUnread)=>{
+    if(isActive) return 'background:var(--paper);font-weight:600;border-left:3px solid var(--indigo);';
+    if(isUnread) return 'background:var(--rust-bg);font-weight:700;border-left:3px solid var(--rust);color:var(--rust);';
+    return 'border-left:3px solid transparent;';
+  };
   const teamUnread = allMessages.some(m=>!m.recipient_id && m.sender_id!==currentUser.id && new Date(m.created_at) > (lastReadAt.team || new Date(0)));
-  let html = `<div class="conv-item" data-conv="team" style="padding:8px 10px;border-radius:6px;cursor:pointer;margin-bottom:4px;${currentConversation==='team'?'background:var(--paper);font-weight:600;':''}">Ekip Kanalı${teamUnread?' <span style="color:var(--rust)">●</span>':''}</div>`;
+  let html = `<div class="conv-item" data-conv="team" style="padding:8px 10px 8px 8px;border-radius:6px;cursor:pointer;margin-bottom:4px;${rowStyle(currentConversation==='team', teamUnread)}">Ekip Kanalı</div>`;
   allProfiles.filter(p=>p.id!==currentUser.id).forEach(p=>{
     const unread = allMessages.some(m=>conversationKey(m)===p.id && m.sender_id===p.id && new Date(m.created_at) > (lastReadAt[p.id] || new Date(0)));
-    html += `<div class="conv-item" data-conv="${p.id}" style="padding:8px 10px;border-radius:6px;cursor:pointer;margin-bottom:4px;${currentConversation===p.id?'background:var(--paper);font-weight:600;':''}">${p.name||'(isimsiz)'}${unread?' <span style="color:var(--rust)">●</span>':''}</div>`;
+    html += `<div class="conv-item" data-conv="${p.id}" style="padding:8px 10px 8px 8px;border-radius:6px;cursor:pointer;margin-bottom:4px;${rowStyle(currentConversation===p.id, unread)}">${p.name||'(isimsiz)'}</div>`;
   });
   el.innerHTML = html;
   el.querySelectorAll('.conv-item').forEach(d=>{
@@ -1026,25 +1044,41 @@ function subscribeToMessages(){
       allMessages.push(m);
       const key = conversationKey(m);
       const isMine = m.sender_id===currentUser.id;
-      const messagesTabOpen = document.getElementById('messages').classList.contains('active');
       if(!isMine && key!==null){
-        if(messagesTabOpen && currentConversation===key) lastReadAt[key] = new Date();
+        if(messagesBoxOpen && currentConversation===key) lastReadAt[key] = new Date();
         else showMessageToast(m);
       }
-      if(messagesTabOpen) renderMessages(); else updateUnreadBadge();
+      if(messagesBoxOpen) renderMessages(); else updateUnreadBadge();
     })
     .subscribe();
 }
+
+// The floating box, not a tab: openMessageBox/closeMessageBox toggle a
+// fixed-position panel over whatever screen is currently open, rather than
+// navigating away from it — so checking or replying to a message never
+// interrupts whatever else someone was doing in the app.
+let messagesBoxOpen = false;
+function openMessageBox(){
+  messagesBoxOpen = true;
+  document.getElementById('messageFloatBox').style.display = '';
+  lastReadAt[currentConversation] = new Date();
+  renderMessages();
+}
+function closeMessageBox(){
+  messagesBoxOpen = false;
+  document.getElementById('messageFloatBox').style.display = 'none';
+}
+document.getElementById('messageFloatToggle').onclick = ()=>{
+  if(messagesBoxOpen) closeMessageBox(); else openMessageBox();
+};
+document.getElementById('messageFloatClose').onclick = closeMessageBox;
+
 document.getElementById('messageToast').onclick = ()=>{
   const el = document.getElementById('messageToast');
   const conv = el.dataset.conv;
   el.style.display = 'none';
-  document.querySelector('.tab[data-tab="messages"]').click();
-  if(conv && conv!=='null'){
-    currentConversation = conv;
-    lastReadAt[conv] = new Date();
-    renderMessages();
-  }
+  if(conv && conv!=='null') currentConversation = conv;
+  openMessageBox();
 };
 
 function showLoginError(msg){
@@ -1561,7 +1595,7 @@ function renderOperatorBar(){
         </select>
       </label>
       <button class="ghost small" id="logoutBtn">Çıkış yap</button>
-      <span class="muted" style="font-size:10px;margin-left:auto;" title="Bu sürümün ne zaman oluşturulduğu — canlı sitenin en güncel dosyayı çalıştırıp çalıştırmadığını doğrulamak için.">Sürüm: 2026-09-14 05:57 UTC</span>
+      <span class="muted" style="font-size:10px;margin-left:auto;" title="Bu sürümün ne zaman oluşturulduğu — canlı sitenin en güncel dosyayı çalıştırıp çalıştırmadığını doğrulamak için.">Sürüm: 2026-09-14 06:02 UTC</span>
     </div>`;
   document.getElementById('themeSelect').onchange = (e)=>{
     VALID_THEMES.forEach(t=>document.body.classList.remove(t));
@@ -2254,10 +2288,6 @@ document.querySelectorAll('.tab').forEach(t=>{
     document.querySelectorAll('.panel').forEach(x=>x.classList.remove('active'));
     t.classList.add('active');
     document.getElementById(t.dataset.tab).classList.add('active');
-    if(t.dataset.tab==='messages'){
-      lastReadAt[currentConversation] = new Date();
-      renderMessages();
-    }
   };
 });
 
@@ -3358,10 +3388,10 @@ function renderReport(){
     <h3 style="font-family:'Fraunces',serif;font-size:15px;margin:20px 0 8px;">Kayıp Kargo</h3>
     <p class="muted" style="margin-top:-4px">Yukarıdaki sayılara dahil değildir — bunlar gerçek yeni satış değil.</p>
     <div class="stat-grid">
-      <div class="stat" style="background:var(--rust-bg);border-color:var(--rust);"><div class="n" style="color:var(--rust);">${matchingLostCargoOrders.length}</div><div class="l">Vaka</div></div>
-      <div class="stat" style="background:var(--rust-bg);border-color:var(--rust);"><div class="n" style="color:var(--rust);">${lostCargoAwaiting}</div><div class="l">Karar bekliyor</div></div>
-      <div class="stat" style="background:var(--rust-bg);border-color:var(--rust);"><div class="n" style="color:var(--rust);">${lostCargoFound}</div><div class="l">Sahada bulundu</div></div>
-      <div class="stat" style="background:var(--rust-bg);border-color:var(--rust);"><div class="n" style="color:var(--rust);">${lostCargoReproducing}</div><div class="l">Yeniden üretiliyor/üretildi</div></div>
+      <div class="stat" style="background:var(--rust-bg);border-color:var(--rust);"><div class="n" style="color:var(--rust);">${matchingLostCargoOrders.length}</div><div class="l" style="color:#3a3a3a;">Vaka</div></div>
+      <div class="stat" style="background:var(--rust-bg);border-color:var(--rust);"><div class="n" style="color:var(--rust);">${lostCargoAwaiting}</div><div class="l" style="color:#3a3a3a;">Karar bekliyor</div></div>
+      <div class="stat" style="background:var(--rust-bg);border-color:var(--rust);"><div class="n" style="color:var(--rust);">${lostCargoFound}</div><div class="l" style="color:#3a3a3a;">Sahada bulundu</div></div>
+      <div class="stat" style="background:var(--rust-bg);border-color:var(--rust);"><div class="n" style="color:var(--rust);">${lostCargoReproducing}</div><div class="l" style="color:#3a3a3a;">Yeniden üretiliyor/üretildi</div></div>
     </div>` : '';
   if(!matchingOrders.length){
     el.innerHTML = '<div class="empty">Bu döneme/kanala uyan gerçek sipariş yok.</div>' + lostCargoSectionHtml;
@@ -7762,7 +7792,7 @@ function renderOverview(){
       {n: found, l:'Sahada bulundu'},
       {n: reproducing, l:'Yeniden üretiliyor/üretildi'},
     ];
-    document.getElementById('lostCargoStatGrid').innerHTML = lostCargoStats.map(s=>`<div class="stat" style="background:var(--rust-bg);border-color:var(--rust);"><div class="n" style="color:var(--rust);">${s.n}</div><div class="l">${s.l}</div></div>`).join('');
+    document.getElementById('lostCargoStatGrid').innerHTML = lostCargoStats.map(s=>`<div class="stat" style="background:var(--rust-bg);border-color:var(--rust);"><div class="n" style="color:var(--rust);">${s.n}</div><div class="l" style="color:#3a3a3a;">${s.l}</div></div>`).join('');
   } else {
     lostCargoCard.style.display = 'none';
   }
