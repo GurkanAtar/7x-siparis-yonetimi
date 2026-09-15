@@ -7599,7 +7599,7 @@ function topDesignsGridHtml(rows, emptyMsg){
         <span style="font-weight:600;color:var(--ink-soft);font-size:12px;">#${i+1}</span>
         ${r.images.length
           ? `<div style="display:flex;flex-wrap:wrap;gap:3px;justify-content:center;width:150px;margin:6px 0;">
-               ${r.images.map(src=>`<img src="${src}" style="width:34px;height:34px;object-fit:cover;border-radius:5px;${r.suggested?'opacity:.45;':''}" title="${r.suggested?'Aynı siparişteki başka bir üründen — bu tasarıma özel doğrulanmış bir fotoğraf değil':''}">`).join('')}
+               ${r.images.map(src=>`<img src="${src}" class="thumb" style="width:34px;height:34px;object-fit:cover;border-radius:5px;${r.suggested?'opacity:.45;':''}" title="${r.suggested?'Aynı siparişteki başka bir üründen — bu tasarıma özel doğrulanmış bir fotoğraf değil':'Büyütmek için tıklayın'}">`).join('')}
              </div>
              ${r.suggested?'<span class="muted" style="font-size:10px;">(tahmini görsel)</span>':`<span class="muted" style="font-size:10px;">${r.images.length} fotoğraf</span>`}`
           : `<div style="width:100px;height:100px;background:var(--paper);border-radius:8px;margin:6px 0;display:flex;align-items:center;justify-content:center;color:var(--ink-soft);font-size:11px;">Görsel yok</div>`}
@@ -7615,12 +7615,18 @@ function renderDesigns(){
   if(!tableEl) return;
   const rows = computeTopDesigns(o=>channelCategoryForNumbering(o.channel)===currentEntryMode);
   tableEl.innerHTML = topDesignsGridHtml(rows, 'Bu kanalda henüz kodlanmış kalem yok.');
+  // This view renders on demand (clicking the Çok Satanlar tab), not as
+  // part of the main render() pass that normally wires lightbox clicks —
+  // so it needs to re-run that wiring itself every time, or these new
+  // thumbnails would just sit there unclickable.
+  wireImageLightbox();
 }
 function renderOverallDesigns(){
   const tableEl = document.getElementById('overallDesignsTable');
   if(!tableEl) return;
   const rows = computeTopDesigns(()=>true);
   tableEl.innerHTML = topDesignsGridHtml(rows, 'Henüz kodlanmış kalem yok.');
+  wireImageLightbox();
 }
 function renderOrders(){
   const tbody = document.querySelector('#ordersTable tbody');
