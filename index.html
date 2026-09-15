@@ -6217,6 +6217,42 @@ function showTrendyolProblems(headerHtml, problemsList){
 function renderTrendyolPreview(){
   const box = document.getElementById('tyUploadPreview');
   if(!pendingTrendyolUpload || !pendingTrendyolUpload.orders.length){ box.innerHTML=''; renderTrendyolUploadLog(); return; }
+
+  // A hard stop, not an overridable warning like the missing-field case
+  // below — an item whose barkod isn't in the current image catalog is
+  // either a brand-new product Trendyol added since the catalog was last
+  // refreshed, or a listing change that came with a new barkod. Saving
+  // anyway would silently record an order with no product photo attached,
+  // which then has to be tracked down and fixed by hand later — cheaper to
+  // require the catalog refresh up front than to clean it up after.
+  const missingImageItems = [];
+  pendingTrendyolUpload.orders.forEach(o=>{
+    o.items.forEach(i=>{
+      if(i.barkod && !catalogImageFor(i)) missingImageItems.push({order:o, item:i});
+    });
+  });
+  if(missingImageItems.length){
+    box.innerHTML = `
+      <div class="preview-box">
+        <div style="background:#fff3e0;border-left:4px solid var(--rust);padding:10px 12px;border-radius:6px;">
+          <strong style="color:var(--rust);">⚠ ${missingImageItems.length} üründe güncel katalogda görsel bulunamadı — bu yükleme kaydedilemez.</strong>
+          <p style="margin:6px 0 0;">Bu ürünler muhtemelen Trendyol'a yeni eklenmiş veya barkodu değişmiş, bu yüzden mevcut "Ürün görsel kataloğu" bunları tanımıyor. Önce Trendyol'dan güncel "Ürünleriniz" dosyasını indirip yukarıdaki "Ürün görsel kataloğu yükle" alanından yükleyin, sonra bu sipariş dosyasını tekrar seçin.</p>
+          <ul style="margin:8px 0 0 18px;padding:0;">${missingImageItems.map(({order,item})=>`<li>${order.customerName||'(isimsiz)'} — ${item.size||'—'} (Barkod: ${item.barkod})</li>`).join('')}</ul>
+        </div>
+        <div style="margin-top:10px;">
+          <button class="ghost" id="tyDiscardUpload">Vazgeç</button>
+        </div>
+      </div>`;
+    document.getElementById('tyDiscardUpload').onclick = ()=>{
+      pendingTrendyolUpload = null;
+      document.getElementById('tyUploadStatus').textContent = 'Vazgeçildi.';
+      document.getElementById('tyFileInput').value = '';
+      document.getElementById('tyFileInputName').textContent = 'Yeni dosya seçilmedi';
+      box.innerHTML = '';
+    };
+    return;
+  }
+
   // Required fields mirror what Trendyol's own manual entry form requires
   // (Müşteri adı, Satış Kanalı) — Trendyol has no Telefon/Adres concept at
   // all, since delivery and payment run entirely through Trendyol's own
@@ -8542,19 +8578,30 @@ function formatDurationLabel(hours, order){
   return `${hours}sa`;
 }
 
-function ageBadge(order, item){
-  // A single, consistent age/delay indicator meant to show up everywhere the item
-  // actually sits (queue, sorting, production, orders list) — not tucked away in a
-  // separate report. Once produced, it's a fixed historical lag (order date → produced
-  // time); before that, it's a live, growing count of hours since the order was taken.
-  if(item.status==='produced'){
-    const lag = itemLagHours(order, item);
-    if(lag===null) return '';
+// Core of the duration badge: given a completion timestamp (or null if not
+// yet complete), shows either the frozen total duration or the live
+// elapsed-since-order count. ageBadge() below (every other channel, where
+// "complete" and "status==='produced'" happen in the same click) and
+// İhracat's Üretim (where the quantity can reach its target before the
+// separate "Tamamlandı olarak kapat" click) both build on this — they just
+// decide differently what counts as the completion moment.
+function durationBadge(order, completedAt){
+  if(completedAt){
+    const placedAt = orderPlacedAt(order);
+    if(!placedAt) return '';
+    const lag = Math.max(0, Math.floor((new Date(completedAt).getTime() - placedAt.getTime())/(60*60*1000)));
     return lag===0 ? `<span class="pill pill-produced">Zamanında üretildi</span>` : `<span class="pill pill-produced">+${formatDurationLabel(lag, order)} üretim süresi</span>`;
   }
   const hours = hoursSinceOrderDate(order);
   if(hours===null || hours<=0) return '';
   return `<span class="pill pill-pending">Siparişten bu yana ${formatDurationLabel(hours, order)}</span>`;
+}
+function ageBadge(order, item){
+  // A single, consistent age/delay indicator meant to show up everywhere the item
+  // actually sits (queue, sorting, production, orders list) — not tucked away in a
+  // separate report. Once produced, it's a fixed historical lag (order date → produced
+  // time); before that, it's a live, growing count of hours since the order was taken.
+  return durationBadge(order, item.status==='produced' ? item.producedAt : null);
 }
 
 function renderProduction(){
@@ -8601,8 +8648,14 @@ function renderProduction(){
         const rowKey = order.id + '::' + ids;
         const num = itemNumbers[order.id+'::'+(bundle[0].setLabel||bundle[0].id)] || '—';
         const carried = isGroupCarriedOver(bundle);
+        const isProduced = bundle[0].status === 'produced';
+        // "X saattir üretimde" only makes sense while something is actually
+        // still waiting — once produced, ageBadge() below already shows the
+        // real story ("+X üretim süresi", the total time it took), so
+        // showing both together was self-contradictory: a finished item
+        // claiming it's "still in production for X hours."
         const hours = hoursWaiting(bundle[0].sortedAt);
-        const waitNote = hours<=0 ? '' : hours===1
+        const waitNote = (isProduced || hours<=0) ? '' : hours===1
           ? ` <span class="pill pill-pending" style="margin-left:4px">1 saattir üretimde</span>`
           : ` <span class="pill pill-pending" style="margin-left:4px">${hours} saattir üretimde</span>`;
         // Same copy-expansion as Ayırma & etiketler — a bundle representing
@@ -8613,7 +8666,6 @@ function renderProduction(){
         // only 2 rows here before this fix).
         const stickerCount = bundleStickerCount(bundle);
         const copyCount = stickerCount > 1 ? stickerCount : 1;
-        const isProduced = bundle[0].status === 'produced';
         const isBeingEdited = productionEditingKey === rowKey;
         for(let copyIdx=1; copyIdx<=copyCount; copyIdx++){
           const tag = document.createElement('span');
@@ -8813,6 +8865,7 @@ function renderExportProduction(){
         <input type="number" class="ex-produced-input" min="0" max="${target}" value="${produced}" style="width:70px" data-oid="${order.id}" data-key="${isPair?group[0].setLabel:group[0].id}">
         <span class="muted">Kalan: ${remaining}</span>
         <span class="pill ${pct>=100?'pill-produced':'pill-pending'}">${pct}%</span>
+        ${durationBadge(order, group[0].producedAt)}
         <button class="ghost small ex-update-produced" data-oid="${order.id}" data-key="${isPair?group[0].setLabel:group[0].id}">Güncelle</button>
         ${pct>=100 ? `<button class="small ex-finalize" data-oid="${order.id}" data-key="${isPair?group[0].setLabel:group[0].id}">Tamamlandı olarak kapat</button>` : ''}
       `;
@@ -8861,7 +8914,19 @@ function renderExportProduction(){
       let val = parseInt(input.value)||0;
       val = Math.max(0, Math.min(val, target));
       const prevQty = group[0].producedQty || 0;
-      group.forEach(i=>{ i.producedQty = val; });
+      // The actual production work is finished the moment the quantity
+      // reaches its target — not whenever someone later gets around to
+      // clicking "Tamamlandı olarak kapat", which could be a batch cleanup
+      // pass done well after the fact. Stamped here so the duration badge
+      // freezes at the true finish time; cleared again if a correction
+      // walks the quantity back below target, since it hasn't actually
+      // reached completion anymore at that point.
+      const reachedTarget = val >= target;
+      group.forEach(i=>{
+        i.producedQty = val;
+        if(reachedTarget && !i.producedAt) i.producedAt = new Date().toISOString();
+        else if(!reachedTarget) i.producedAt = null;
+      });
       logActivity(`Üretim güncellendi: ${group.map(i=>i.size).join(', ')} — ${order.customerName} (${prevQty} → ${val} / ${target})`);
       saveState(); render();
     };
@@ -8870,8 +8935,12 @@ function renderExportProduction(){
     b.onclick = ()=>{
       const {order, group} = resolveGroup(b.dataset.oid, b.dataset.key);
       if(!order || !group.length) return;
+      // producedAt was already captured the moment the quantity first hit
+      // its target (above) — this just changes status, it never overwrites
+      // that original timestamp with whatever later moment this click
+      // happens to land on.
       const finishedAt = new Date().toISOString();
-      group.forEach(i=>{ i.status = 'produced'; i.producedAt = finishedAt; });
+      group.forEach(i=>{ i.status = 'produced'; if(!i.producedAt) i.producedAt = finishedAt; });
       logActivity(`Üretim tamamlandı olarak kapatıldı: ${group.map(i=>i.size).join(', ')} — ${order.customerName} (${group[0].producedQty}/${group[0].qty})`);
       saveState(); render();
     };
