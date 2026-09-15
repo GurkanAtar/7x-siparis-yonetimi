@@ -1378,6 +1378,17 @@ function showPinLockOverlay(){
   renderPinLockNames();
   document.getElementById('pinLockOverlay').style.display = 'flex';
 }
+// Shared by both paths below: a normal verified-PIN unlock, and the
+// no-PIN-set-yet bypass — one place that actually flips the lock state,
+// so both stay in sync.
+function unlockAs(p, note){
+  currentProfile = p;
+  operatorName = p.name || currentUser.email;
+  isPinUnlocked = true;
+  document.getElementById('pinLockOverlay').style.display = 'none';
+  logActivity(`Kilit açıldı: ${operatorName}${note ? ` (${note})` : ''}`);
+  saveState(); render();
+}
 function renderPinLockNames(){
   const el = document.getElementById('pinLockNameList');
   const roleLabels = { owner:'Yönetici', sales:'Satış', production:'Üretim', finance:'Finans' };
@@ -1388,6 +1399,17 @@ function renderPinLockNames(){
     b.onclick = ()=>{
       pinLockSelectedProfileId = b.dataset.id;
       const p = allProfiles.find(x=>x.id===pinLockSelectedProfileId);
+      // No PIN configured for this person at all yet — there's nothing to
+      // verify against, so blocking here would be a dead end with no way
+      // out (this screen is the only path back to Hesabım & Yetkiler,
+      // where a PIN actually gets set). Let them straight in instead, same
+      // as how the app behaved before this feature existed — once they (or
+      // the owner) sets a real PIN for this profile, this bypass stops
+      // applying to it specifically.
+      if(!p.pin){
+        unlockAs(p, 'PIN henüz belirlenmemişti');
+        return;
+      }
       document.getElementById('pinLockSelectedName').textContent = p.name || '(isimsiz)';
       document.getElementById('pinLockNameList').style.display = 'none';
       document.getElementById('pinLockPinRow').style.display = 'flex';
@@ -1407,11 +1429,6 @@ function attemptPinUnlock(){
   const statusEl = document.getElementById('pinLockStatus');
   const p = allProfiles.find(x=>x.id===pinLockSelectedProfileId);
   if(!p) return;
-  if(!p.pin){
-    statusEl.style.color = 'var(--rust)';
-    statusEl.textContent = 'Bu kullanıcı için henüz PIN belirlenmemiş — Hesabım & Yetkiler\'den bir yönetici PIN atamalı.';
-    return;
-  }
   if(entered !== p.pin){
     statusEl.style.color = 'var(--rust)';
     statusEl.textContent = 'PIN yanlış.';
@@ -1419,12 +1436,7 @@ function attemptPinUnlock(){
     document.getElementById('pinLockInput').focus();
     return;
   }
-  currentProfile = p;
-  operatorName = p.name || currentUser.email;
-  isPinUnlocked = true;
-  document.getElementById('pinLockOverlay').style.display = 'none';
-  logActivity(`Kilit açıldı: ${operatorName}`);
-  saveState(); render();
+  unlockAs(p);
 }
 document.getElementById('pinLockSubmit').onclick = attemptPinUnlock;
 document.getElementById('pinLockInput').onkeydown = (e)=>{ if(e.key==='Enter') attemptPinUnlock(); };
@@ -4872,9 +4884,11 @@ function renderSetTemplates(){
   ).join('');
   el.querySelectorAll('.del-tpl').forEach(b=>{
     b.onclick = async ()=>{
+      const t = state.setTemplates[parseInt(b.dataset.idx)];
+      const confirmed = await showConfirm(`"${t.name}" set şablonunu silmek üzeresiniz. Devam edilsin mi?`);
+      if(!confirmed) return;
       const auth = await requireAdmin('Bu set şablonunu silme');
       if(!auth) return;
-      const t = state.setTemplates[parseInt(b.dataset.idx)];
       logActivity(`Set şablonu kaldırıldı: "${t.name}"`, auth==='pin' ? 'Admin' : undefined);
       state.setTemplates.splice(parseInt(b.dataset.idx),1);
       saveState(); render();
@@ -6948,6 +6962,8 @@ function renderUploadLog(){
       const batch = state.uploadBatches.find(x=>x.id===b.dataset.id);
       if(!batch) return;
       const batchOrders = state.orders.filter(o=>o.batchId===batch.id);
+      const confirmed = await showConfirm(`"${batch.fileName}" yüklemesini silmek üzeresiniz — ${batchOrders.length} sipariş birden silinecek. Devam edilsin mi?`);
+      if(!confirmed) return;
       const auth = await requireAdmin(`"${batch.fileName}" yüklemesini silme (${batchOrders.length} sipariş birden silinecek)`);
       if(!auth) return;
       state.orders = state.orders.filter(o=>o.batchId!==batch.id);
@@ -6979,6 +6995,8 @@ function renderTrendyolUploadLog(){
       const batch = state.uploadBatches.find(x=>x.id===b.dataset.id);
       if(!batch) return;
       const batchOrders = state.orders.filter(o=>o.batchId===batch.id);
+      const confirmed = await showConfirm(`"${batch.fileName}" yüklemesini silmek üzeresiniz — ${batchOrders.length} sipariş birden silinecek. Devam edilsin mi?`);
+      if(!confirmed) return;
       const auth = await requireAdmin(`"${batch.fileName}" yüklemesini silme (${batchOrders.length} sipariş birden silinecek)`);
       if(!auth) return;
       state.orders = state.orders.filter(o=>o.batchId!==batch.id);
@@ -7823,6 +7841,8 @@ function wireOrdersRowHandlers(tbody){
   tbody.querySelectorAll('.del-order').forEach(b=>{
     b.onclick = async ()=>{
       const order = state.orders.find(o=>o.id===b.dataset.id);
+      const confirmed = await showConfirm(`${order ? `"${order.customerName}" siparişini` : 'Bu siparişi'} silmek üzeresiniz. Devam edilsin mi?`);
+      if(!confirmed) return;
       const auth = await requireDeleteAuth('Bu siparişi silme', order);
       if(!auth) return;
       if(order) logActivity(`Sipariş silindi: ${order.customerName} (${order.channel})`, auth==='pin' ? 'Admin' : undefined);
@@ -7844,10 +7864,14 @@ function wireOrdersRowHandlers(tbody){
   tbody.querySelectorAll('.del-order-item').forEach(b=>{
     b.onclick = async ()=>{
       const order = state.orders.find(o=>o.id===b.dataset.id);
-      const auth = await requireDeleteAuth('Bu kalemi silme', order);
-      if(!auth) return;
       if(!order) return;
       const ids = b.dataset.ids.split(',');
+      const removedPreview = order.items.filter(i=>ids.includes(i.id));
+      const labelPreview = removedPreview.length>1 ? `${displaySetLabel(removedPreview[0].setLabel)} (${removedPreview.length} parça)` : (removedPreview[0] ? removedPreview[0].size : '');
+      const confirmed = await showConfirm(`"${labelPreview}" kalemini — ${order.customerName} siparişinden — silmek üzeresiniz. Devam edilsin mi?`);
+      if(!confirmed) return;
+      const auth = await requireDeleteAuth('Bu kalemi silme', order);
+      if(!auth) return;
       // Captured before mutating order.items below — needed to restore
       // correctly either way this goes: if only some items were removed,
       // this puts the rest back; if it was the last item and the whole
@@ -8040,10 +8064,14 @@ function renderExportOrders(){
   tbody.querySelectorAll('.del-order-item').forEach(b=>{
     b.onclick = async ()=>{
       const order = state.orders.find(o=>o.id===b.dataset.id);
-      const auth = await requireDeleteAuth('Bu kalemi silme', order);
-      if(!auth) return;
       if(!order) return;
       const ids = b.dataset.ids.split(',');
+      const removedPreview = order.items.filter(i=>ids.includes(i.id));
+      const labelPreview = removedPreview.length>1 ? `${displaySetLabel(removedPreview[0].setLabel)} (${removedPreview.length} parça)` : (removedPreview[0] ? removedPreview[0].size : '');
+      const confirmed = await showConfirm(`"${labelPreview}" kalemini — ${order.customerName} siparişinden — silmek üzeresiniz. Devam edilsin mi?`);
+      if(!confirmed) return;
+      const auth = await requireDeleteAuth('Bu kalemi silme', order);
+      if(!auth) return;
       const originalItems = order.items.slice();
       const removed = order.items.filter(i=>ids.includes(i.id));
       const label = removed.length>1 ? `${displaySetLabel(removed[0].setLabel)} (${removed.length} parça)` : removed[0].size;
@@ -9435,6 +9463,8 @@ function renderChannels(){
       const c = state.channels[parseInt(b.dataset.idx)];
       const orderCount = state.orders.filter(o=>channelNamesMatch(o.channel,c.name)).length;
       const countNote = orderCount ? ` (bu kanala ait ${orderCount} sipariş var — kanal silinir ama siparişler SİLİNMEZ, sadece bu ad artık kayıtlı bir kanal olarak görünmez)` : '';
+      const confirmed = await showConfirm(`"${c.name}" kanalını silmek üzeresiniz${countNote}. Devam edilsin mi?`);
+      if(!confirmed) return;
       const auth = await requireAdmin(`"${c.name}" kanalını silme${countNote}`);
       if(!auth) return;
       // Removing a channel only affects future dropdown choices — it does not touch
