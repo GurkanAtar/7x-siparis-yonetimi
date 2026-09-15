@@ -668,7 +668,7 @@
       <h2 id="shippedReadyTitle">Kargoya Hazır Siparişler</h2>
       <p class="muted" style="margin-top:-6px" id="shippedReadySubtitle"></p>
       <div id="shippedReadyList"></div>
-      <div class="empty" id="shippedReadyEmpty" style="display:none">Kargoya hazır bekleyen sipariş yok.</div>
+      <div class="empty" id="shippedReadyEmpty" style="display:none"></div>
     </div>
     </div>
 
@@ -678,6 +678,13 @@
       <p class="muted" style="margin-top:-6px">İhracat kalemleri kodlandığında doğrudan buraya düşer (etiket/ayırma aşaması atlanır). Hedef adet ve o ana kadar üretilen adedi girip Güncelle'ye basın — ilerlemeyi birkaç gün boyunca parça parça takip edebilirsiniz. Hedefe ulaşınca "Tamamlandı olarak kapat" ile kalemi Üretildi durumuna alın.</p>
       <div id="exportProductionGroups"></div>
       <div class="empty" id="exportProductionEmpty" style="display:none">Şu anda üretimde ihracat kalemi yok.</div>
+    </div>
+
+    <div class="card" id="yollandiReadyCard">
+      <h2>Yollandı Bekleyen Siparişler</h2>
+      <p class="muted" style="margin-top:-6px">Tüm kalemleri üretilmiş ama henüz "Yollandı" olarak kapatılmamış siparişler — İhracat kargo/DHL ile değil ayrı bir sevkiyat süreciyle gittiği için kendi kapanışı.</p>
+      <div id="yollandiReadyList"></div>
+      <div class="empty" id="yollandiReadyEmpty" style="display:none">Yollandı bekleyen sipariş yok.</div>
     </div>
     </div>
   </div>
@@ -8657,9 +8664,11 @@ function renderShippedReady(){
   if(currentEntryMode==='sicaksatis'){
     document.getElementById('shippedReadyTitle').textContent = 'Teslim Edildi Bekleyen Siparişler';
     document.getElementById('shippedReadySubtitle').textContent = 'Tüm kalemleri üretilmiş ama henüz "Teslim Edildi" olarak kapatılmamış siparişler — Sıcak Satış kargo ile değil doğrudan teslim edildiği için ayrı bir kapanış.';
+    document.getElementById('shippedReadyEmpty').textContent = 'Teslim edildi bekleyen sipariş yok.';
   } else {
     document.getElementById('shippedReadyTitle').textContent = 'Kargoya Hazır Siparişler';
     document.getElementById('shippedReadySubtitle').textContent = 'Tüm kalemleri üretilmiş ama henüz "Kargoya verildi" olarak işaretlenmemiş siparişler. WhatsApp bildirimi açık bir Instagram kanalına aitse, bu işaret mesaj kuyruğunu da tetikler.';
+    document.getElementById('shippedReadyEmpty').textContent = 'Kargoya hazır bekleyen sipariş yok.';
   }
   const ready = state.orders.filter(o=>
     o.items.length && o.items.every(i=>i.status==='produced')
@@ -8800,6 +8809,42 @@ function renderExportProduction(){
       item.status = 'produced';
       item.producedAt = new Date().toISOString();
       logActivity(`Üretim tamamlandı olarak kapatıldı: ${item.size} — ${order.customerName} (${item.producedQty}/${item.qty})`);
+      saveState(); render();
+    };
+  });
+  renderYollandiReady();
+}
+
+// İhracat's own version of the Kargoya Hazır / Teslim Edildi card —
+// separate wording again ("Yollandı") since export shipping is its own
+// process, not DHL and not a direct local handover. Every item on the
+// order finalized (status 'produced', same finish line as the target-
+// quantity tracking above ends at) but not yet marked dispatched.
+function renderYollandiReady(){
+  const wrap = document.getElementById('yollandiReadyList');
+  if(!wrap) return;
+  const ready = state.orders.filter(o=>
+    o.channel==='İhracat' && o.items.length && o.items.every(i=>i.status==='produced')
+    && !o.dispatchedAt && o.saleType!=='Kayıp Kargo'
+  ).sort((a,b)=>{
+    const ad = a.items.reduce((m,i)=>i.producedAt && (!m||i.producedAt<m) ? i.producedAt : m, null);
+    const bd = b.items.reduce((m,i)=>i.producedAt && (!m||i.producedAt<m) ? i.producedAt : m, null);
+    return (ad||'').localeCompare(bd||'');
+  });
+  document.getElementById('yollandiReadyEmpty').style.display = ready.length ? 'none' : 'block';
+  wrap.innerHTML = ready.map(o=>{
+    const sizes = o.items.map(i=>`${i.size} ×${i.qty}`).join(', ');
+    return `<div class="tag" style="display:flex;align-items:center;justify-content:space-between;width:100%;">
+      <span>${chanBadgeHtml(o.channel)} <strong>${o.customerName||''}</strong> — ${sizes}</span>
+      <button class="ghost small mark-dispatched" data-oid="${o.id}">Yollandı olarak kapat</button>
+    </div>`;
+  }).join('');
+  wrap.querySelectorAll('.mark-dispatched').forEach(b=>{
+    b.onclick = ()=>{
+      const order = state.orders.find(o=>o.id===b.dataset.oid);
+      if(!order) return;
+      order.dispatchedAt = new Date().toISOString();
+      logActivity(`Yollandı olarak kapatıldı: ${order.customerName} (${order.channel})`);
       saveState(); render();
     };
   });
