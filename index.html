@@ -387,6 +387,7 @@
           <button type="button" class="ghost small" id="tyCatalogClear" style="margin-left:auto;">Kataloğu temizle</button>
         </div>
         <div id="tyCatalogInfo" class="muted" style="margin-top:8px;"></div>
+        <div id="tyCatalogUploadLog"></div>
       </div>
 
       <div class="card" id="manualEntryCard-trendyol">
@@ -1731,7 +1732,7 @@ function showPinModal(labelText){
     };
   });
 }
-let state = { orders: [], uploadBatches: [], activityLog: [], setTemplates: [], commonSizes: ['160x220','180x270','200x300'], productCatalog: {}, channelMerges: [], photoBackfillHistory: [], channels: [
+let state = { orders: [], uploadBatches: [], activityLog: [], setTemplates: [], commonSizes: ['160x220','180x270','200x300'], productCatalog: {}, channelMerges: [], photoBackfillHistory: [], catalogUploadHistory: [], channels: [
   {name:'qatalina', type:'Instagram kurumsal'},
   {name:'7xhome', type:'Instagram kurumsal'},
   {name:'Carpetra Home', type:'Instagram kurumsal'},
@@ -1985,6 +1986,7 @@ async function loadState(){
       state.setTemplates = loaded.setTemplates || [];
       state.channelMerges = loaded.channelMerges || [];
       state.photoBackfillHistory = loaded.photoBackfillHistory || [];
+      state.catalogUploadHistory = loaded.catalogUploadHistory || [];
       state.lastBackupAt = loaded.lastBackupAt || null;
       state.commonSizes = (loaded.commonSizes && loaded.commonSizes.length) ? loaded.commonSizes : state.commonSizes;
       state.productCatalog = loaded.productCatalog || {};
@@ -2243,6 +2245,7 @@ function saveState(){
         channels: state.channels,
         channelMerges: state.channelMerges,
         photoBackfillHistory: state.photoBackfillHistory,
+        catalogUploadHistory: state.catalogUploadHistory,
         currentEntryMode: state.currentEntryMode,
         currentStageMode: state.currentStageMode,
         lastBackupAt: state.lastBackupAt,
@@ -6415,6 +6418,8 @@ document.getElementById('tyCatalogInput').onchange = async (e)=>{
       state.productCatalog[barkod] = url;
     }
     const total = Object.keys(state.productCatalog).length;
+    state.catalogUploadHistory = state.catalogUploadHistory || [];
+    state.catalogUploadHistory.push({ id: uid(), fileName: file.name, uploadedAt: new Date().toISOString(), added, updated, totalAfter: total });
     logActivity(`Ürün görsel kataloğu yüklendi: "${file.name}" — ${added} yeni, ${updated} güncellendi (toplam ${total} ürün)`);
     statusEl.innerHTML = `<strong style="color:var(--forest)">✓</strong> ${added} yeni ürün eklendi, ${updated} güncellendi. Katalogda toplam <strong>${total}</strong> ürün görseli var.`;
     document.getElementById('tyCatalogInput').value = '';
@@ -6444,9 +6449,34 @@ function renderCatalogInfo(){
   const el = document.getElementById('tyCatalogInfo');
   if(!el) return;
   const entries = Object.keys(state.productCatalog||{});
-  if(!entries.length){ el.textContent = 'Katalogda henüz ürün görseli yok.'; return; }
-  const approxKB = (JSON.stringify(state.productCatalog).length/1024).toFixed(0);
-  el.textContent = `Katalogda ${entries.length} ürün görseli var (yaklaşık ${approxKB} KB depolama alanı kaplıyor).`;
+  if(!entries.length){ el.textContent = 'Katalogda henüz ürün görseli yok.'; }
+  else {
+    const approxKB = (JSON.stringify(state.productCatalog).length/1024).toFixed(0);
+    el.textContent = `Katalogda ${entries.length} ürün görseli var (yaklaşık ${approxKB} KB depolama alanı kaplıyor).`;
+  }
+  renderCatalogUploadLog();
+}
+// Same "10 dosya göster, sonra Daha fazla göster" pattern as the order
+// upload logs (buildUploadLogTableHtml) — but no Sil button here, unlike
+// an order batch: a catalog upload only ever adds or updates barkod
+// entries in one shared map, never a cleanly separable chunk of its own,
+// so there's nothing sound to delete per-upload. This is a read-only
+// record of what was uploaded and when, not an undoable action list.
+function renderCatalogUploadLog(){
+  const el = document.getElementById('tyCatalogUploadLog');
+  if(!el) return;
+  const history = state.catalogUploadHistory || [];
+  if(!history.length){ el.innerHTML = ''; return; }
+  const allSorted = history.slice().sort((a,b)=>new Date(b.uploadedAt)-new Date(a.uploadedAt));
+  const showKey = 'tyCatalogUploadLog';
+  const showCount = fileListShowCount[showKey] || 10;
+  const visible = allSorted.slice(0, showCount);
+  const moreCount = allSorted.length - visible.length;
+  const rows = visible.map(h=>`<tr><td>${h.fileName}</td><td class="ts">${new Date(h.uploadedAt).toLocaleString('tr-TR')}</td><td>${h.added}</td><td>${h.updated}</td></tr>`).join('');
+  const moreRow = moreCount>0 ? `<tr><td colspan="4"><span class="show-more-uploadlog" data-key="${showKey}" style="cursor:pointer;color:var(--indigo);font-weight:600;">Daha fazla göster (+${Math.min(10,moreCount)}, ${moreCount} kaldı)</span></td></tr>` : '';
+  el.innerHTML = `<div style="margin-top:14px"><label>Katalog yükleme geçmişi</label>
+    <table><thead><tr><th>Dosya</th><th>Yüklendi</th><th>Yeni</th><th>Güncellendi</th></tr></thead><tbody>${rows}${moreRow}</tbody></table></div>`;
+  wireUploadLogShowMore(el, showKey, renderCatalogUploadLog);
 }
 document.getElementById('tyCatalogClear').onclick = async ()=>{
   const entries = Object.keys(state.productCatalog||{});
@@ -8809,8 +8839,12 @@ function renderExportProduction(){
   const seenItemIds = new Set();
   state.orders.forEach(o=>{
     if(o.channel!=='İhracat') return;
-    const sortedItems = o.items.filter(i=>i.status==='sorted');
-    sortedItems.forEach(item=>{
+    // Includes 'produced' now, not just 'sorted' — a completed row stays
+    // visible here (showing its frozen finish-time badge) instead of
+    // disappearing the moment it hits 100%, so 100% + the day count IS the
+    // visible "finished and ready to send" signal, nothing to click away.
+    const relevantItems = o.items.filter(i=>i.status==='sorted' || i.status==='produced');
+    relevantItems.forEach(item=>{
       if(seenItemIds.has(item.id)) return;
       // Only the specific paspas-style pair collapses into one row — any
       // other multi-piece set (3+, or a 2-piece combo that isn't one of
@@ -8818,7 +8852,7 @@ function renderExportProduction(){
       // independent row with its own target/progress.
       let group = [item];
       if(item.setLabel){
-        const setMates = sortedItems.filter(i=>i.setLabel===item.setLabel);
+        const setMates = relevantItems.filter(i=>i.setLabel===item.setLabel);
         if(isCollapsiblePair(setMates)) group = setMates;
       }
       group.forEach(i=>seenItemIds.add(i.id));
@@ -8867,7 +8901,6 @@ function renderExportProduction(){
         <span class="pill ${pct>=100?'pill-produced':'pill-pending'}">${pct}%</span>
         ${durationBadge(order, group[0].producedAt)}
         <button class="ghost small ex-update-produced" data-oid="${order.id}" data-key="${isPair?group[0].setLabel:group[0].id}">Güncelle</button>
-        ${pct>=100 ? `<button class="small ex-finalize" data-oid="${order.id}" data-key="${isPair?group[0].setLabel:group[0].id}">Tamamlandı olarak kapat</button>` : ''}
       `;
       g.appendChild(row);
     });
@@ -8914,34 +8947,28 @@ function renderExportProduction(){
       let val = parseInt(input.value)||0;
       val = Math.max(0, Math.min(val, target));
       const prevQty = group[0].producedQty || 0;
-      // The actual production work is finished the moment the quantity
-      // reaches its target — not whenever someone later gets around to
-      // clicking "Tamamlandı olarak kapat", which could be a batch cleanup
-      // pass done well after the fact. Stamped here so the duration badge
-      // freezes at the true finish time; cleared again if a correction
-      // walks the quantity back below target, since it hasn't actually
-      // reached completion anymore at that point.
+      // Reaching the target IS completion now — no separate "Tamamlandı
+      // olarak kapat" click. The moment Güncelle brings the quantity to
+      // 100%, this row's job is done: producedAt freezes the real finish
+      // time, and status flips to 'produced' in the same action, so it
+      // moves off this active list exactly like every other channel's
+      // one-click "Üretildi olarak işaretle" already does. Reopening a
+      // completed row by correcting the quantity back down (rare, but
+      // possible) reverses both, since it genuinely isn't finished anymore.
       const reachedTarget = val >= target;
       group.forEach(i=>{
         i.producedQty = val;
-        if(reachedTarget && !i.producedAt) i.producedAt = new Date().toISOString();
-        else if(!reachedTarget) i.producedAt = null;
+        if(reachedTarget){
+          if(!i.producedAt) i.producedAt = new Date().toISOString();
+          i.status = 'produced';
+        } else {
+          i.producedAt = null;
+          i.status = 'sorted';
+        }
       });
-      logActivity(`Üretim güncellendi: ${group.map(i=>i.size).join(', ')} — ${order.customerName} (${prevQty} → ${val} / ${target})`);
-      saveState(); render();
-    };
-  });
-  wrap.querySelectorAll('.ex-finalize').forEach(b=>{
-    b.onclick = ()=>{
-      const {order, group} = resolveGroup(b.dataset.oid, b.dataset.key);
-      if(!order || !group.length) return;
-      // producedAt was already captured the moment the quantity first hit
-      // its target (above) — this just changes status, it never overwrites
-      // that original timestamp with whatever later moment this click
-      // happens to land on.
-      const finishedAt = new Date().toISOString();
-      group.forEach(i=>{ i.status = 'produced'; if(!i.producedAt) i.producedAt = finishedAt; });
-      logActivity(`Üretim tamamlandı olarak kapatıldı: ${group.map(i=>i.size).join(', ')} — ${order.customerName} (${group[0].producedQty}/${group[0].qty})`);
+      logActivity(reachedTarget
+        ? `Üretim tamamlandı: ${group.map(i=>i.size).join(', ')} — ${order.customerName} (${val}/${target})`
+        : `Üretim güncellendi: ${group.map(i=>i.size).join(', ')} — ${order.customerName} (${prevQty} → ${val} / ${target})`);
       saveState(); render();
     };
   });
