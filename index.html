@@ -688,7 +688,7 @@
   <div id="designs" class="stage-panel">
     <div class="card">
       <h2>Çok Satanlar</h2>
-      <p class="muted" style="margin-top:-6px">Baskı öncesi'nde verilen tasarım koduna göre en çok satılan tasarımlar — görsele değil, sadece koda bakılır. Şu an açık olan kanala göre hesaplanır. Sadece kodlanmış kalemler dahildir; Kayıp Kargo hariç.</p>
+      <p class="muted" style="margin-top:-6px">Baskı öncesi'nde verilen tasarım koduna göre en çok satılan tasarımlar — sıralama görsele değil sadece koda göre yapılır, ama her tasarımın yanında tanıma kolaylığı için (varsa) bir görsel de gösterilir. Şu an açık olan kanala göre hesaplanır. Sadece kodlanmış kalemler dahildir; Kayıp Kargo hariç.</p>
       <div style="max-width:700px;">
         <canvas id="chartTopDesigns" height="260"></canvas>
       </div>
@@ -7512,15 +7512,26 @@ function renderDesigns(){
     if(channelCategoryForNumbering(o.channel)!==currentEntryMode) return;
     o.items.forEach(item=>{
       if(!item.code) return;
-      byCode[item.code] = byCode[item.code] || { pieces:0, orders:new Set(), m2:0 };
+      byCode[item.code] = byCode[item.code] || { pieces:0, orders:new Set(), m2:0, image:null };
       const qty = item.qty || 1;
       byCode[item.code].pieces += qty;
       byCode[item.code].orders.add(o.id);
       byCode[item.code].m2 += sizeToM2(item.size) * qty;
+      // First photo found for this code wins as its representative image —
+      // manually uploaded first (IG/Sıcak Satış/İhracat), falling back to
+      // the barkod-matched catalog photo (Trendyol/Hepsiburada) when there
+      // isn't one. A code isn't strictly guaranteed to have only one
+      // distinct photo across every copy sold, but in practice the same
+      // design looks the same, so whichever copy happened to get
+      // photographed first is a fine representative.
+      if(!byCode[item.code].image){
+        const img = (item.images && item.images.length) ? item.images[0] : catalogImageFor(item);
+        if(img) byCode[item.code].image = img;
+      }
     });
   });
   const rows = Object.keys(byCode).map(code=>({
-    code, pieces: byCode[code].pieces, orders: byCode[code].orders.size, m2: byCode[code].m2
+    code, pieces: byCode[code].pieces, orders: byCode[code].orders.size, m2: byCode[code].m2, image: byCode[code].image
   })).sort((a,b)=>b.pieces-a.pieces);
 
   if(canvas && typeof Chart!=='undefined'){
@@ -7536,9 +7547,19 @@ function renderDesigns(){
   }
 
   if(!rows.length){ tableEl.innerHTML = '<p class="muted">Bu kanalda henüz kodlanmış kalem yok.</p>'; return; }
-  tableEl.innerHTML = `<table><thead><tr><th>Kod</th><th>Adet</th><th>Sipariş sayısı</th><th>Toplam m²</th></tr></thead><tbody>
-    ${rows.map(r=>`<tr><td>${r.code}</td><td>${r.pieces}</td><td>${r.orders}</td><td>${r.m2.toFixed(2)}</td></tr>`).join('')}
-  </tbody></table>`;
+  tableEl.innerHTML = `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:14px;">
+    ${rows.map((r,i)=>`
+      <div class="tag" style="display:flex;flex-direction:column;align-items:center;text-align:center;padding:10px;">
+        <span style="font-weight:600;color:var(--ink-soft);font-size:12px;">#${i+1}</span>
+        ${r.image
+          ? `<img src="${r.image}" style="width:100px;height:100px;object-fit:cover;border-radius:8px;margin:6px 0;">`
+          : `<div style="width:100px;height:100px;background:var(--paper);border-radius:8px;margin:6px 0;display:flex;align-items:center;justify-content:center;color:var(--ink-soft);font-size:11px;">Görsel yok</div>`}
+        <strong style="font-family:'IBM Plex Mono',monospace;">${r.code}</strong>
+        <span class="muted" style="font-size:12px;margin-top:4px;">${r.pieces} adet · ${r.orders} sipariş</span>
+        <span class="muted" style="font-size:12px;">${r.m2.toFixed(2)} m²</span>
+      </div>
+    `).join('')}
+  </div>`;
 }
 function renderOrders(){
   const tbody = document.querySelector('#ordersTable tbody');
