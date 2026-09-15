@@ -234,6 +234,7 @@
       <div class="entry-subtab" id="iadelerBtn">İadeler</div>
       <div class="entry-subtab" id="waQueueBtn">WhatsApp Kuyruğu</div>
       <div class="entry-subtab" id="siparisSorgulaBtn">Sipariş Sorgula</div>
+      <div class="entry-subtab" id="overallDesignsBtn">Genel Çok Satanlar</div>
     </div>
     <div class="entry-subtabs" id="stageSelector" style="margin-top:6px;">
       <div class="entry-subtab active" data-stage="entry">Sipariş girişi</div>
@@ -288,6 +289,12 @@
       <p class="muted" style="margin-top:-6px">Sipariş numarası (üretim tamamlanınca atanan, örn. IGQA2609150001), iç üretim kodu (örn. IG-305) veya müşteri adı/telefonu ile arayın.</p>
       <input id="siparisSorgulaInput" placeholder="Sipariş numarası, kod, isim veya telefon...">
       <div id="siparisSorgulaResults" style="margin-top:14px;"></div>
+    </div>
+
+    <div id="overallDesignsPanel" class="card" style="display:none;">
+      <h2>Genel Çok Satanlar</h2>
+      <p class="muted" style="margin-top:-6px">Tüm kanallar birlikte — Instagram, Trendyol, Hepsiburada, Sıcak Satış ve İhracat'ı tek listede birleştirip en çok satılan ilk 10 tasarımı gösterir. Aynı kod farklı kanallarda kullanılmışsa hepsi birlikte sayılır. Sadece kodlanmış kalemler dahildir; Kayıp Kargo hariç.</p>
+      <div id="overallDesignsTable"></div>
     </div>
 
   <div id="entry" class="stage-panel active">
@@ -688,7 +695,7 @@
   <div id="designs" class="stage-panel">
     <div class="card">
       <h2>Çok Satanlar</h2>
-      <p class="muted" style="margin-top:-6px">Baskı öncesi'nde verilen tasarım koduna göre en çok satılan tasarımlar — sıralama görsele değil sadece koda göre yapılır, ama her tasarımın yanında tanıma kolaylığı için (varsa) bir görsel de gösterilir. Şu an açık olan kanala göre hesaplanır. Sadece kodlanmış kalemler dahildir; Kayıp Kargo hariç.</p>
+      <p class="muted" style="margin-top:-6px">Baskı öncesi'nde verilen tasarım koduna göre en çok satılan ilk 10 tasarım — sıralama görsele değil sadece koda göre yapılır, ama her tasarımın yanında tanıma kolaylığı için (varsa, en fazla 10 adet) gerçek fotoğraflar da gösterilir. Şu an açık olan kanala göre hesaplanır. Sadece kodlanmış kalemler dahildir; Kayıp Kargo hariç.</p>
       <div id="topDesignsTable" style="margin-top:16px;"></div>
     </div>
   </div>
@@ -2702,10 +2709,11 @@ function renderCurrentStage(){
 
 document.querySelectorAll('.entry-subtab[data-sub]').forEach(t=>{
   t.onclick = ()=>{
-    // Coming back from Müşteri Veritabanı, İadeler, WhatsApp Kuyruğu, or
-    // Sipariş Sorgula (none of these are a currentEntryMode — all four are
-    // independent views layered on top) — restore everything they hid, so
-    // a normal channel looks exactly like it did before.
+    // Coming back from Müşteri Veritabanı, İadeler, WhatsApp Kuyruğu,
+    // Sipariş Sorgula, or Genel Çok Satanlar (none of these are a
+    // currentEntryMode — all five are independent views layered on top) —
+    // restore everything they hid, so a normal channel looks exactly like
+    // it did before.
     document.getElementById('musteriDbBtn').classList.remove('active');
     document.getElementById('musteriDbPanel').style.display = 'none';
     document.getElementById('iadelerBtn').classList.remove('active');
@@ -2714,6 +2722,8 @@ document.querySelectorAll('.entry-subtab[data-sub]').forEach(t=>{
     document.getElementById('waQueuePanel').style.display = 'none';
     document.getElementById('siparisSorgulaBtn').classList.remove('active');
     document.getElementById('siparisSorgulaPanel').style.display = 'none';
+    document.getElementById('overallDesignsBtn').classList.remove('active');
+    document.getElementById('overallDesignsPanel').style.display = 'none';
     document.getElementById('stageSelector').style.display = '';
     document.querySelectorAll('.entry-subtab[data-sub]').forEach(x=>x.classList.remove('active'));
     document.querySelectorAll('.entry-sub-panel[id^="entrySub-"]').forEach(x=>x.classList.remove('active'));
@@ -2748,12 +2758,13 @@ document.querySelectorAll('.entry-subtab[data-sub]').forEach(t=>{
   };
 });
 
-// Müşteri Veritabanı, İadeler, WhatsApp Kuyruğu, and Sipariş Sorgula are
-// independent views, not real channel modes (currentEntryMode never
-// becomes any of their names) — so none of the category-based logic
-// elsewhere (numbering, stage tabs, entry forms) needs to know they exist.
-// Each one just hides the normal channel content and the other three,
-// then shows itself; clicking any real channel button restores everything.
+// Müşteri Veritabanı, İadeler, WhatsApp Kuyruğu, Sipariş Sorgula, and Genel
+// Çok Satanlar are independent views, not real channel modes
+// (currentEntryMode never becomes any of their names) — so none of the
+// category-based logic elsewhere (numbering, stage tabs, entry forms)
+// needs to know they exist. Each one just hides the normal channel content
+// and the other four, then shows itself; clicking any real channel button
+// restores everything.
 document.getElementById('musteriDbBtn').onclick = ()=>{
   document.querySelectorAll('.entry-subtab[data-sub]').forEach(x=>x.classList.remove('active'));
   document.getElementById('musteriDbBtn').classList.add('active');
@@ -2763,6 +2774,8 @@ document.getElementById('musteriDbBtn').onclick = ()=>{
   document.getElementById('waQueuePanel').style.display = 'none';
   document.getElementById('siparisSorgulaBtn').classList.remove('active');
   document.getElementById('siparisSorgulaPanel').style.display = 'none';
+  document.getElementById('overallDesignsBtn').classList.remove('active');
+  document.getElementById('overallDesignsPanel').style.display = 'none';
   document.getElementById('stageSelector').style.display = 'none';
   ['entry','queue','sort','production','designs'].forEach(id=>document.getElementById(id).classList.remove('active'));
   document.getElementById('sharedItemsCard').style.display = 'none';
@@ -2779,6 +2792,8 @@ document.getElementById('iadelerBtn').onclick = ()=>{
   document.getElementById('waQueuePanel').style.display = 'none';
   document.getElementById('siparisSorgulaBtn').classList.remove('active');
   document.getElementById('siparisSorgulaPanel').style.display = 'none';
+  document.getElementById('overallDesignsBtn').classList.remove('active');
+  document.getElementById('overallDesignsPanel').style.display = 'none';
   document.getElementById('stageSelector').style.display = 'none';
   ['entry','queue','sort','production','designs'].forEach(id=>document.getElementById(id).classList.remove('active'));
   document.getElementById('sharedItemsCard').style.display = 'none';
@@ -2801,6 +2816,8 @@ document.getElementById('waQueueBtn').onclick = ()=>{
   document.getElementById('waQueueBtn').classList.add('active');
   document.getElementById('siparisSorgulaBtn').classList.remove('active');
   document.getElementById('siparisSorgulaPanel').style.display = 'none';
+  document.getElementById('overallDesignsBtn').classList.remove('active');
+  document.getElementById('overallDesignsPanel').style.display = 'none';
   document.getElementById('stageSelector').style.display = 'none';
   ['entry','queue','sort','production','designs'].forEach(id=>document.getElementById(id).classList.remove('active'));
   document.getElementById('sharedItemsCard').style.display = 'none';
@@ -2822,12 +2839,36 @@ document.getElementById('siparisSorgulaBtn').onclick = ()=>{
   document.getElementById('waQueueBtn').classList.remove('active');
   document.getElementById('waQueuePanel').style.display = 'none';
   document.getElementById('siparisSorgulaBtn').classList.add('active');
+  document.getElementById('overallDesignsBtn').classList.remove('active');
+  document.getElementById('overallDesignsPanel').style.display = 'none';
   document.getElementById('stageSelector').style.display = 'none';
   ['entry','queue','sort','production','designs'].forEach(id=>document.getElementById(id).classList.remove('active'));
   document.getElementById('sharedItemsCard').style.display = 'none';
   document.getElementById('lostCargoLookupCard').style.display = 'none';
   document.getElementById('siparisSorgulaPanel').style.display = 'block';
   renderSiparisSorgula();
+};
+// Genel Çok Satanlar — same idea as the per-channel Çok Satanlar stage tab,
+// but deliberately ignores currentEntryMode entirely so a design used
+// under the same code across different channels counts as one combined
+// total instead of five separate rankings.
+document.getElementById('overallDesignsBtn').onclick = ()=>{
+  document.querySelectorAll('.entry-subtab[data-sub]').forEach(x=>x.classList.remove('active'));
+  document.getElementById('musteriDbBtn').classList.remove('active');
+  document.getElementById('musteriDbPanel').style.display = 'none';
+  document.getElementById('iadelerBtn').classList.remove('active');
+  document.getElementById('iadelerPanel').style.display = 'none';
+  document.getElementById('waQueueBtn').classList.remove('active');
+  document.getElementById('waQueuePanel').style.display = 'none';
+  document.getElementById('siparisSorgulaBtn').classList.remove('active');
+  document.getElementById('siparisSorgulaPanel').style.display = 'none';
+  document.getElementById('overallDesignsBtn').classList.add('active');
+  document.getElementById('stageSelector').style.display = 'none';
+  ['entry','queue','sort','production','designs'].forEach(id=>document.getElementById(id).classList.remove('active'));
+  document.getElementById('sharedItemsCard').style.display = 'none';
+  document.getElementById('lostCargoLookupCard').style.display = 'none';
+  document.getElementById('overallDesignsPanel').style.display = 'block';
+  renderOverallDesigns();
 };
 let cdbMode = 'all';
 document.querySelectorAll('.entry-subtab[data-mode]').forEach(b=>{
@@ -7499,63 +7540,87 @@ function orderAgeBadge(o){
 // really comparable to each other, so this deliberately doesn't mix them.
 // Only coded items count (a still-pending item has no code yet); Kayıp
 // Kargo excluded, same rule as everywhere else.
-function renderDesigns(){
-  const tableEl = document.getElementById('topDesignsTable');
-  if(!tableEl) return;
+// Shared by both the per-channel Çok Satanlar (scoped to whichever channel
+// tab is open) and the overall cross-channel version below — same matching
+// rules, same image fallback, same top-10 cap, differing only in which
+// orders orderFilter lets through.
+function computeTopDesigns(orderFilter){
   const byCode = {};
   state.orders.forEach(o=>{
     if(o.saleType==='Kayıp Kargo') return;
-    if(channelCategoryForNumbering(o.channel)!==currentEntryMode) return;
+    if(!orderFilter(o)) return;
     o.items.forEach(item=>{
       if(!item.code) return;
-      byCode[item.code] = byCode[item.code] || { pieces:0, orders:new Set(), m2:0, image:null, suggested:false };
+      byCode[item.code] = byCode[item.code] || { pieces:0, orders:new Set(), m2:0, confirmed:[], suggested:[] };
       const qty = item.qty || 1;
       byCode[item.code].pieces += qty;
       byCode[item.code].orders.add(o.id);
       byCode[item.code].m2 += sizeToM2(item.size) * qty;
       // Same three-step fallback Baskı öncesi already uses, in the same
-      // order, so the two screens never disagree about whether a design
-      // "has a photo": this item's own upload, then the barkod-matched
-      // catalog photo, then — only if neither exists — another item in the
-      // SAME order that happens to have a photo (Baskı öncesi's own "aynı
-      // tasarım olabilir" guess for orders with multiple similar-looking
-      // pieces). That third one is explicitly a same-order guess, not a
-      // confirmed match for this design specifically, so it's flagged as
-      // "suggested" and shown visually softened, exactly like Baskı
-      // öncesi already fades it — never treated as equal certainty to an
-      // actual confirmed photo.
-      if(!byCode[item.code].image){
-        const own = (item.images && item.images.length) ? item.images[0] : null;
-        const catalog = own ? null : catalogImageFor(item);
-        const sibling = (own || catalog) ? null : o.items.find(i=>i!==item && i.images && i.images.length);
-        const img = own || catalog || (sibling ? sibling.images[0] : null);
-        if(img){
-          byCode[item.code].image = img;
-          byCode[item.code].suggested = !own && !catalog;
+      // order, so every screen agrees on whether a piece "has a photo":
+      // this item's own upload, then the barkod-matched catalog photo,
+      // then — only if neither exists — another item in the SAME order
+      // that happens to have a photo (Baskı öncesi's own "aynı tasarım
+      // olabilir" guess). That third source is explicitly a same-order
+      // guess, not a confirmed photo of this exact piece, so it's
+      // collected separately and only shown faded, never mixed in with
+      // confirmed ones as if equally certain. Up to 10 distinct confirmed
+      // photos are kept per design — real copies sold can legitimately
+      // look slightly different shot to shot, so showing a few rather
+      // than just one gives a truer picture of what's actually gone out
+      // under this code.
+      const own = (item.images && item.images.length) ? item.images[0] : null;
+      const catalog = own ? null : catalogImageFor(item);
+      const confirmed = own || catalog;
+      if(confirmed && byCode[item.code].confirmed.length<10 && !byCode[item.code].confirmed.includes(confirmed)){
+        byCode[item.code].confirmed.push(confirmed);
+      } else if(!confirmed && byCode[item.code].confirmed.length===0 && byCode[item.code].suggested.length<10){
+        const sibling = o.items.find(i=>i!==item && i.images && i.images.length);
+        if(sibling && !byCode[item.code].suggested.includes(sibling.images[0])){
+          byCode[item.code].suggested.push(sibling.images[0]);
         }
       }
     });
   });
-  const rows = Object.keys(byCode).map(code=>({
+  return Object.keys(byCode).map(code=>({
     code, pieces: byCode[code].pieces, orders: byCode[code].orders.size, m2: byCode[code].m2,
-    image: byCode[code].image, suggested: byCode[code].suggested
-  })).sort((a,b)=>b.pieces-a.pieces);
-
-  if(!rows.length){ tableEl.innerHTML = '<p class="muted">Bu kanalda henüz kodlanmış kalem yok.</p>'; return; }
-  tableEl.innerHTML = `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:14px;">
+    // Confirmed photos always take priority over guessed ones — a design
+    // with even one real confirmed photo never shows the faded same-order
+    // guesses alongside it.
+    images: byCode[code].confirmed.length ? byCode[code].confirmed : byCode[code].suggested,
+    suggested: byCode[code].confirmed.length===0 && byCode[code].suggested.length>0,
+  })).sort((a,b)=>b.pieces-a.pieces || b.m2-a.m2).slice(0,10);
+}
+function topDesignsGridHtml(rows, emptyMsg){
+  if(!rows.length) return `<p class="muted">${emptyMsg}</p>`;
+  return `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:14px;">
     ${rows.map((r,i)=>`
       <div class="tag" style="display:flex;flex-direction:column;align-items:center;text-align:center;padding:10px;">
         <span style="font-weight:600;color:var(--ink-soft);font-size:12px;">#${i+1}</span>
-        ${r.image
-          ? `<img src="${r.image}" style="width:100px;height:100px;object-fit:cover;border-radius:8px;margin:6px 0;${r.suggested?'opacity:.45;':''}" title="${r.suggested?'Aynı siparişteki başka bir üründen — bu tasarıma özel doğrulanmış bir fotoğraf değil':''}">
-             ${r.suggested?'<span class="muted" style="font-size:10px;">(tahmini görsel)</span>':''}`
+        ${r.images.length
+          ? `<div style="display:flex;flex-wrap:wrap;gap:3px;justify-content:center;width:150px;margin:6px 0;">
+               ${r.images.map(src=>`<img src="${src}" style="width:34px;height:34px;object-fit:cover;border-radius:5px;${r.suggested?'opacity:.45;':''}" title="${r.suggested?'Aynı siparişteki başka bir üründen — bu tasarıma özel doğrulanmış bir fotoğraf değil':''}">`).join('')}
+             </div>
+             ${r.suggested?'<span class="muted" style="font-size:10px;">(tahmini görsel)</span>':`<span class="muted" style="font-size:10px;">${r.images.length} fotoğraf</span>`}`
           : `<div style="width:100px;height:100px;background:var(--paper);border-radius:8px;margin:6px 0;display:flex;align-items:center;justify-content:center;color:var(--ink-soft);font-size:11px;">Görsel yok</div>`}
-        <strong style="font-family:'IBM Plex Mono',monospace;">${r.code}</strong>
+        <strong style="font-family:'IBM Plex Mono',monospace;margin-top:4px;">${r.code}</strong>
         <span class="muted" style="font-size:12px;margin-top:4px;">${r.pieces} adet · ${r.orders} sipariş</span>
         <span class="muted" style="font-size:12px;">${r.m2.toFixed(2)} m²</span>
       </div>
     `).join('')}
   </div>`;
+}
+function renderDesigns(){
+  const tableEl = document.getElementById('topDesignsTable');
+  if(!tableEl) return;
+  const rows = computeTopDesigns(o=>channelCategoryForNumbering(o.channel)===currentEntryMode);
+  tableEl.innerHTML = topDesignsGridHtml(rows, 'Bu kanalda henüz kodlanmış kalem yok.');
+}
+function renderOverallDesigns(){
+  const tableEl = document.getElementById('overallDesignsTable');
+  if(!tableEl) return;
+  const rows = computeTopDesigns(()=>true);
+  tableEl.innerHTML = topDesignsGridHtml(rows, 'Henüz kodlanmış kalem yok.');
 }
 function renderOrders(){
   const tbody = document.querySelector('#ordersTable tbody');
