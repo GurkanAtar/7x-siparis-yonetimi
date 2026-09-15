@@ -7508,26 +7508,37 @@ function renderDesigns(){
     if(channelCategoryForNumbering(o.channel)!==currentEntryMode) return;
     o.items.forEach(item=>{
       if(!item.code) return;
-      byCode[item.code] = byCode[item.code] || { pieces:0, orders:new Set(), m2:0, image:null };
+      byCode[item.code] = byCode[item.code] || { pieces:0, orders:new Set(), m2:0, image:null, suggested:false };
       const qty = item.qty || 1;
       byCode[item.code].pieces += qty;
       byCode[item.code].orders.add(o.id);
       byCode[item.code].m2 += sizeToM2(item.size) * qty;
-      // First photo found for this code wins as its representative image —
-      // manually uploaded first (IG/Sıcak Satış/İhracat), falling back to
-      // the barkod-matched catalog photo (Trendyol/Hepsiburada) when there
-      // isn't one. A code isn't strictly guaranteed to have only one
-      // distinct photo across every copy sold, but in practice the same
-      // design looks the same, so whichever copy happened to get
-      // photographed first is a fine representative.
+      // Same three-step fallback Baskı öncesi already uses, in the same
+      // order, so the two screens never disagree about whether a design
+      // "has a photo": this item's own upload, then the barkod-matched
+      // catalog photo, then — only if neither exists — another item in the
+      // SAME order that happens to have a photo (Baskı öncesi's own "aynı
+      // tasarım olabilir" guess for orders with multiple similar-looking
+      // pieces). That third one is explicitly a same-order guess, not a
+      // confirmed match for this design specifically, so it's flagged as
+      // "suggested" and shown visually softened, exactly like Baskı
+      // öncesi already fades it — never treated as equal certainty to an
+      // actual confirmed photo.
       if(!byCode[item.code].image){
-        const img = (item.images && item.images.length) ? item.images[0] : catalogImageFor(item);
-        if(img) byCode[item.code].image = img;
+        const own = (item.images && item.images.length) ? item.images[0] : null;
+        const catalog = own ? null : catalogImageFor(item);
+        const sibling = (own || catalog) ? null : o.items.find(i=>i!==item && i.images && i.images.length);
+        const img = own || catalog || (sibling ? sibling.images[0] : null);
+        if(img){
+          byCode[item.code].image = img;
+          byCode[item.code].suggested = !own && !catalog;
+        }
       }
     });
   });
   const rows = Object.keys(byCode).map(code=>({
-    code, pieces: byCode[code].pieces, orders: byCode[code].orders.size, m2: byCode[code].m2, image: byCode[code].image
+    code, pieces: byCode[code].pieces, orders: byCode[code].orders.size, m2: byCode[code].m2,
+    image: byCode[code].image, suggested: byCode[code].suggested
   })).sort((a,b)=>b.pieces-a.pieces);
 
   if(!rows.length){ tableEl.innerHTML = '<p class="muted">Bu kanalda henüz kodlanmış kalem yok.</p>'; return; }
@@ -7536,7 +7547,8 @@ function renderDesigns(){
       <div class="tag" style="display:flex;flex-direction:column;align-items:center;text-align:center;padding:10px;">
         <span style="font-weight:600;color:var(--ink-soft);font-size:12px;">#${i+1}</span>
         ${r.image
-          ? `<img src="${r.image}" style="width:100px;height:100px;object-fit:cover;border-radius:8px;margin:6px 0;">`
+          ? `<img src="${r.image}" style="width:100px;height:100px;object-fit:cover;border-radius:8px;margin:6px 0;${r.suggested?'opacity:.45;':''}" title="${r.suggested?'Aynı siparişteki başka bir üründen — bu tasarıma özel doğrulanmış bir fotoğraf değil':''}">
+             ${r.suggested?'<span class="muted" style="font-size:10px;">(tahmini görsel)</span>':''}`
           : `<div style="width:100px;height:100px;background:var(--paper);border-radius:8px;margin:6px 0;display:flex;align-items:center;justify-content:center;color:var(--ink-soft);font-size:11px;">Görsel yok</div>`}
         <strong style="font-family:'IBM Plex Mono',monospace;">${r.code}</strong>
         <span class="muted" style="font-size:12px;margin-top:4px;">${r.pieces} adet · ${r.orders} sipariş</span>
