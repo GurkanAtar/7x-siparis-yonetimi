@@ -917,6 +917,16 @@
   </div>
 </div>
 
+<div id="confirmModalOverlay" style="display:none;position:fixed;inset:0;background:rgba(42,38,34,.45);z-index:100;align-items:center;justify-content:center;">
+  <div style="background:var(--card);border-radius:12px;padding:22px;width:340px;box-shadow:0 8px 28px rgba(0,0,0,.2);">
+    <p id="confirmModalText" style="margin:0 0 16px;font-size:14px;line-height:1.4;"></p>
+    <div style="display:flex;gap:8px;justify-content:flex-end;">
+      <button class="ghost small" id="confirmModalCancel">Vazgeç</button>
+      <button class="small" id="confirmModalOk" style="background:var(--rust);border-color:var(--rust);">Evet, sil</button>
+    </div>
+  </div>
+</div>
+
 <div id="imgLightboxOverlay" style="display:none;position:fixed;inset:0;background:rgba(20,18,16,.85);z-index:150;align-items:center;justify-content:center;cursor:zoom-out;">
   <img id="imgLightboxImg" style="max-width:92vw;max-height:92vh;border-radius:8px;box-shadow:0 12px 40px rgba(0,0,0,.5);">
   <button id="imgLightboxClose" style="position:fixed;top:18px;right:24px;background:rgba(255,255,255,.15);color:#fff;border:1px solid rgba(255,255,255,.3);border-radius:50%;width:38px;height:38px;font-size:18px;cursor:pointer;">×</button>
@@ -1367,6 +1377,26 @@ function showMessage(text){
     ok.onclick = cleanup;
     ok.focus();
     const onKey = (e)=>{ if(e.key==='Enter'||e.key==='Escape'){ cleanup(); document.removeEventListener('keydown', onKey); } };
+    document.addEventListener('keydown', onKey);
+  });
+}
+// A real "are you sure" for destructive actions that shouldn't fire
+// instantly just because requireAdmin() silently auto-approves the owner
+// (it returns immediately for that role, with no dialog of its own) —
+// callers that actually need the person to stop and confirm losing data
+// should call this FIRST, then requireAdmin() only if this resolves true.
+// Resolves true on "Evet, sil", false on "Vazgeç" or Escape.
+function showConfirm(text){
+  return new Promise(resolve=>{
+    const overlay = document.getElementById('confirmModalOverlay');
+    document.getElementById('confirmModalText').textContent = text;
+    overlay.style.display = 'flex';
+    const cleanup = (val)=>{ overlay.style.display='none'; resolve(val); };
+    document.getElementById('confirmModalOk').onclick = ()=>cleanup(true);
+    document.getElementById('confirmModalCancel').onclick = ()=>cleanup(false);
+    const onKey = (e)=>{
+      if(e.key==='Escape'){ cleanup(false); document.removeEventListener('keydown', onKey); }
+    };
     document.addEventListener('keydown', onKey);
   });
 }
@@ -6489,6 +6519,12 @@ function renderCatalogUploadLog(){
 document.getElementById('tyCatalogClear').onclick = async ()=>{
   const entries = Object.keys(state.productCatalog||{});
   if(!entries.length){ showMessage('Katalog zaten boş.'); return; }
+  // requireAdmin() below auto-approves silently for the owner — no dialog
+  // of its own — so a genuinely destructive, whole-catalog wipe needs an
+  // explicit stop-and-confirm step first, not just a PIN gate that a
+  // yönetici account sails straight through unnoticed.
+  const confirmed = await showConfirm(`Ürün görsel kataloğunu tamamen silmek üzeresiniz — ${entries.length} ürün görseli kaybedilecek. Bu işlemi geri almak için kısa süreli bir "Geri al" seçeneği sunulacak, ama sayfadan ayrılırsanız kalıcı olur. Devam edilsin mi?`);
+  if(!confirmed) return;
   const auth = await requireAdmin(`Ürün görsel kataloğunu temizleme (${entries.length} ürün silinecek)`);
   if(!auth) return;
   const savedCatalog = state.productCatalog;
@@ -8628,7 +8664,7 @@ function durationBadge(order, completedAt){
     const placedAt = orderPlacedAt(order);
     if(!placedAt) return '';
     const lag = Math.max(0, Math.floor((new Date(completedAt).getTime() - placedAt.getTime())/(60*60*1000)));
-    return lag===0 ? `<span class="pill pill-produced">Zamanında üretildi</span>` : `<span class="pill pill-produced">+${formatDurationLabel(lag, order)} üretim süresi</span>`;
+    return lag===0 ? `<span class="pill pill-produced">Zamanında üretildi</span>` : `<span class="pill pill-produced">${formatDurationLabel(lag, order)}</span>`;
   }
   const hours = hoursSinceOrderDate(order);
   if(hours===null || hours<=0) return '';
@@ -8687,15 +8723,6 @@ function renderProduction(){
         const num = itemNumbers[order.id+'::'+(bundle[0].setLabel||bundle[0].id)] || '—';
         const carried = isGroupCarriedOver(bundle);
         const isProduced = bundle[0].status === 'produced';
-        // "X saattir üretimde" only makes sense while something is actually
-        // still waiting — once produced, ageBadge() below already shows the
-        // real story ("+X üretim süresi", the total time it took), so
-        // showing both together was self-contradictory: a finished item
-        // claiming it's "still in production for X hours."
-        const hours = hoursWaiting(bundle[0].sortedAt);
-        const waitNote = (isProduced || hours<=0) ? '' : hours===1
-          ? ` <span class="pill pill-pending" style="margin-left:4px">1 saattir üretimde</span>`
-          : ` <span class="pill pill-pending" style="margin-left:4px">${hours} saattir üretimde</span>`;
         // Same copy-expansion as Ayırma & etiketler — a bundle representing
         // more than one physical piece (a 2-piece pair at qty > 1, or any other
         // multi-piece qty) gets its own row per copy here too, each with its
@@ -8718,7 +8745,7 @@ function renderProduction(){
           } else {
             actionHtml = `<span style="color:var(--forest);font-weight:600">✓ Üretildi</span> <button class="ghost small edit-produced" data-oid="${order.id}" data-ids="${ids}">Düzenle</button>`;
           }
-          tag.innerHTML = `${thumb} <span class="ts">${pos}</span> ${bundle[0].code} — ${order.customerName} — ${sizes}${setNote}${waitNote} ${ageBadge(order, bundle[0])}
+          tag.innerHTML = `${thumb} <span class="ts">${pos}</span> ${bundle[0].code} — ${order.customerName} — ${sizes}${setNote} ${ageBadge(order, bundle[0])}
             ${actionHtml}`;
           g.appendChild(tag);
         }
