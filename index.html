@@ -729,6 +729,12 @@
           </select>
         </div>
         <div id="newChanCityWrap" style="display:none"><label>Şehir</label><input id="newChanCity" placeholder="örn. Bursa"></div>
+      </div>
+      <div class="row row3" id="newChanExtraRow" style="display:none;margin-top:10px;">
+        <div id="newChanPhoneWrap" style="display:none"><label>Telefon</label><input id="newChanPhone" placeholder="05XX XXX XX XX"></div>
+        <div id="newChanCountryWrap" style="display:none"><label>Ülke</label><input id="newChanCountry" placeholder="örn. Rusya"></div>
+      </div>
+      <div class="row row3" style="margin-top:10px;">
         <div id="newChanMarkaWrap" style="display:none"><label>Marka</label><input id="newChanMarka" placeholder="örn. Qatalina"></div>
       </div>
       <p class="muted" id="newChanMarkaNote" style="display:none;margin-top:-4px;">Instagram bayilerinde marka doğrudan kaynaktan gelmez — burada bir kere kaydedin, bayi adını sonradan değiştirseniz bile marka bağlantısı korunur.</p>
@@ -5052,7 +5058,7 @@ document.getElementById('saveOrder').onclick = async ()=>{
     if(!f.name) missing.push({id:'exName', label:'Müşteri adı'});
     if(!f.city) missing.push({id:'exCity', label:'Şehir'});
     if(!f.country) missing.push({id:'exCountry', label:'Ülke'});
-    if(!f.exchangeRate) missing.push({id:'exRate', label:'Kur'});
+    if(!f.exchangeRate) missing.push({id:'exRate', label:'Kur (girilmezse Toplam Tutar hesaplanamaz)'});
     if(missing.length){
       missing.forEach(m=>document.getElementById(m.id).style.borderColor = 'var(--rust)');
       showMessage(`Sipariş kaydedilemedi — şu alanlar boş: ${missing.map(m=>m.label).join(', ')}. Lütfen doldurun.`);
@@ -6721,7 +6727,7 @@ const NUMBERING_PREFIX = { ig:'IG-', sicaksatis:'SS-', ihracat:'EXP-', hepsibura
 // sends from. Generated once, the moment a channel is created (whichever
 // of the many places in this app that happens — manual entry here, or
 // auto-registration from an upload/order), then never changes.
-const CHANNEL_CODE_CATEGORY_PREFIX = { ig:'IG', trendyol:'TY', hepsiburada:'HB', sicaksatis:'SS', ihracat:'IH' };
+const CHANNEL_CODE_CATEGORY_PREFIX = { ig:'IG', trendyol:'TY', hepsiburada:'HB', sicaksatis:'SS', ihracat:'EX' };
 // The 7 channels that already existed when this system was introduced —
 // exact values as decided, rather than letting the generic derivation
 // below (which wouldn't reliably reproduce "7X" from "7xhome", for
@@ -6770,14 +6776,26 @@ function generateChannelCode(channel){
 // remember to generate a code at each of those separate places. Collisions
 // (two different dealers naturally producing the same 2 letters) get a
 // numeric suffix, assigned once and then permanent, same as the base code.
+//
+// Also self-corrects a code whose prefix no longer matches its channel's
+// actual category — this happened for every Sıcak Satış/İhracat dealer
+// registered while channelCategoryForNumbering didn't yet recognize those
+// two dealer types (a bug, now fixed there), which meant they'd all been
+// silently assigned an IG- prefix instead of SS-/EX-. A normal correct code
+// is never touched here — only ones that demonstrably don't match what
+// their category should produce.
 function ensureAllChannelCodes(){
   const used = new Set(state.channels.filter(c=>c.code).map(c=>c.code));
   let changed = false;
   state.channels.forEach(c=>{
-    if(c.code) return;
+    const correctPrefix = CHANNEL_CODE_CATEGORY_PREFIX[channelCategoryForNumbering(c.name)] || 'XX';
+    const hasWrongPrefix = c.code && !c.code.startsWith(correctPrefix);
+    if(c.code && !hasWrongPrefix) return;
+    if(hasWrongPrefix) used.delete(c.code);
     const base = generateChannelCode(c);
     let code = base, suffix = 2;
     while(used.has(code)){ code = base + suffix; suffix++; }
+    if(hasWrongPrefix) logActivity(`Kanal kodu düzeltildi (yanlış kategori öneki): "${c.name}" — "${c.code}" → "${code}"`);
     c.code = code;
     used.add(code);
     changed = true;
@@ -6854,6 +6872,13 @@ function orderHasMissingContactWarning(o){
 function channelCategoryForNumbering(channelName){
   if(channelName==='İhracat') return 'ihracat';
   if(channelName==='Sıcak Satış') return 'sicaksatis';
+  // Individual dealers under these two categories (e.g. "abdullah bey —
+  // Üsküdar", "Sweet Home — Beyrut, Lubnan") don't match the plain-name
+  // checks above — those only catch the category itself, not a specific
+  // dealer within it. Checked via the registry's own type field, same way
+  // Trendyol/Hepsiburada bayi channels are matched just below.
+  if(channelType(channelName)==='Sıcak Satış bayi') return 'sicaksatis';
+  if(channelType(channelName)==='İhracat bayi') return 'ihracat';
   if(channelType(channelName).startsWith('Trendyol')) return 'trendyol';
   if(channelType(channelName).startsWith('Hepsiburada')) return 'hepsiburada';
   // Second, INDEPENDENT signal that needs no registry entry at all: every
@@ -7715,37 +7740,74 @@ function getOrderItemGroups(order){
   return keys;
 }
 function getOrderPhysicalPieces(order){
-  // One entry per physical carpet/copy, in the same group order as
-  // getOrderItemGroups — this is the single, continuous sequence used to
-  // number every physical piece across the WHOLE order (701-1/6, 701-2/6,
-  // ...), not restarted per item and not grouped separately by item, whether
-  // pieces come from the same item (via qty) or from different items
-  // entirely. A collapsible pair (only the two specific bathroom-mat presets)
-  // contributes one entry per copy ordered; every other case (standalone
-  // items, and sets of any other size/combination) contributes
-  // bundleStickerCount entries — one per physical piece.
-  const groupKeys = getOrderItemGroups(order);
+  // One entry per physical carpet/copy — the single continuous sequence
+  // used to number every physical piece across the WHOLE order
+  // (701-1/6, 701-2/6, ...). A collapsible pair (only the two specific
+  // bathroom-mat presets) contributes one entry per copy ordered, since
+  // both sizes are produced and finished as one inseparable unit — that
+  // pair genuinely IS one product. Every other case — a standalone item,
+  // AND each size within any other kind of set (3+ pieces, or a 2-piece
+  // combination that isn't one of those two exact pairs) — contributes
+  // its OWN independent sequence of entries, one per physical piece of
+  // THAT SPECIFIC ITEM. This matters: different sizes within a set can
+  // genuinely finish production at different times, so each needs its own
+  // distinct position — treating them as one shared sequence (as this used
+  // to) let two different sizes' stickers collide on the same position
+  // number.
   const pieces = [];
-  groupKeys.forEach(key=>{
-    const bundle = order.items.filter(i=>(i.setLabel||i.id)===key);
-    const count = bundleStickerCount(bundle);
-    for(let n=1; n<=count; n++){
-      pieces.push({ groupKey: key, copyIndex: n });
+  const seenCollapsedLabels = new Set();
+  order.items.forEach(item=>{
+    const setMates = item.setLabel ? order.items.filter(i=>i.setLabel===item.setLabel) : [item];
+    const collapsed = !!item.setLabel && isCollapsiblePair(setMates);
+    if(collapsed){
+      if(seenCollapsedLabels.has(item.setLabel)) return;
+      seenCollapsedLabels.add(item.setLabel);
+      const count = setMates[0].qty || 1;
+      for(let n=1; n<=count; n++) pieces.push({ setLabel: item.setLabel, itemId: null, copyIndex: n });
+    } else {
+      const count = item.qty || 1;
+      for(let n=1; n<=count; n++) pieces.push({ setLabel: null, itemId: item.id, copyIndex: n });
     }
   });
   return pieces;
 }
 function itemPosition(order, item, copyIndex){
-  // copyIndex selects which physical piece within a multi-piece/multi-copy
-  // group this refers to (1-based) — omitted, it defaults to the group's
-  // first piece, which is what a single "one row per group" display (Baskı
-  // öncesi, Tüm siparişler, Üretim) wants: a stable, representative position
-  // for that whole group without needing to show a range of numbers.
-  const key = item.setLabel || item.id;
+  // copyIndex selects which physical piece within a multi-copy item/pair
+  // this refers to (1-based) — omitted, it defaults to the first piece,
+  // which is what a single "one row per group" display (Baskı öncesi,
+  // Tüm siparişler) wants: a stable, representative position without
+  // needing to show a range of numbers.
+  const setMates = item.setLabel ? order.items.filter(i=>i.setLabel===item.setLabel) : [item];
+  const collapsed = !!item.setLabel && isCollapsiblePair(setMates);
   const pieces = getOrderPhysicalPieces(order);
   const wantedCopy = copyIndex || 1;
-  const idx = pieces.findIndex(p => p.groupKey===key && p.copyIndex===wantedCopy);
+  const idx = collapsed
+    ? pieces.findIndex(p => p.setLabel===item.setLabel && p.copyIndex===wantedCopy)
+    : pieces.findIndex(p => p.itemId===item.id && p.copyIndex===wantedCopy);
   return `${idx+1}/${pieces.length}`;
+}
+// Groups an already status-filtered item list into render-bundles for
+// Ayırma & etiketler / Üretim: a collapsible pair stays combined as one
+// 2-item bundle (unchanged, still one row, one shared Hedef/Üretildi);
+// everything else — standalone, or any piece of a non-collapsible set —
+// becomes its own independent 1-item bundle, so each size in a set gets
+// its own row, own sticker, and own completion click. Mirrors exactly how
+// getOrderPhysicalPieces groups things, so on-screen rows and printed
+// sticker positions always agree with each other.
+function groupItemsForProductionRows(items){
+  const bundles = [];
+  const seenCollapsedLabels = new Set();
+  items.forEach(item=>{
+    const setMates = item.setLabel ? items.filter(i=>i.setLabel===item.setLabel) : [item];
+    if(item.setLabel && isCollapsiblePair(setMates)){
+      if(seenCollapsedLabels.has(item.setLabel)) return;
+      seenCollapsedLabels.add(item.setLabel);
+      bundles.push(setMates);
+    } else {
+      bundles.push([item]);
+    }
+  });
+  return bundles;
 }
 
 function numberWithPosition(num, order, item, copyIndex){
@@ -8138,7 +8200,6 @@ function renderSort(){
   renderFileFilterListGeneric('sortFileFilterList', 'sortFileFilterToggle', 'sortFileFilterSearch', selectedSortFileFilterIds, currentEntryMode, renderSort);
   const groups = {};
   let count=0;
-  const seenSets = new Set();
   const itemNumbers = computeItemNumbers();
   const filteredOrders = applyQueueFilters(state.orders, selectedSortFileFilterIds, 'sortTsFrom', 'sortTsTo');
   filteredOrders.forEach(o=>{
@@ -8158,11 +8219,7 @@ function renderSort(){
     // printed, so this naturally shows both states side by side without
     // needing any other change to the grouping itself.
     const relevant = o.items.filter(i=>i.status==='coded' || i.status==='sorted');
-    relevant.forEach(item=>{
-      const setKey = o.id + '::' + (item.setLabel || item.id);
-      if(seenSets.has(setKey)) return;
-      seenSets.add(setKey);
-      const bundle = item.setLabel ? relevant.filter(i=>i.setLabel===item.setLabel) : [item];
+    groupItemsForProductionRows(relevant).forEach(bundle=>{
       count += bundle.length;
       const taban = bundle[0].taban;
       groups[taban] = groups[taban]||[];
@@ -8506,7 +8563,6 @@ function renderProduction(){
   renderFileFilterListGeneric('prodFileFilterList', 'prodFileFilterToggle', 'prodFileFilterSearch', selectedProdFileFilterIds, currentEntryMode, renderProduction);
   const groups = {};
   let count=0;
-  const seenSets = new Set();
   const itemNumbers = computeItemNumbers();
   const filteredOrders = applyQueueFilters(state.orders, selectedProdFileFilterIds, 'prodTsFrom', 'prodTsTo');
   filteredOrders.forEach(o=>{
@@ -8520,11 +8576,7 @@ function renderProduction(){
     // splitOffOneCopy) already keeps it as its own separate group here,
     // distinct from any copies still waiting to be produced.
     const relevant = o.items.filter(i=>i.status==='sorted' || i.status==='produced');
-    relevant.forEach(item=>{
-      const setKey = o.id + '::' + (item.setLabel || item.id);
-      if(seenSets.has(setKey)) return;
-      seenSets.add(setKey);
-      const bundle = item.setLabel ? relevant.filter(i=>i.setLabel===item.setLabel) : [item];
+    groupItemsForProductionRows(relevant).forEach(bundle=>{
       count += bundle.length;
       const taban = bundle[0].taban;
       groups[taban] = groups[taban]||[];
@@ -9069,7 +9121,17 @@ function renderMarkaRegistry(){
 
 document.getElementById('newChanType').addEventListener('change', ()=>{
   const type = document.getElementById('newChanType').value;
-  document.getElementById('newChanCityWrap').style.display = type === 'Sıcak Satış bayi' ? '' : 'none';
+  // Şehir is shared between the two — both need it to disambiguate dealers
+  // with the same name, same as order entry already requires.
+  document.getElementById('newChanCityWrap').style.display = (type === 'Sıcak Satış bayi' || type === 'İhracat bayi') ? '' : 'none';
+  // Telefon (Sıcak Satış) and Ülke/Kur (İhracat) — the same fields order
+  // entry treats as required for these two dealer types, now collectible
+  // here too instead of only ever being entered per-order.
+  const isSicak = type === 'Sıcak Satış bayi';
+  const isIhracat = type === 'İhracat bayi';
+  document.getElementById('newChanExtraRow').style.display = (isSicak || isIhracat) ? '' : 'none';
+  document.getElementById('newChanPhoneWrap').style.display = isSicak ? '' : 'none';
+  document.getElementById('newChanCountryWrap').style.display = isIhracat ? '' : 'none';
   // Marka is only ever manually registered for Instagram bayi — Instagram
   // kurumsal already has a known fixed brand mapping, and Trendyol/
   // Hepsiburada (both kurumsal and bayi) get their brand straight from the
@@ -9085,18 +9147,53 @@ document.getElementById('addChannel').onclick = ()=>{
   if(!name) return;
   const type = document.getElementById('newChanType').value;
   const city = document.getElementById('newChanCity').value.trim();
+  const country = document.getElementById('newChanCountry').value.trim();
+  const phone = document.getElementById('newChanPhone').value.trim();
   const marka = document.getElementById('newChanMarka').value.trim();
-  // Sıcak Satış dealers are identified by name AND city — folded into one string
-  // here so it flows through everywhere a channel is just referenced by name
-  // (order entry, Excel SATIŞ KANALI, Genel Bakış, Raporlar) with no other
-  // changes needed.
-  if(city) name = `${name} — ${city}`;
+  // Same required set as placing an actual order for each of these two
+  // dealer types (see the ssName/ssPhone/ssCity and exName/exCity/exCountry
+  // checks in the order-save validation) — a dealer registered here without
+  // these would just hit the same wall the moment their first order gets
+  // entered, so it's better to ask now. Kur is deliberately NOT collected
+  // here — an exchange rate isn't a fixed property of a dealer the way a
+  // phone number or city is; it moves with the market, so it only ever gets
+  // entered per-order (still required there, unchanged).
+  ['newChanPhone','newChanCity','newChanCountry'].forEach(id=>document.getElementById(id).style.borderColor = '');
+  const missing = [];
+  if(type==='Sıcak Satış bayi'){
+    if(!phone) missing.push({id:'newChanPhone', label:'Telefon'});
+    if(!city) missing.push({id:'newChanCity', label:'Şehir'});
+  }
+  if(type==='İhracat bayi'){
+    if(!city) missing.push({id:'newChanCity', label:'Şehir'});
+    if(!country) missing.push({id:'newChanCountry', label:'Ülke'});
+  }
+  if(missing.length){
+    missing.forEach(m=>document.getElementById(m.id).style.borderColor = 'var(--rust)');
+    showMessage(`Kanal eklenemedi — şu alanlar boş: ${missing.map(m=>m.label).join(', ')}. Lütfen doldurun.`);
+    return;
+  }
+  // Sıcak Satış dealers are identified by name AND city — folded into one
+  // string here so it flows through everywhere a channel is just referenced
+  // by name (order entry, Excel SATIŞ KANALI, Genel Bakış, Raporlar) with no
+  // other changes needed. İhracat folds in city AND country, same reasoning
+  // as the auto-registration path (an international buyer needs both to
+  // disambiguate; a domestic Sıcak Satış customer only needs the city).
+  if(type==='İhracat bayi'){
+    const location = [city, country].filter(Boolean).join(', ');
+    if(location) name = `${name} — ${location}`;
+  } else if(city){
+    name = `${name} — ${city}`;
+  }
   const chan = { name, type };
   if(type==='Instagram bayi' && marka) chan.marka = marka;
+  if(type==='Sıcak Satış bayi' && phone) chan.phone = phone;
   state.channels.push(chan);
   logActivity(`Kanal eklendi: "${name}" (${type})${chan.marka ? ` — Marka: "${chan.marka}"` : ''}`);
   document.getElementById('newChanName').value='';
   document.getElementById('newChanCity').value='';
+  document.getElementById('newChanCountry').value='';
+  document.getElementById('newChanPhone').value='';
   document.getElementById('newChanMarka').value='';
   saveState(); render();
 };
