@@ -689,9 +689,6 @@
     <div class="card">
       <h2>Çok Satanlar</h2>
       <p class="muted" style="margin-top:-6px">Baskı öncesi'nde verilen tasarım koduna göre en çok satılan tasarımlar — sıralama görsele değil sadece koda göre yapılır, ama her tasarımın yanında tanıma kolaylığı için (varsa) bir görsel de gösterilir. Şu an açık olan kanala göre hesaplanır. Sadece kodlanmış kalemler dahildir; Kayıp Kargo hariç.</p>
-      <div style="max-width:700px;">
-        <canvas id="chartTopDesigns" height="260"></canvas>
-      </div>
       <div id="topDesignsTable" style="margin-top:16px;"></div>
     </div>
   </div>
@@ -7503,7 +7500,6 @@ function orderAgeBadge(o){
 // Only coded items count (a still-pending item has no code yet); Kayıp
 // Kargo excluded, same rule as everywhere else.
 function renderDesigns(){
-  const canvas = document.getElementById('chartTopDesigns');
   const tableEl = document.getElementById('topDesignsTable');
   if(!tableEl) return;
   const byCode = {};
@@ -7533,18 +7529,6 @@ function renderDesigns(){
   const rows = Object.keys(byCode).map(code=>({
     code, pieces: byCode[code].pieces, orders: byCode[code].orders.size, m2: byCode[code].m2, image: byCode[code].image
   })).sort((a,b)=>b.pieces-a.pieces);
-
-  if(canvas && typeof Chart!=='undefined'){
-    const top = rows.slice(0,10);
-    destroyTrendChart('topDesigns');
-    trendCharts.topDesigns = new Chart(canvas.getContext('2d'), {
-      type:'bar',
-      data:{ labels: top.map(r=>r.code), datasets:[{ label:'Adet', data: top.map(r=>r.pieces), backgroundColor:'#3C4A6B' }] },
-      options:{ responsive:true, plugins:{legend:{display:false}}, scales:{ y:{ beginAtZero:true, ticks:{stepSize:1} } } }
-    });
-  } else if(canvas){
-    canvas.getContext('2d').clearRect(0,0,canvas.width,canvas.height);
-  }
 
   if(!rows.length){ tableEl.innerHTML = '<p class="muted">Bu kanalda henüz kodlanmış kalem yok.</p>'; return; }
   tableEl.innerHTML = `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:14px;">
