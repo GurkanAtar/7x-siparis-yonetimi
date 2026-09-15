@@ -240,6 +240,7 @@
       <div class="entry-subtab" data-stage="queue">Baskı öncesi</div>
       <div class="entry-subtab" data-stage="sort" id="stageBtn-sort">Ayırma &amp; etiketler</div>
       <div class="entry-subtab" data-stage="production">Üretim</div>
+      <div class="entry-subtab" data-stage="designs">Çok Satanlar</div>
     </div>
 
     <div id="musteriDbPanel" class="card" style="display:none;">
@@ -684,6 +685,17 @@
   </div>
   </div>
 
+  <div id="designs" class="stage-panel">
+    <div class="card">
+      <h2>Çok Satanlar</h2>
+      <p class="muted" style="margin-top:-6px">Baskı öncesi'nde verilen tasarım koduna göre en çok satılan tasarımlar — görsele değil, sadece koda bakılır. Şu an açık olan kanala göre hesaplanır. Sadece kodlanmış kalemler dahildir; Kayıp Kargo hariç.</p>
+      <div style="max-width:700px;">
+        <canvas id="chartTopDesigns" height="260"></canvas>
+      </div>
+      <div id="topDesignsTable" style="margin-top:16px;"></div>
+    </div>
+  </div>
+
   <div id="overview" class="panel">
     <div class="card" style="padding:14px 16px;">
       <div class="row row3">
@@ -826,7 +838,9 @@
       <h2>Üretim Süresi (Lead Time)</h2>
       <p class="muted" style="margin-top:-6px">Siparişin sisteme girdiği andan (Instagram için sipariş tarihi, diğer kanallar için sisteme kaydedildiği an — her yerde kullanılan aynı kural) tüm kalemleri üretildi olana kadar geçen süre. Sadece tamamen üretilmiş siparişler dahildir; Kayıp Kargo hariç.</p>
       <h3 style="font-family:'Fraunces',serif;font-size:15px;margin:16px 0 10px;">Aylık Ortalama (son 12 ay)</h3>
-      <canvas id="chartLeadTime" height="220"></canvas>
+      <div style="max-width:700px;">
+        <canvas id="chartLeadTime" height="220"></canvas>
+      </div>
       <div class="row" style="margin-top:20px;gap:28px;">
         <div style="flex:1;">
           <h3 style="font-family:'Fraunces',serif;font-size:15px;margin:0 0 10px;">Kanala Göre Ortalama</h3>
@@ -2685,6 +2699,7 @@ function renderCurrentStage(){
   else if(currentStageMode==='queue') renderQueue();
   else if(currentStageMode==='sort') renderSort();
   else if(currentStageMode==='production') renderProduction();
+  else if(currentStageMode==='designs') renderDesigns();
   wireImageLightbox();
 }
 
@@ -2752,7 +2767,7 @@ document.getElementById('musteriDbBtn').onclick = ()=>{
   document.getElementById('siparisSorgulaBtn').classList.remove('active');
   document.getElementById('siparisSorgulaPanel').style.display = 'none';
   document.getElementById('stageSelector').style.display = 'none';
-  ['entry','queue','sort','production'].forEach(id=>document.getElementById(id).classList.remove('active'));
+  ['entry','queue','sort','production','designs'].forEach(id=>document.getElementById(id).classList.remove('active'));
   document.getElementById('sharedItemsCard').style.display = 'none';
   document.getElementById('lostCargoLookupCard').style.display = 'none';
   document.getElementById('musteriDbPanel').style.display = 'block';
@@ -2768,7 +2783,7 @@ document.getElementById('iadelerBtn').onclick = ()=>{
   document.getElementById('siparisSorgulaBtn').classList.remove('active');
   document.getElementById('siparisSorgulaPanel').style.display = 'none';
   document.getElementById('stageSelector').style.display = 'none';
-  ['entry','queue','sort','production'].forEach(id=>document.getElementById(id).classList.remove('active'));
+  ['entry','queue','sort','production','designs'].forEach(id=>document.getElementById(id).classList.remove('active'));
   document.getElementById('sharedItemsCard').style.display = 'none';
   document.getElementById('lostCargoLookupCard').style.display = 'none';
   document.getElementById('iadelerPanel').style.display = 'block';
@@ -2790,7 +2805,7 @@ document.getElementById('waQueueBtn').onclick = ()=>{
   document.getElementById('siparisSorgulaBtn').classList.remove('active');
   document.getElementById('siparisSorgulaPanel').style.display = 'none';
   document.getElementById('stageSelector').style.display = 'none';
-  ['entry','queue','sort','production'].forEach(id=>document.getElementById(id).classList.remove('active'));
+  ['entry','queue','sort','production','designs'].forEach(id=>document.getElementById(id).classList.remove('active'));
   document.getElementById('sharedItemsCard').style.display = 'none';
   document.getElementById('lostCargoLookupCard').style.display = 'none';
   document.getElementById('waQueuePanel').style.display = 'block';
@@ -2811,7 +2826,7 @@ document.getElementById('siparisSorgulaBtn').onclick = ()=>{
   document.getElementById('waQueuePanel').style.display = 'none';
   document.getElementById('siparisSorgulaBtn').classList.add('active');
   document.getElementById('stageSelector').style.display = 'none';
-  ['entry','queue','sort','production'].forEach(id=>document.getElementById(id).classList.remove('active'));
+  ['entry','queue','sort','production','designs'].forEach(id=>document.getElementById(id).classList.remove('active'));
   document.getElementById('sharedItemsCard').style.display = 'none';
   document.getElementById('lostCargoLookupCard').style.display = 'none';
   document.getElementById('siparisSorgulaPanel').style.display = 'block';
@@ -7480,6 +7495,51 @@ function orderAgeBadge(o){
   return ageBadge(o, o.items[0]);
 }
 
+// Best-selling designs — ranked by the print/pattern CODE given at Baskı
+// öncesi (item.code), not by looking at the image at all. Scoped to
+// whichever channel tab is currently open, same convention Üretim/Ayırma
+// already use — a code from Instagram and a code from Sıcak Satış aren't
+// really comparable to each other, so this deliberately doesn't mix them.
+// Only coded items count (a still-pending item has no code yet); Kayıp
+// Kargo excluded, same rule as everywhere else.
+function renderDesigns(){
+  const canvas = document.getElementById('chartTopDesigns');
+  const tableEl = document.getElementById('topDesignsTable');
+  if(!tableEl) return;
+  const byCode = {};
+  state.orders.forEach(o=>{
+    if(o.saleType==='Kayıp Kargo') return;
+    if(channelCategoryForNumbering(o.channel)!==currentEntryMode) return;
+    o.items.forEach(item=>{
+      if(!item.code) return;
+      byCode[item.code] = byCode[item.code] || { pieces:0, orders:new Set(), m2:0 };
+      const qty = item.qty || 1;
+      byCode[item.code].pieces += qty;
+      byCode[item.code].orders.add(o.id);
+      byCode[item.code].m2 += sizeToM2(item.size) * qty;
+    });
+  });
+  const rows = Object.keys(byCode).map(code=>({
+    code, pieces: byCode[code].pieces, orders: byCode[code].orders.size, m2: byCode[code].m2
+  })).sort((a,b)=>b.pieces-a.pieces);
+
+  if(canvas && typeof Chart!=='undefined'){
+    const top = rows.slice(0,10);
+    destroyTrendChart('topDesigns');
+    trendCharts.topDesigns = new Chart(canvas.getContext('2d'), {
+      type:'bar',
+      data:{ labels: top.map(r=>r.code), datasets:[{ label:'Adet', data: top.map(r=>r.pieces), backgroundColor:'#3C4A6B' }] },
+      options:{ responsive:true, plugins:{legend:{display:false}}, scales:{ y:{ beginAtZero:true, ticks:{stepSize:1} } } }
+    });
+  } else if(canvas){
+    canvas.getContext('2d').clearRect(0,0,canvas.width,canvas.height);
+  }
+
+  if(!rows.length){ tableEl.innerHTML = '<p class="muted">Bu kanalda henüz kodlanmış kalem yok.</p>'; return; }
+  tableEl.innerHTML = `<table><thead><tr><th>Kod</th><th>Adet</th><th>Sipariş sayısı</th><th>Toplam m²</th></tr></thead><tbody>
+    ${rows.map(r=>`<tr><td>${r.code}</td><td>${r.pieces}</td><td>${r.orders}</td><td>${r.m2.toFixed(2)}</td></tr>`).join('')}
+  </tbody></table>`;
+}
 function renderOrders(){
   const tbody = document.querySelector('#ordersTable tbody');
   tbody.innerHTML='';
