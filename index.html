@@ -663,13 +663,13 @@
       <div id="productionGroups"></div>
       <div class="empty" id="productionEmpty" style="display:none">Şu anda üretimde bir şey yok.</div>
     </div>
-    </div>
 
     <div class="card" id="shippedReadyCard">
-      <h2>Kargoya Hazır Siparişler</h2>
-      <p class="muted" style="margin-top:-6px">Tüm kalemleri üretilmiş ama henüz "Kargoya verildi" olarak işaretlenmemiş siparişler. WhatsApp bildirimi açık bir Instagram kanalına aitse, bu işaret mesaj kuyruğunu da tetikler.</p>
+      <h2 id="shippedReadyTitle">Kargoya Hazır Siparişler</h2>
+      <p class="muted" style="margin-top:-6px" id="shippedReadySubtitle"></p>
       <div id="shippedReadyList"></div>
       <div class="empty" id="shippedReadyEmpty" style="display:none">Kargoya hazır bekleyen sipariş yok.</div>
+    </div>
     </div>
 
     <div id="prodSub-ihracat" class="entry-sub-panel">
@@ -8638,22 +8638,46 @@ function renderProduction(){
 // integration later only has to swap what SETS shippedAt (the cargo
 // company's own system, instead of a click here) without touching
 // anything downstream that reacts to it (the WhatsApp message included).
+// Scoped to whichever channel is currently selected, exactly like
+// renderProduction() above — was previously one shared list mixing every
+// channel together, which put DHL-flavored "Kargoya verildi" language in
+// front of Sıcak Satış/İhracat even though neither ships via DHL at all.
+// Now each channel's Üretim gets its own version of this card:
+//   - IG / Trendyol / Hepsiburada: "Kargoya Hazır Siparişler", unchanged
+//     behavior (fires the WhatsApp trigger where eligible)
+//   - Sıcak Satış: a differently-worded "Teslim Edildi Bekleyen Siparişler"
+//     — no cargo, no WhatsApp, just closing the order out once it's been
+//     handed to the customer directly
+//   - İhracat: this card's container (prodSub-main) is already hidden
+//     whenever İhracat is the active channel, so nothing to gate here
 function renderShippedReady(){
   const wrap = document.getElementById('shippedReadyList');
-  if(!wrap) return;
+  const card = document.getElementById('shippedReadyCard');
+  if(!wrap || !card) return;
+  if(currentEntryMode==='sicaksatis'){
+    document.getElementById('shippedReadyTitle').textContent = 'Teslim Edildi Bekleyen Siparişler';
+    document.getElementById('shippedReadySubtitle').textContent = 'Tüm kalemleri üretilmiş ama henüz "Teslim Edildi" olarak kapatılmamış siparişler — Sıcak Satış kargo ile değil doğrudan teslim edildiği için ayrı bir kapanış.';
+  } else {
+    document.getElementById('shippedReadyTitle').textContent = 'Kargoya Hazır Siparişler';
+    document.getElementById('shippedReadySubtitle').textContent = 'Tüm kalemleri üretilmiş ama henüz "Kargoya verildi" olarak işaretlenmemiş siparişler. WhatsApp bildirimi açık bir Instagram kanalına aitse, bu işaret mesaj kuyruğunu da tetikler.';
+  }
   const ready = state.orders.filter(o=>
-    o.items.length && o.items.every(i=>i.status==='produced') && !o.shippedAt && o.saleType!=='Kayıp Kargo'
+    o.items.length && o.items.every(i=>i.status==='produced')
+    && !o.shippedAt && !o.deliveredAt && o.saleType!=='Kayıp Kargo'
+    && channelCategoryForNumbering(o.channel)===currentEntryMode
   ).sort((a,b)=>{
     const ad = a.items.reduce((m,i)=>i.producedAt && (!m||i.producedAt<m) ? i.producedAt : m, null);
     const bd = b.items.reduce((m,i)=>i.producedAt && (!m||i.producedAt<m) ? i.producedAt : m, null);
     return (ad||'').localeCompare(bd||'');
   });
   document.getElementById('shippedReadyEmpty').style.display = ready.length ? 'none' : 'block';
+  const btnLabel = currentEntryMode==='sicaksatis' ? 'Teslim Edildi olarak kapat' : 'Kargoya verildi';
+  const btnClass = currentEntryMode==='sicaksatis' ? 'mark-delivered' : 'mark-shipped';
   wrap.innerHTML = ready.map(o=>{
     const sizes = o.items.map(i=>`${i.size} ×${i.qty}`).join(', ');
     return `<div class="tag" style="display:flex;align-items:center;justify-content:space-between;width:100%;">
       <span>${chanBadgeHtml(o.channel)} <strong>${o.customerName||''}</strong> — ${sizes}</span>
-      <button class="ghost small mark-shipped" data-oid="${o.id}">Kargoya verildi</button>
+      <button class="ghost small ${btnClass}" data-oid="${o.id}">${btnLabel}</button>
     </div>`;
   }).join('');
   wrap.querySelectorAll('.mark-shipped').forEach(b=>{
@@ -8663,6 +8687,15 @@ function renderShippedReady(){
       order.shippedAt = new Date().toISOString();
       logActivity(`Kargoya verildi olarak işaretlendi: ${order.customerName} (${order.channel})`);
       maybeEnqueueShippedMessage(order);
+      saveState(); render();
+    };
+  });
+  wrap.querySelectorAll('.mark-delivered').forEach(b=>{
+    b.onclick = ()=>{
+      const order = state.orders.find(o=>o.id===b.dataset.oid);
+      if(!order) return;
+      order.deliveredAt = new Date().toISOString();
+      logActivity(`Teslim edildi olarak kapatıldı: ${order.customerName} (${order.channel})`);
       saveState(); render();
     };
   });
