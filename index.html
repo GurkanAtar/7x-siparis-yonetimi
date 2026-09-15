@@ -821,6 +821,23 @@
         </div>
       </div>
     </div>
+
+    <div class="card" style="margin-top:16px;">
+      <h2>Üretim Süresi (Lead Time)</h2>
+      <p class="muted" style="margin-top:-6px">Siparişin sisteme girdiği andan (Instagram için sipariş tarihi, diğer kanallar için sisteme kaydedildiği an — her yerde kullanılan aynı kural) tüm kalemleri üretildi olana kadar geçen süre. Sadece tamamen üretilmiş siparişler dahildir; Kayıp Kargo hariç.</p>
+      <h3 style="font-family:'Fraunces',serif;font-size:15px;margin:16px 0 10px;">Aylık Ortalama (son 12 ay)</h3>
+      <canvas id="chartLeadTime" height="220"></canvas>
+      <div class="row" style="margin-top:20px;gap:28px;">
+        <div style="flex:1;">
+          <h3 style="font-family:'Fraunces',serif;font-size:15px;margin:0 0 10px;">Kanala Göre Ortalama</h3>
+          <div id="leadTimeByChannel"></div>
+        </div>
+        <div style="flex:1;">
+          <h3 style="font-family:'Fraunces',serif;font-size:15px;margin:0 0 10px;">Tabana Göre Ortalama</h3>
+          <div id="leadTimeByTaban"></div>
+        </div>
+      </div>
+    </div>
     <div class="card" style="margin-top:16px;">
       <h2>En Çok Alışveriş Yapanlar</h2>
       <p class="muted" style="margin-top:-6px">Toplam sipariş tutarına göre sıralı — Kayıp Kargo vakaları hariç. Aynı kişi birden fazla kanaldan alışveriş yaptıysa buraya tek satır olarak toplanır (kanal ayrımı Müşteri Veritabanı'nda görülebilir).</p>
@@ -953,6 +970,21 @@
       <input id="recoveryPassword" type="password" placeholder="Yeni şifre" autocomplete="new-password">
       <button id="recoverySubmit">Şifreyi kaydet</button>
       <span id="recoveryStatus" class="muted" style="min-height:16px;"></span>
+    </div>
+  </div>
+</div>
+
+<div id="pinLockOverlay" style="display:none;position:fixed;inset:0;background:var(--paper);z-index:302;align-items:center;justify-content:center;">
+  <div style="background:var(--card);border-radius:12px;padding:32px;width:340px;box-shadow:0 8px 28px rgba(0,0,0,.2);">
+    <h1 style="font-size:20px;margin:0 0 4px;">Kimliğinizi doğrulayın</h1>
+    <p class="muted" style="margin:0 0 18px;">Bu cihaz paylaşılıyor olabilir — devam etmeden önce isminizi seçip PIN'inizi girin.</p>
+    <div id="pinLockNameList" style="display:flex;flex-direction:column;gap:6px;margin-bottom:6px;"></div>
+    <div id="pinLockPinRow" style="display:none;flex-direction:column;gap:10px;">
+      <p style="margin:0;font-weight:600;" id="pinLockSelectedName"></p>
+      <input id="pinLockInput" type="password" placeholder="PIN" autocomplete="off" inputmode="numeric">
+      <button id="pinLockSubmit">Kilidi aç</button>
+      <button class="ghost small" id="pinLockChangeUser">Başka biri</button>
+      <span id="pinLockStatus" class="muted" style="min-height:16px;"></span>
     </div>
   </div>
 </div>
@@ -1313,12 +1345,89 @@ async function attemptLogin(){
 async function enterApp(user){
   currentUser = user;
   await fetchProfileAndGrants();
-  operatorName = currentProfile.name || currentUser.email;
   document.getElementById('loginOverlay').style.display = 'none';
+  // Data loads in the background WHILE the lock screen is up (not after
+  // unlocking) — purely so the dashboard is instantly ready the moment
+  // someone unlocks, instead of making them wait through a load on top of
+  // the PIN step. The lock overlay covers the screen either way, so
+  // there's nothing to see prematurely.
+  showPinLockOverlay();
   await loadState();
   await loadMessages();
   subscribeToMessages();
 }
+
+// ---------------- PIN lock ----------------
+// Layered on top of the real Supabase login, not a replacement for it —
+// exists for a shared device (one browser, one logged-in account, several
+// people physically using it through the day) so actions get attributed
+// to whoever is actually at the keyboard, not just whoever happened to be
+// logged into Supabase that morning. IMPORTANT LIMITATION, stated plainly
+// rather than implied: this only changes who the APP displays as active
+// and credits in logActivity/operatorName — real database permission
+// enforcement (Supabase RLS) still follows the actual authenticated
+// account on this browser, not whichever profile unlocked here. It's an
+// attribution layer, not a second real security boundary.
+let isPinUnlocked = false;
+let pinLockSelectedProfileId = null;
+function showPinLockOverlay(){
+  isPinUnlocked = false;
+  pinLockSelectedProfileId = null;
+  document.getElementById('pinLockNameList').style.display = '';
+  document.getElementById('pinLockPinRow').style.display = 'none';
+  renderPinLockNames();
+  document.getElementById('pinLockOverlay').style.display = 'flex';
+}
+function renderPinLockNames(){
+  const el = document.getElementById('pinLockNameList');
+  const roleLabels = { owner:'Yönetici', sales:'Satış', production:'Üretim', finance:'Finans' };
+  el.innerHTML = allProfiles.map(p=>
+    `<button class="ghost small pin-lock-name" data-id="${p.id}" style="text-align:left;">${p.name||'(isimsiz)'} <span class="muted">— ${roleLabels[p.role]||p.role||''}</span></button>`
+  ).join('');
+  el.querySelectorAll('.pin-lock-name').forEach(b=>{
+    b.onclick = ()=>{
+      pinLockSelectedProfileId = b.dataset.id;
+      const p = allProfiles.find(x=>x.id===pinLockSelectedProfileId);
+      document.getElementById('pinLockSelectedName').textContent = p.name || '(isimsiz)';
+      document.getElementById('pinLockNameList').style.display = 'none';
+      document.getElementById('pinLockPinRow').style.display = 'flex';
+      document.getElementById('pinLockInput').value = '';
+      document.getElementById('pinLockStatus').textContent = '';
+      document.getElementById('pinLockInput').focus();
+    };
+  });
+}
+document.getElementById('pinLockChangeUser').onclick = ()=>{
+  pinLockSelectedProfileId = null;
+  document.getElementById('pinLockNameList').style.display = '';
+  document.getElementById('pinLockPinRow').style.display = 'none';
+};
+function attemptPinUnlock(){
+  const entered = document.getElementById('pinLockInput').value.trim();
+  const statusEl = document.getElementById('pinLockStatus');
+  const p = allProfiles.find(x=>x.id===pinLockSelectedProfileId);
+  if(!p) return;
+  if(!p.pin){
+    statusEl.style.color = 'var(--rust)';
+    statusEl.textContent = 'Bu kullanıcı için henüz PIN belirlenmemiş — Hesabım & Yetkiler\'den bir yönetici PIN atamalı.';
+    return;
+  }
+  if(entered !== p.pin){
+    statusEl.style.color = 'var(--rust)';
+    statusEl.textContent = 'PIN yanlış.';
+    document.getElementById('pinLockInput').value = '';
+    document.getElementById('pinLockInput').focus();
+    return;
+  }
+  currentProfile = p;
+  operatorName = p.name || currentUser.email;
+  isPinUnlocked = true;
+  document.getElementById('pinLockOverlay').style.display = 'none';
+  logActivity(`Kilit açıldı: ${operatorName}`);
+  saveState(); render();
+}
+document.getElementById('pinLockSubmit').onclick = attemptPinUnlock;
+document.getElementById('pinLockInput').onkeydown = (e)=>{ if(e.key==='Enter') attemptPinUnlock(); };
 
 document.getElementById('loginSubmit').onclick = attemptLogin;
 document.getElementById('loginPassword').onkeydown = (e)=>{ if(e.key==='Enter') attemptLogin(); };
@@ -1826,6 +1935,7 @@ function renderOperatorBar(){
           ${Object.entries(THEME_LABELS).map(([cls,label])=>`<option value="${cls}" ${currentTheme===cls?'selected':''}>${label}</option>`).join('')}
         </select>
       </label>
+      <button class="ghost small" id="lockBtn">Kilitle</button>
       <button class="ghost small" id="logoutBtn">Çıkış yap</button>
       <span class="muted" style="font-size:10px;margin-left:auto;" title="Bu sürümün ne zaman oluşturulduğu — canlı sitenin en güncel dosyayı çalıştırıp çalıştırmadığını doğrulamak için.">Sürüm: 2026-09-14 07:06 UTC</span>
     </div>`;
@@ -1834,6 +1944,9 @@ function renderOperatorBar(){
     const chosen = e.target.value;
     if(chosen){ document.body.classList.add(chosen); localStorage.setItem('themeName', chosen); }
     else { localStorage.removeItem('themeName'); }
+  };
+  document.getElementById('lockBtn').onclick = ()=>{
+    showPinLockOverlay();
   };
   document.getElementById('logoutBtn').onclick = async ()=>{
     await sb.auth.signOut();
@@ -4375,6 +4488,96 @@ function renderTrendCharts(){
   renderWeeklyTrendChart();
   renderMonthlyComparisonChart();
   renderChannelMixChart();
+  renderLeadTimeChart();
+  renderLeadTimeBreakdowns();
+}
+
+// ---------------- Üretim Süresi (Lead Time) ----------------
+// How long a fully-completed order took from the same "placed at" moment
+// used everywhere else in the app (orderPlacedAt — Instagram by its own
+// order date, every other channel by when it was actually recorded) to
+// the LATEST producedAt among its items — i.e. when the whole order, not
+// just its first piece, was actually finished. Only counts orders where
+// every item has reached 'produced'; one still in progress has no lead
+// time yet, not a partial one.
+function orderLeadTimeDays(order){
+  if(!order.items.length || !order.items.every(i=>i.status==='produced')) return null;
+  const placedAt = orderPlacedAt(order);
+  if(!placedAt) return null;
+  let completedAt = null;
+  order.items.forEach(i=>{
+    if(i.producedAt && (!completedAt || i.producedAt>completedAt)) completedAt = i.producedAt;
+  });
+  if(!completedAt) return null;
+  return Math.max(0, (new Date(completedAt).getTime() - placedAt.getTime()) / (24*60*60*1000));
+}
+function leadTimeEligibleOrders(){
+  return state.orders.filter(o=>o.saleType!=='Kayıp Kargo');
+}
+function renderLeadTimeChart(){
+  const canvas = document.getElementById('chartLeadTime');
+  if(!canvas || typeof Chart==='undefined') return;
+  const today = new Date();
+  const months = [];
+  for(let i=11;i>=0;i--) months.push(new Date(today.getFullYear(), today.getMonth()-i, 1));
+  const orders = leadTimeEligibleOrders();
+  const avgs = months.map(m=>{
+    const key = monthKey(m);
+    const vals = [];
+    orders.forEach(o=>{
+      const days = orderLeadTimeDays(o);
+      if(days===null) return;
+      // Bucketed by COMPLETION month — this chart is about recent
+      // operational performance, not which month the order was placed in.
+      let completedAt = null;
+      o.items.forEach(i=>{ if(i.producedAt && (!completedAt||i.producedAt>completedAt)) completedAt = i.producedAt; });
+      if(!completedAt || monthKey(new Date(completedAt))!==key) return;
+      vals.push(days);
+    });
+    return vals.length ? vals.reduce((s,v)=>s+v,0)/vals.length : null;
+  });
+  destroyTrendChart('leadTime');
+  trendCharts.leadTime = new Chart(canvas.getContext('2d'), {
+    type:'line',
+    data:{ labels: months.map(monthLabel), datasets:[{
+      label:'Ortalama gün', data: avgs, borderColor:'#6B4C93', backgroundColor:'rgba(107,76,147,.12)',
+      fill:true, tension:.25, pointRadius:3, spanGaps:true,
+    }] },
+    options:{ responsive:true, plugins:{ legend:{display:false},
+      tooltip:{ callbacks:{ label: ctx => ctx.parsed.y===null ? 'Veri yok' : `${ctx.parsed.y.toFixed(1)} gün` } } },
+      scales:{ y:{ beginAtZero:true, ticks:{callback:v=>v+' gün'} } } }
+  });
+}
+function renderLeadTimeBreakdowns(){
+  const chanEl = document.getElementById('leadTimeByChannel');
+  const tabanEl = document.getElementById('leadTimeByTaban');
+  if(!chanEl || !tabanEl) return;
+  const byChannel = {}, byTaban = {};
+  leadTimeEligibleOrders().forEach(o=>{
+    const days = orderLeadTimeDays(o);
+    if(days===null) return;
+    const fam = channelCategoryForNumbering(o.channel);
+    byChannel[fam] = byChannel[fam] || [];
+    byChannel[fam].push(days);
+    // An order can span more than one taban (mixed-item orders) — counted
+    // once per taban actually present, same convention the rest of the app
+    // already uses for a mixed order's taban-level stats.
+    const tabans = [...new Set(o.items.map(i=>i.taban).filter(Boolean))];
+    tabans.forEach(t=>{ byTaban[t] = byTaban[t] || []; byTaban[t].push(days); });
+  });
+  const chanRows = Object.keys(CHANNEL_FAMILY_LABELS)
+    .filter(f=>byChannel[f] && byChannel[f].length)
+    .map(f=>({ label: CHANNEL_FAMILY_LABELS[f], avg: byChannel[f].reduce((s,v)=>s+v,0)/byChannel[f].length, count: byChannel[f].length }))
+    .sort((a,b)=>b.avg-a.avg);
+  chanEl.innerHTML = chanRows.length ? `<table><thead><tr><th>Kanal</th><th>Ortalama</th><th>Sipariş</th></tr></thead><tbody>
+    ${chanRows.map(r=>`<tr><td>${r.label}</td><td>${r.avg.toFixed(1)} gün</td><td>${r.count}</td></tr>`).join('')}
+  </tbody></table>` : '<p class="muted">Henüz tamamlanmış sipariş yok.</p>';
+  const tabanRows = Object.keys(byTaban)
+    .map(t=>({ label:t, avg: byTaban[t].reduce((s,v)=>s+v,0)/byTaban[t].length, count: byTaban[t].length }))
+    .sort((a,b)=>b.avg-a.avg);
+  tabanEl.innerHTML = tabanRows.length ? `<table><thead><tr><th>Taban</th><th>Ortalama</th><th>Sipariş</th></tr></thead><tbody>
+    ${tabanRows.map(r=>`<tr><td>${r.label}</td><td>${r.avg.toFixed(1)} gün</td><td>${r.count}</td></tr>`).join('')}
+  </tbody></table>` : '<p class="muted">Henüz tamamlanmış sipariş yok.</p>';
 }
 
 // En Çok Alışveriş Yapanlar — same exclusion rule as everything else here
@@ -4704,6 +4907,31 @@ function renderWaQueue(){
     </tr>`).join('')}
   </tbody></table>`;
 }
+// Sets/changes the currently logged-in account's own PIN lock code — used
+// by both the owner's and a regular team member's view of this screen,
+// since anyone should be able to set their own PIN even if only the owner
+// can set OTHER people's.
+function wireMyPinSave(){
+  const btn = document.getElementById('myPinSave');
+  if(!btn) return;
+  btn.onclick = async ()=>{
+    const val = document.getElementById('myPinInput').value.trim();
+    const statusEl = document.getElementById('myPinStatus');
+    if(val && !/^\d{4,8}$/.test(val)){
+      statusEl.style.color = 'var(--rust)';
+      statusEl.textContent = '4-8 haneli rakam girin.';
+      return;
+    }
+    const { error } = await sb.from('profiles').update({ pin: val || null }).eq('id', currentUser.id);
+    if(error){ statusEl.style.color='var(--rust)'; statusEl.textContent = 'Kaydedilemedi.'; return; }
+    if(currentProfile) currentProfile.pin = val || null;
+    const mine = allProfiles.find(p=>p.id===currentUser.id);
+    if(mine) mine.pin = val || null;
+    logActivity(`PIN güncellendi: ${operatorName}`);
+    statusEl.style.color = 'var(--forest)';
+    statusEl.textContent = 'Kaydedildi.';
+  };
+}
 function renderUsers(){
   const el = document.getElementById('adminPanel');
   if(!el) return;
@@ -4714,10 +4942,18 @@ function renderUsers(){
   document.getElementById('fullBackupCard').style.display = isOwner ? '' : 'none';
 
   const roleLabels = { owner:'Yönetici', sales:'Satış', production:'Üretim', finance:'Finans' };
+  const myPinRow = `
+    <div style="display:flex;align-items:center;gap:8px;margin-top:6px;">
+      <label class="muted" style="margin:0;">Kilit ekranı PIN'iniz:</label>
+      <input id="myPinInput" type="password" inputmode="numeric" placeholder="PIN" value="${currentProfile && currentProfile.pin ? currentProfile.pin : ''}" style="width:100px;">
+      <button class="ghost small" id="myPinSave">Kaydet</button>
+      <span class="muted" id="myPinStatus"></span>
+    </div>`;
   const myRow = `
     <div style="margin-bottom:18px;">
       <p class="muted" style="margin:0 0 4px;">Hesabınız</p>
       <p style="margin:0;"><strong>${currentProfile ? (currentProfile.name||currentUser.email) : ''}</strong> — ${currentProfile ? (roleLabels[currentProfile.role]||currentProfile.role) : ''} (${currentUser ? currentUser.email : ''})</p>
+      ${myPinRow}
     </div>`;
 
   if(!isOwner){
@@ -4728,6 +4964,7 @@ function renderUsers(){
       ? `<p class="muted">Geçici yönetici yetkiniz var — ${Math.max(0,Math.round((new Date(myGrant.expires_at).getTime()-Date.now())/60000))} dakika kaldı.</p>`
       : `<p class="muted">Şu anda yönetici yetkiniz yok. Silme/24 saatten eski düzenleme gibi işlemler için yöneticinizden geçici yetki isteyin.</p>`;
     el.innerHTML = myRow + grantNote;
+    wireMyPinSave();
     return;
   }
 
@@ -4754,17 +4991,40 @@ function renderUsers(){
          </select>
          <button class="ghost small grant-temp" data-id="${p.id}">Yetki ver</button>`;
     return `
-    <div class="row" style="grid-template-columns:1fr auto auto;display:grid;gap:8px;align-items:center;margin-bottom:8px;">
+    <div class="row" style="grid-template-columns:1fr auto auto auto;display:grid;gap:8px;align-items:center;margin-bottom:8px;">
       <span>${p.name||'(isimsiz)'} — <span class="muted">${roleLabels[p.role]||p.role}</span></span>
+      <span style="display:flex;align-items:center;gap:6px;">
+        <input class="user-pin-input" data-id="${p.id}" type="password" inputmode="numeric" placeholder="PIN" value="${p.pin||''}" style="width:90px;">
+        <button class="ghost small user-pin-save" data-id="${p.id}">Kaydet</button>
+      </span>
       <span>${grantNote}</span>
     </div>`;
   }).join('') || '<p class="muted">Başka hesap yok. Yeni bir kullanıcı için Supabase panelinden hesap oluşturup profiles tablosuna ekleyin.</p>';
 
   el.innerHTML = myRow + `
     <h3 style="font-family:'Fraunces',serif;font-size:15px;margin:0 0 8px;">Ekip &amp; geçici yetkiler</h3>
-    <p class="muted" style="margin-top:-4px">Silme ve 24 saatten eski düzenleme gibi yönetici işlemleri için, seçilen kişiye seçtiğiniz süre kadar yetki verir. Süre dolunca otomatik biter. Yeni hesap eklemek Supabase panelinden yapılır.</p>
+    <p class="muted" style="margin-top:-4px">Silme ve 24 saatten eski düzenleme gibi yönetici işlemleri için, seçilen kişiye seçtiğiniz süre kadar yetki verir. Süre dolunca otomatik biter. Yeni hesap eklemek Supabase panelinden yapılır. PIN sütunu, paylaşılan bir cihazda kilit ekranından açılırken kullanılan kişiye özel koddur.</p>
     ${profileRows}
   `;
+  wireMyPinSave();
+  el.querySelectorAll('.user-pin-save').forEach(b=>{
+    b.onclick = async ()=>{
+      const userId = b.dataset.id;
+      const target = allProfiles.find(p=>p.id===userId);
+      const input = el.querySelector(`.user-pin-input[data-id="${userId}"]`);
+      const val = input.value.trim();
+      if(val && !/^\d{4,8}$/.test(val)){
+        showMessage('PIN 4-8 haneli rakam olmalı.');
+        return;
+      }
+      const { error } = await sb.from('profiles').update({ pin: val || null }).eq('id', userId);
+      if(error){ showMessage('PIN kaydedilemedi: ' + error.message); return; }
+      if(target) target.pin = val || null;
+      logActivity(`PIN güncellendi: ${target ? target.name : userId}`, 'Admin');
+      input.style.borderColor = 'var(--forest)';
+      setTimeout(()=>{ input.style.borderColor=''; }, 1200);
+    };
+  });
 
   el.querySelectorAll('.grant-temp').forEach(b=>{
     b.onclick = async ()=>{
