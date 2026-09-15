@@ -233,6 +233,7 @@
       <div class="entry-subtab" id="musteriDbBtn">Müşteri Veritabanı</div>
       <div class="entry-subtab" id="iadelerBtn">İadeler</div>
       <div class="entry-subtab" id="waQueueBtn">WhatsApp Kuyruğu</div>
+      <div class="entry-subtab" id="siparisSorgulaBtn">Sipariş Sorgula</div>
     </div>
     <div class="entry-subtabs" id="stageSelector" style="margin-top:6px;">
       <div class="entry-subtab active" data-stage="entry">Sipariş girişi</div>
@@ -279,6 +280,13 @@
       <p class="muted" style="margin-top:-6px">"Sipariş onaylandı" kodlandığında, "Kargoya verildi" Üretim'de işaretlendiğinde otomatik kuyruğa girer — yalnızca WhatsApp bildirimi açık bir Instagram kanalına ait siparişler için. Gerçek gönderim için Meta tarafı henüz bağlanmadı; buradaki kayıtlar şimdilik doğru anda doğru içerikle kuyruğa girdiğini görmek/test etmek içindir.</p>
       <div id="waQueueList"></div>
       <p class="muted" id="waQueueEmpty" style="display:none;">Kuyrukta henüz mesaj yok.</p>
+    </div>
+
+    <div id="siparisSorgulaPanel" class="card" style="display:none;">
+      <h2>Sipariş Sorgula</h2>
+      <p class="muted" style="margin-top:-6px">Sipariş numarası (üretim tamamlanınca atanan, örn. IGQA2609150001), iç üretim kodu (örn. IG-305) veya müşteri adı/telefonu ile arayın.</p>
+      <input id="siparisSorgulaInput" placeholder="Sipariş numarası, kod, isim veya telefon...">
+      <div id="siparisSorgulaResults" style="margin-top:14px;"></div>
     </div>
 
   <div id="entry" class="stage-panel active">
@@ -2518,16 +2526,18 @@ function renderCurrentStage(){
 
 document.querySelectorAll('.entry-subtab[data-sub]').forEach(t=>{
   t.onclick = ()=>{
-    // Coming back from Müşteri Veritabanı, İadeler, or WhatsApp Kuyruğu
-    // (none of these are a currentEntryMode — all three are independent
-    // views layered on top) — restore everything they hid, so a normal
-    // channel looks exactly like it did before.
+    // Coming back from Müşteri Veritabanı, İadeler, WhatsApp Kuyruğu, or
+    // Sipariş Sorgula (none of these are a currentEntryMode — all four are
+    // independent views layered on top) — restore everything they hid, so
+    // a normal channel looks exactly like it did before.
     document.getElementById('musteriDbBtn').classList.remove('active');
     document.getElementById('musteriDbPanel').style.display = 'none';
     document.getElementById('iadelerBtn').classList.remove('active');
     document.getElementById('iadelerPanel').style.display = 'none';
     document.getElementById('waQueueBtn').classList.remove('active');
     document.getElementById('waQueuePanel').style.display = 'none';
+    document.getElementById('siparisSorgulaBtn').classList.remove('active');
+    document.getElementById('siparisSorgulaPanel').style.display = 'none';
     document.getElementById('stageSelector').style.display = '';
     document.querySelectorAll('.entry-subtab[data-sub]').forEach(x=>x.classList.remove('active'));
     document.querySelectorAll('.entry-sub-panel[id^="entrySub-"]').forEach(x=>x.classList.remove('active'));
@@ -2562,11 +2572,12 @@ document.querySelectorAll('.entry-subtab[data-sub]').forEach(t=>{
   };
 });
 
-// Müşteri Veritabanı — an independent view, not one of the normal channel
-// modes (currentEntryMode never becomes "musteridb") — so none of the
-// category-based logic elsewhere (numbering, stage tabs, entry forms) needs
-// to know it exists. Clicking it just hides the normal channel content and
-// shows this instead; clicking any real channel button (above) restores it.
+// Müşteri Veritabanı, İadeler, WhatsApp Kuyruğu, and Sipariş Sorgula are
+// independent views, not real channel modes (currentEntryMode never
+// becomes any of their names) — so none of the category-based logic
+// elsewhere (numbering, stage tabs, entry forms) needs to know they exist.
+// Each one just hides the normal channel content and the other three,
+// then shows itself; clicking any real channel button restores everything.
 document.getElementById('musteriDbBtn').onclick = ()=>{
   document.querySelectorAll('.entry-subtab[data-sub]').forEach(x=>x.classList.remove('active'));
   document.getElementById('musteriDbBtn').classList.add('active');
@@ -2574,6 +2585,8 @@ document.getElementById('musteriDbBtn').onclick = ()=>{
   document.getElementById('iadelerPanel').style.display = 'none';
   document.getElementById('waQueueBtn').classList.remove('active');
   document.getElementById('waQueuePanel').style.display = 'none';
+  document.getElementById('siparisSorgulaBtn').classList.remove('active');
+  document.getElementById('siparisSorgulaPanel').style.display = 'none';
   document.getElementById('stageSelector').style.display = 'none';
   ['entry','queue','sort','production'].forEach(id=>document.getElementById(id).classList.remove('active'));
   document.getElementById('sharedItemsCard').style.display = 'none';
@@ -2581,9 +2594,6 @@ document.getElementById('musteriDbBtn').onclick = ()=>{
   document.getElementById('musteriDbPanel').style.display = 'block';
   renderCustomerDbResults();
 };
-// İadeler — same independent-view pattern as Müşteri Veritabanı: cuts
-// across every channel (a return can come from any of them), so it isn't
-// tied to currentEntryMode either.
 document.getElementById('iadelerBtn').onclick = ()=>{
   document.querySelectorAll('.entry-subtab[data-sub]').forEach(x=>x.classList.remove('active'));
   document.getElementById('musteriDbBtn').classList.remove('active');
@@ -2591,6 +2601,8 @@ document.getElementById('iadelerBtn').onclick = ()=>{
   document.getElementById('iadelerBtn').classList.add('active');
   document.getElementById('waQueueBtn').classList.remove('active');
   document.getElementById('waQueuePanel').style.display = 'none';
+  document.getElementById('siparisSorgulaBtn').classList.remove('active');
+  document.getElementById('siparisSorgulaPanel').style.display = 'none';
   document.getElementById('stageSelector').style.display = 'none';
   ['entry','queue','sort','production'].forEach(id=>document.getElementById(id).classList.remove('active'));
   document.getElementById('sharedItemsCard').style.display = 'none';
@@ -2611,12 +2623,35 @@ document.getElementById('waQueueBtn').onclick = ()=>{
   document.getElementById('iadelerBtn').classList.remove('active');
   document.getElementById('iadelerPanel').style.display = 'none';
   document.getElementById('waQueueBtn').classList.add('active');
+  document.getElementById('siparisSorgulaBtn').classList.remove('active');
+  document.getElementById('siparisSorgulaPanel').style.display = 'none';
   document.getElementById('stageSelector').style.display = 'none';
   ['entry','queue','sort','production'].forEach(id=>document.getElementById(id).classList.remove('active'));
   document.getElementById('sharedItemsCard').style.display = 'none';
   document.getElementById('lostCargoLookupCard').style.display = 'none';
   document.getElementById('waQueuePanel').style.display = 'block';
   renderWaQueue();
+};
+// Sipariş Sorgula — the fast lookup for "a customer texted me this
+// number, what's going on with their order." Searches BOTH the permanent
+// fused Sipariş Numarası (once assigned) and the short floor code, plus
+// name/phone, so it works whether the order is still mid-production or
+// long finished.
+document.getElementById('siparisSorgulaBtn').onclick = ()=>{
+  document.querySelectorAll('.entry-subtab[data-sub]').forEach(x=>x.classList.remove('active'));
+  document.getElementById('musteriDbBtn').classList.remove('active');
+  document.getElementById('musteriDbPanel').style.display = 'none';
+  document.getElementById('iadelerBtn').classList.remove('active');
+  document.getElementById('iadelerPanel').style.display = 'none';
+  document.getElementById('waQueueBtn').classList.remove('active');
+  document.getElementById('waQueuePanel').style.display = 'none';
+  document.getElementById('siparisSorgulaBtn').classList.add('active');
+  document.getElementById('stageSelector').style.display = 'none';
+  ['entry','queue','sort','production'].forEach(id=>document.getElementById(id).classList.remove('active'));
+  document.getElementById('sharedItemsCard').style.display = 'none';
+  document.getElementById('lostCargoLookupCard').style.display = 'none';
+  document.getElementById('siparisSorgulaPanel').style.display = 'block';
+  renderSiparisSorgula();
 };
 let cdbMode = 'all';
 document.querySelectorAll('.entry-subtab[data-mode]').forEach(b=>{
@@ -2731,6 +2766,53 @@ function renderRecentIadeler(){
     ${rows.map(({o,item})=>`<tr><td>${new Date(item.iade.at).toLocaleDateString('tr-TR')}</td><td>${o.customerName||''}</td><td>${chanBadgeHtml(o.channel)}</td><td>${item.size} ${item.taban||''}</td><td>${escapeHtml(item.iade.reason)}</td><td>${formatTL(item.iade.estValue)} TL</td></tr>`).join('')}
   </tbody></table>`;
 }
+
+// Sipariş Sorgula — one search box, three different things it might be
+// asked to find: the permanent fused Sipariş Numarası (once an order is
+// fully produced), the short floor code still in use while it's mid-
+// production, or a plain name/phone when neither number is at hand. Not
+// restricted to Instagram/WhatsApp-eligible orders — any channel's order
+// can be looked up here.
+function renderSiparisSorgula(){
+  const container = document.getElementById('siparisSorgulaResults');
+  if(!container) return;
+  const raw = document.getElementById('siparisSorgulaInput').value.trim();
+  if(!raw){ container.innerHTML = '<p class="muted">Sipariş numarası, kod, isim veya telefon girin.</p>'; return; }
+  const term = raw.toLowerCase();
+  const numbers = computeItemNumbers();
+  const matches = state.orders.filter(o=>{
+    if(o.siparisNumarasi && o.siparisNumarasi.toLowerCase().includes(term)) return true;
+    if(foldTurkishForSearch(o.customerName).includes(foldTurkishForSearch(raw))) return true;
+    if((o.phone||'').includes(raw)) return true;
+    return o.items.some(item=>(numbers[itemGroupKey(o,item)]||'').toLowerCase().includes(term));
+  });
+  if(!matches.length){ container.innerHTML = '<div class="empty">Eşleşen sipariş bulunamadı.</div>'; return; }
+  container.innerHTML = matches.map(o=>{
+    const finalNo = displaySiparisNumarasi(o);
+    const headerNo = finalNo
+      ? `<span style="font-family:'IBM Plex Mono',monospace;font-weight:600;">${finalNo}</span> <span class="muted">(tamamlandı)</span>`
+      : (o.siparisNumarasi ? `<span class="muted">Sipariş numarası atandı, üretim tamamlanınca görünür</span>` : `<span class="muted">Henüz kodlanmadı</span>`);
+    const itemRows = o.items.map(item=>{
+      const shortCode = numbers[itemGroupKey(o,item)] || '—';
+      const statusLabel = item.iade ? `<span style="color:var(--rust);font-weight:600;">İADE — ${escapeHtml(item.iade.reason)}</span>` : pill(item.status==='sorted'?'in production':item.status);
+      return `<tr><td>${shortCode}</td><td>${item.size} ${item.taban||''}</td><td>${item.qty}</td><td>${statusLabel}</td></tr>`;
+    }).join('');
+    const shippedLine = o.shippedAt
+      ? `<p class="muted" style="margin:4px 0 0;">Kargoya verildi: ${new Date(o.shippedAt).toLocaleDateString('tr-TR')}</p>` : '';
+    const waMsgs = (o.whatsappMessages||[]).map(m=>{
+      const label = m.type==='confirmed' ? 'Sipariş onaylandı' : 'Kargoya verildi';
+      return `<span class="pill" style="margin-right:4px;">${label}: ${m.status}</span>`;
+    }).join('');
+    return `<div class="tag" style="display:block;width:100%;margin-bottom:12px;">
+      <p style="margin:0 0 6px;"><strong>${o.customerName||'(isimsiz)'}</strong> ${chanBadgeHtml(o.channel)} <span class="muted">${o.date||''}</span></p>
+      <p style="margin:0 0 8px;">${headerNo}</p>
+      <table><thead><tr><th>Kod</th><th>Ölçü/Taban</th><th>Adet</th><th>Durum</th></tr></thead><tbody>${itemRows}</tbody></table>
+      ${shippedLine}
+      ${waMsgs ? `<p style="margin:6px 0 0;">${waMsgs}</p>` : ''}
+    </div>`;
+  }).join('');
+}
+document.getElementById('siparisSorgulaInput').addEventListener('input', renderSiparisSorgula);
 
 // Each channel is fully separate in the per-channel tabs — Instagram
 // Kurumsal, Instagram Bayileri, Trendyol Kurumsal, Trendyol Bayileri,
@@ -6874,6 +6956,46 @@ function computeItemNumbers(){
 // Only Instagram Kurumsal/Bayi channels that have been explicitly switched
 // on (channel.waEnabled) send anything — every other channel/category, and
 // every Instagram channel that hasn't been opted in, is silently skipped.
+// ---------------- Fused Sipariş Numarası (permanent, order-level) ----------------
+// Format: [kanal+hesap kodu][YYMMDD][4 haneli sıra] — e.g. IGQA2609150001.
+// Genuinely different job from the short "IG-305" day-digit code above:
+// the short code + item suffix (-1/2, -2/2) is a PRODUCTION-tracking tool,
+// useful only while pieces of one order are still moving independently
+// through coding/sorting/production. This fused number is the order's
+// permanent identity, generated once (same moment as the short code, at
+// first coding) and never changing after — but deliberately not surfaced
+// in the operational tables while items are still in progress, since the
+// short code is what staff actually need on the floor. It "pops up" and
+// becomes the number that matters everywhere else (Müşteri Veritabanı
+// history, İadeler, Sipariş Sorgula, WhatsApp) once every item is produced
+// and the order is whole again.
+//
+// The daily sequence is a single counter SHARED across every channel — the
+// next order coded today gets the next number, regardless of which
+// channel it belongs to — not a separate counter per channel/account.
+function generateSiparisNumarasi(order){
+  const chan = state.channels.find(c=>normText(c.name)===normText(order.channel));
+  const code = (chan && chan.code) ? chan.code : 'XXXX';
+  const now = new Date();
+  const dateSegment = String(now.getFullYear()).slice(2) + String(now.getMonth()+1).padStart(2,'0') + String(now.getDate()).padStart(2,'0');
+  const usedToday = state.orders.filter(o=>o.siparisNumarasi && o.siparisNumarasi.slice(4,10)===dateSegment).length;
+  const seq = String(usedToday+1).padStart(4,'0');
+  return code + dateSegment + seq;
+}
+function ensureSiparisNumarasi(order){
+  if(order.siparisNumarasi) return;
+  order.siparisNumarasi = generateSiparisNumarasi(order);
+  logActivity(`Sipariş numarası atandı: ${order.customerName||''} → ${order.siparisNumarasi}`);
+}
+// The fused number only ever shows once the order is whole again (every
+// item produced) — returns null otherwise, so callers naturally fall back
+// to showing the short code instead while production is still in progress.
+function displaySiparisNumarasi(order){
+  if(!order.siparisNumarasi) return null;
+  if(!order.items.length || !order.items.every(i=>i.status==='produced')) return null;
+  return order.siparisNumarasi;
+}
+
 function whatsAppEligible(order){
   if(channelCategoryForNumbering(order.channel)!=='ig') return false;
   if(!order.phone) return false;
@@ -6894,27 +7016,26 @@ function enqueueWhatsAppMessage(order, type, templateParams){
   });
 }
 // Message 1 — fires the moment an order's FIRST item gets coded (this is
-// deliberately called from inside confirmCode(), not at order entry —
-// see the numbering decision this reuses). Reuses the same order-level
-// number already shown in Baskı öncesi/Ayırma/Üretim (e.g. "IG-305") —
-// no separate reference number, and no item-position suffix (-1/2, -2/2).
-function maybeEnqueueConfirmedMessage(order, codedGroupFirstItem){
+// deliberately called from inside confirmCode(), not at order entry — see
+// the numbering decision this reuses). Uses the permanent fused Sipariş
+// Numarası (generated at this exact same moment, in confirmCode) — not the
+// short "IG-305" floor code, since that's meant for internal production
+// tracking only. The fused number exists from this point on even though it
+// won't actually be SHOWN anywhere internally until the order is fully
+// produced — the message can safely reference it early since it's already
+// permanent, just not yet displayed.
+function maybeEnqueueConfirmedMessage(order){
   if(!whatsAppEligible(order)) return;
-  const numbers = computeItemNumbers();
-  const orderNo = numbers[itemGroupKey(order, codedGroupFirstItem)] || '';
-  if(!orderNo) return; // number not resolvable yet (shouldn't normally happen right after coding)
-  enqueueWhatsAppMessage(order, 'confirmed', { name: order.customerName||'', orderNo });
+  if(!order.siparisNumarasi) return; // shouldn't happen — ensureSiparisNumarasi() runs right before this
+  enqueueWhatsAppMessage(order, 'confirmed', { name: order.customerName||'', orderNo: order.siparisNumarasi });
 }
 // Message 2 — fires from the "Kargoya verildi" action once every item on
-// the order is produced. Looks up the same order-level number rather than
-// storing its own copy, so it always reflects whatever was actually
-// assigned at coding time.
+// the order is produced. Same fused number as message 1, not looked up
+// again — it was fixed at coding time and never changes.
 function maybeEnqueueShippedMessage(order){
   if(!whatsAppEligible(order)) return;
-  const numbers = computeItemNumbers();
-  const firstCoded = order.items.find(i=>i.code || i.codedAt);
-  const orderNo = firstCoded ? (numbers[itemGroupKey(order, firstCoded)] || '') : '';
-  enqueueWhatsAppMessage(order, 'shipped', { name: order.customerName||'', orderNo });
+  if(!order.siparisNumarasi) return;
+  enqueueWhatsAppMessage(order, 'shipped', { name: order.customerName||'', orderNo: order.siparisNumarasi });
 }
 
 function isGroupCarriedOver(group){
@@ -7904,11 +8025,14 @@ function wireQueueHandlers(tbody){
       assignTrendyolNumberIfNeeded(order);
       logActivity(`Kodlandı "${label}" — ${order.customerName} → ${code}${lostCargoTag}`);
     }
+    // Generated for every channel (not just Instagram) — this is the
+    // general permanent order identity, WhatsApp is just one consumer of it.
+    ensureSiparisNumarasi(order);
     // whatsAppEligible() already filters this down to Instagram + opted-in
     // channels only — safe to call unconditionally on every coding action,
     // İhracat included, since it'll just no-op for anything that doesn't
     // qualify.
-    maybeEnqueueConfirmedMessage(order, group[0]);
+    maybeEnqueueConfirmedMessage(order);
     saveState(); render();
   }
   tbody.querySelectorAll('.confirm-code').forEach(b=>{
