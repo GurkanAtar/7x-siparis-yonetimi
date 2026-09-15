@@ -7551,7 +7551,7 @@ function computeTopDesigns(orderFilter){
     if(!orderFilter(o)) return;
     o.items.forEach(item=>{
       if(!item.code) return;
-      byCode[item.code] = byCode[item.code] || { pieces:0, orders:new Set(), m2:0, confirmed:[], suggested:[] };
+      byCode[item.code] = byCode[item.code] || { pieces:0, orders:new Set(), m2:0, image:null, suggested:false };
       const qty = item.qty || 1;
       byCode[item.code].pieces += qty;
       byCode[item.code].orders.add(o.id);
@@ -7561,48 +7561,42 @@ function computeTopDesigns(orderFilter){
       // this item's own upload, then the barkod-matched catalog photo,
       // then — only if neither exists — another item in the SAME order
       // that happens to have a photo (Baskı öncesi's own "aynı tasarım
-      // olabilir" guess). That third source is explicitly a same-order
-      // guess, not a confirmed photo of this exact piece, so it's
-      // collected separately and only shown faded, never mixed in with
-      // confirmed ones as if equally certain. Up to 10 distinct confirmed
-      // photos are kept per design — real copies sold can legitimately
-      // look slightly different shot to shot, so showing a few rather
-      // than just one gives a truer picture of what's actually gone out
-      // under this code.
-      const own = (item.images && item.images.length) ? item.images[0] : null;
-      const catalog = own ? null : catalogImageFor(item);
-      const confirmed = own || catalog;
-      if(confirmed && byCode[item.code].confirmed.length<10 && !byCode[item.code].confirmed.includes(confirmed)){
-        byCode[item.code].confirmed.push(confirmed);
-      } else if(!confirmed && byCode[item.code].confirmed.length===0 && byCode[item.code].suggested.length<10){
-        const sibling = o.items.find(i=>i!==item && i.images && i.images.length);
-        if(sibling && !byCode[item.code].suggested.includes(sibling.images[0])){
-          byCode[item.code].suggested.push(sibling.images[0]);
+      // olabilir" guess). One clear representative photo per design —
+      // whichever is found first wins, and a confirmed photo always takes
+      // priority over a same-order guess even if the guess was found
+      // first while scanning.
+      if(!byCode[item.code].image || byCode[item.code].suggested){
+        const own = (item.images && item.images.length) ? item.images[0] : null;
+        const catalog = own ? null : catalogImageFor(item);
+        const confirmed = own || catalog;
+        if(confirmed){
+          byCode[item.code].image = confirmed;
+          byCode[item.code].suggested = false;
+        } else if(!byCode[item.code].image){
+          const sibling = o.items.find(i=>i!==item && i.images && i.images.length);
+          if(sibling){
+            byCode[item.code].image = sibling.images[0];
+            byCode[item.code].suggested = true;
+          }
         }
       }
     });
   });
   return Object.keys(byCode).map(code=>({
     code, pieces: byCode[code].pieces, orders: byCode[code].orders.size, m2: byCode[code].m2,
-    // Confirmed photos always take priority over guessed ones — a design
-    // with even one real confirmed photo never shows the faded same-order
-    // guesses alongside it.
-    images: byCode[code].confirmed.length ? byCode[code].confirmed : byCode[code].suggested,
-    suggested: byCode[code].confirmed.length===0 && byCode[code].suggested.length>0,
+    image: byCode[code].image, suggested: byCode[code].suggested,
   })).sort((a,b)=>b.pieces-a.pieces || b.m2-a.m2).slice(0,10);
 }
 function topDesignsGridHtml(rows, emptyMsg){
   if(!rows.length) return `<p class="muted">${emptyMsg}</p>`;
-  return `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:14px;">
+  return `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(420px,1fr));gap:20px;">
     ${rows.map((r,i)=>`
-      <div class="tag" style="display:flex;flex-direction:column;align-items:center;text-align:center;padding:10px;">
+      <div class="tag" style="display:flex;flex-direction:column;align-items:center;text-align:center;padding:14px;">
         <span style="font-weight:600;color:var(--ink-soft);font-size:12px;">#${i+1}</span>
-        ${r.images.length
-          ? `<div style="display:flex;flex-wrap:wrap;gap:3px;justify-content:center;width:150px;margin:6px 0;">
-               ${r.images.map(src=>`<img src="${src}" class="thumb" style="width:34px;height:34px;object-fit:cover;border-radius:5px;${r.suggested?'opacity:.45;':''}" title="${r.suggested?'Aynı siparişteki başka bir üründen — bu tasarıma özel doğrulanmış bir fotoğraf değil':'Büyütmek için tıklayın'}">`).join('')}
-             </div>
-             ${r.suggested?'<span class="muted" style="font-size:10px;">(tahmini görsel)</span>':`<span class="muted" style="font-size:10px;">${r.images.length} fotoğraf</span>`}`
-          : `<div style="width:100px;height:100px;background:var(--paper);border-radius:8px;margin:6px 0;display:flex;align-items:center;justify-content:center;color:var(--ink-soft);font-size:11px;">Görsel yok</div>`}
+        ${r.image
+          ? `<img src="${r.image}" class="thumb" style="width:400px;height:400px;object-fit:cover;border-radius:10px;margin:8px 0;${r.suggested?'opacity:.45;':''}" title="${r.suggested?'Aynı siparişteki başka bir üründen — bu tasarıma özel doğrulanmış bir fotoğraf değil':'Büyütmek için tıklayın'}">
+             ${r.suggested?'<span class="muted" style="font-size:10px;">(tahmini görsel)</span>':''}`
+          : `<div style="width:400px;height:400px;background:var(--paper);border-radius:10px;margin:8px 0;display:flex;align-items:center;justify-content:center;color:var(--ink-soft);font-size:11px;">Görsel yok</div>`}
         <strong style="font-family:'IBM Plex Mono',monospace;margin-top:4px;">${r.code}</strong>
         <span class="muted" style="font-size:12px;margin-top:4px;">${r.pieces} adet · ${r.orders} sipariş</span>
         <span class="muted" style="font-size:12px;">${r.m2.toFixed(2)} m²</span>
