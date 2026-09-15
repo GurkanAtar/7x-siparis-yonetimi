@@ -6467,8 +6467,12 @@ function renderCatalogUploadLog(){
   if(!el) return;
   const history = state.catalogUploadHistory || [];
   if(!history.length){
+    const hasCatalog = Object.keys(state.productCatalog||{}).length > 0;
+    const msg = hasCatalog
+      ? 'Mevcut katalog verisi bu özellik eklenmeden önce yüklenmiş, o yüzden hangi dosyanın ne zaman yüklendiği kayıtlı değil — kataloğun kendisi (görseller) tamamen sağlam, sadece geçmiş kaydı yok. Bundan sonraki her yükleme burada listelenecek.'
+      : 'Henüz kayıt yok — bu andan itibaren yapılan her katalog yüklemesi burada listelenecek.';
     el.innerHTML = `<div style="margin-top:14px"><label>Katalog yükleme geçmişi</label>
-      <p class="muted" style="margin-top:4px;">Henüz kayıt yok — bu andan itibaren yapılan her katalog yüklemesi burada listelenecek.</p></div>`;
+      <p class="muted" style="margin-top:4px;">${msg}</p></div>`;
     return;
   }
   const allSorted = history.slice().sort((a,b)=>new Date(b.uploadedAt)-new Date(a.uploadedAt));
