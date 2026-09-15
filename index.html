@@ -679,13 +679,6 @@
       <div id="exportProductionGroups"></div>
       <div class="empty" id="exportProductionEmpty" style="display:none">Şu anda üretimde ihracat kalemi yok.</div>
     </div>
-
-    <div class="card" id="yollandiReadyCard">
-      <h2>Yollandı Bekleyen Siparişler</h2>
-      <p class="muted" style="margin-top:-6px">Tüm kalemleri üretilmiş ama henüz "Yollandı" olarak kapatılmamış siparişler — İhracat kargo/DHL ile değil ayrı bir sevkiyat süreciyle gittiği için kendi kapanışı.</p>
-      <div id="yollandiReadyList"></div>
-      <div class="empty" id="yollandiReadyEmpty" style="display:none">Yollandı bekleyen sipariş yok.</div>
-    </div>
     </div>
   </div>
   </div>
@@ -8644,35 +8637,30 @@ function renderProduction(){
 // a simple manual stand-in for cargo-company integration, built so that
 // integration later only has to swap what SETS shippedAt (the cargo
 // company's own system, instead of a click here) without touching
-// anything downstream that reacts to it (the WhatsApp message included).
 // Scoped to whichever channel is currently selected, exactly like
 // renderProduction() above — was previously one shared list mixing every
 // channel together, which put DHL-flavored "Kargoya verildi" language in
 // front of Sıcak Satış/İhracat even though neither ships via DHL at all.
-// Now each channel's Üretim gets its own version of this card:
-//   - IG / Trendyol / Hepsiburada: "Kargoya Hazır Siparişler", unchanged
-//     behavior (fires the WhatsApp trigger where eligible)
-//   - Sıcak Satış: a differently-worded "Teslim Edildi Bekleyen Siparişler"
-//     — no cargo, no WhatsApp, just closing the order out once it's been
-//     handed to the customer directly
-//   - İhracat: this card's container (prodSub-main) is already hidden
-//     whenever İhracat is the active channel, so nothing to gate here
+//   - IG / Trendyol / Hepsiburada: "Kargoya Hazır Siparişler", fires the
+//     WhatsApp trigger where eligible
+//   - Sıcak Satış: no card at all — decided this was more confusing than
+//     useful for a channel that's just a direct local handover
+//   - İhracat: no card either (same decision, same reasoning) — its
+//     container (prodSub-main) is also already hidden whenever İhracat is
+//     the active channel anyway
 function renderShippedReady(){
   const wrap = document.getElementById('shippedReadyList');
   const card = document.getElementById('shippedReadyCard');
   if(!wrap || !card) return;
   if(currentEntryMode==='sicaksatis'){
-    document.getElementById('shippedReadyTitle').textContent = 'Teslim Edildi Bekleyen Siparişler';
-    document.getElementById('shippedReadySubtitle').textContent = 'Tüm kalemleri üretilmiş ama henüz "Teslim Edildi" olarak kapatılmamış siparişler — Sıcak Satış kargo ile değil doğrudan teslim edildiği için ayrı bir kapanış.';
-    document.getElementById('shippedReadyEmpty').textContent = 'Teslim edildi bekleyen sipariş yok.';
-  } else {
-    document.getElementById('shippedReadyTitle').textContent = 'Kargoya Hazır Siparişler';
-    document.getElementById('shippedReadySubtitle').textContent = 'Tüm kalemleri üretilmiş ama henüz "Kargoya verildi" olarak işaretlenmemiş siparişler. WhatsApp bildirimi açık bir Instagram kanalına aitse, bu işaret mesaj kuyruğunu da tetikler.';
-    document.getElementById('shippedReadyEmpty').textContent = 'Kargoya hazır bekleyen sipariş yok.';
+    card.style.display = 'none';
+    return;
   }
+  card.style.display = '';
+  document.getElementById('shippedReadyEmpty').textContent = 'Kargoya hazır bekleyen sipariş yok.';
   const ready = state.orders.filter(o=>
     o.items.length && o.items.every(i=>i.status==='produced')
-    && !o.shippedAt && !o.deliveredAt && o.saleType!=='Kayıp Kargo'
+    && !o.shippedAt && o.saleType!=='Kayıp Kargo'
     && channelCategoryForNumbering(o.channel)===currentEntryMode
   ).sort((a,b)=>{
     const ad = a.items.reduce((m,i)=>i.producedAt && (!m||i.producedAt<m) ? i.producedAt : m, null);
@@ -8680,13 +8668,11 @@ function renderShippedReady(){
     return (ad||'').localeCompare(bd||'');
   });
   document.getElementById('shippedReadyEmpty').style.display = ready.length ? 'none' : 'block';
-  const btnLabel = currentEntryMode==='sicaksatis' ? 'Teslim Edildi olarak kapat' : 'Kargoya verildi';
-  const btnClass = currentEntryMode==='sicaksatis' ? 'mark-delivered' : 'mark-shipped';
   wrap.innerHTML = ready.map(o=>{
     const sizes = o.items.map(i=>`${i.size} ×${i.qty}`).join(', ');
     return `<div class="tag" style="display:flex;align-items:center;justify-content:space-between;width:100%;">
       <span>${chanBadgeHtml(o.channel)} <strong>${o.customerName||''}</strong> — ${sizes}</span>
-      <button class="ghost small ${btnClass}" data-oid="${o.id}">${btnLabel}</button>
+      <button class="ghost small mark-shipped" data-oid="${o.id}">Kargoya verildi</button>
     </div>`;
   }).join('');
   wrap.querySelectorAll('.mark-shipped').forEach(b=>{
@@ -8699,152 +8685,142 @@ function renderShippedReady(){
       saveState(); render();
     };
   });
-  wrap.querySelectorAll('.mark-delivered').forEach(b=>{
-    b.onclick = ()=>{
-      const order = state.orders.find(o=>o.id===b.dataset.oid);
-      if(!order) return;
-      order.deliveredAt = new Date().toISOString();
-      logActivity(`Teslim edildi olarak kapatıldı: ${order.customerName} (${order.channel})`);
-      saveState(); render();
-    };
-  });
 }
 
 function renderExportProduction(){
   // İhracat tracks production as a running count against a target quantity,
-  // per PIECE — not a one-click "done" like IG's individual carpets, since
+  // per GROUP — not a one-click "done" like IG's individual carpets, since
   // export orders come in bulk and finishing happens gradually, often across
-  // several days. Each piece is tracked independently even within a set, since
-  // different sizes in the same set can be produced at different paces.
+  // several days. Grouped by setLabel exactly like every other screen in the
+  // app (Sipariş girişi, Baskı öncesi, Ayırma) — a paspas-style pair
+  // (40x60+60x100, or 40x60+60x90) is one product, tracked as one row with
+  // one shared Hedef/Üretilen, both sizes always moving together. Any other
+  // multi-piece set (3+ pieces, or a 2-piece combination that isn't one of
+  // those two specific pairs) is NOT collapsed — same rule isCollapsiblePair
+  // already applies for carpet counts and stickers elsewhere.
   const wrap = document.getElementById('exportProductionGroups');
   if(!wrap) return;
   wrap.innerHTML = '';
-  const rows = [];
+  const rowGroups = [];
+  const seenItemIds = new Set();
   state.orders.forEach(o=>{
     if(o.channel!=='İhracat') return;
-    o.items.filter(i=>i.status==='sorted').forEach(item=>{
-      rows.push({order:o, item});
+    const sortedItems = o.items.filter(i=>i.status==='sorted');
+    sortedItems.forEach(item=>{
+      if(seenItemIds.has(item.id)) return;
+      // Only the specific paspas-style pair collapses into one row — any
+      // other multi-piece set (3+, or a 2-piece combo that isn't one of
+      // those two exact pairs) stays exactly as before: each piece its own
+      // independent row with its own target/progress.
+      let group = [item];
+      if(item.setLabel){
+        const setMates = sortedItems.filter(i=>i.setLabel===item.setLabel);
+        if(isCollapsiblePair(setMates)) group = setMates;
+      }
+      group.forEach(i=>seenItemIds.add(i.id));
+      rowGroups.push({order:o, group});
     });
   });
-  document.getElementById('exportProductionEmpty').style.display = rows.length ? 'none' : 'block';
-  if(!rows.length) return;
+  document.getElementById('exportProductionEmpty').style.display = rowGroups.length ? 'none' : 'block';
+  if(!rowGroups.length) return;
 
   const byTaban = {};
-  rows.forEach(r=>{ byTaban[r.item.taban] = byTaban[r.item.taban]||[]; byTaban[r.item.taban].push(r); });
+  rowGroups.forEach(rg=>{ byTaban[rg.group[0].taban] = byTaban[rg.group[0].taban]||[]; byTaban[rg.group[0].taban].push(rg); });
   Object.keys(byTaban).forEach(taban=>{
     const g = document.createElement('div');
     g.className = 'taban-group';
     g.innerHTML = `<h3>${taban} — ${byTaban[taban].length} kalem</h3>`;
-    byTaban[taban].sort((a,b)=>hoursWaiting(b.item.sortedAt)-hoursWaiting(a.item.sortedAt));
-    byTaban[taban].forEach(({order,item})=>{
-      const produced = item.producedQty || 0;
-      const target = item.qty || 1;
+    byTaban[taban].sort((a,b)=>hoursWaiting(b.group[0].sortedAt)-hoursWaiting(a.group[0].sortedAt));
+    byTaban[taban].forEach(({order,group})=>{
+      const isPair = group.length>1;
+      const sizeLabel = group.map(i=>i.size).join(', ');
+      // A collapsed pair's target/progress is read from the first item —
+      // both pieces are always kept in lockstep by every handler below, so
+      // in practice they never actually differ.
+      const target = group[0].qty || 1;
+      const produced = group[0].producedQty || 0;
       const remaining = Math.max(0, target - produced);
       const pct = target ? Math.min(100, Math.round(produced/target*100)) : 0;
-      const rowKey = order.id + '::' + item.id;
+      const rowKey = order.id + '::' + (isPair ? group[0].setLabel : group[0].id);
       const isEditingCode = exportCodeEditingKey === rowKey;
       const codeCell = isEditingCode
-        ? `<input class="ex-code-input" value="${item.code||''}" data-oid="${order.id}" data-id="${item.id}" style="width:90px">
-           <button class="ghost small ex-save-code" data-oid="${order.id}" data-id="${item.id}">Kaydet</button>`
-        : `<span>${item.code}</span>
-           <button class="ghost small ex-edit-code" data-oid="${order.id}" data-id="${item.id}" title="Kod yazım hatası varsa düzeltin">Düzenle</button>`;
+        ? `<input class="ex-code-input" value="${group[0].code||''}" data-oid="${order.id}" data-key="${isPair?group[0].setLabel:group[0].id}" style="width:90px">
+           <button class="ghost small ex-save-code" data-oid="${order.id}" data-key="${isPair?group[0].setLabel:group[0].id}">Kaydet</button>`
+        : `<span>${group[0].code}</span>
+           <button class="ghost small ex-edit-code" data-oid="${order.id}" data-key="${isPair?group[0].setLabel:group[0].id}" title="Kod yazım hatası varsa düzeltin">Düzenle</button>`;
       const row = document.createElement('div');
       row.className = 'tag';
       row.style.display = 'flex';
       row.style.alignItems = 'center';
       row.style.gap = '10px';
       row.innerHTML = `
-        <span>${order.customerName} — ${item.size}${item.setLabel?` <span class="muted">(${displaySetLabel(item.setLabel)})</span>`:''}</span>
+        <span>${order.customerName} — ${sizeLabel}${group[0].setLabel?` <span class="muted">(${displaySetLabel(group[0].setLabel)})</span>`:''}</span>
         ${codeCell}
         <span class="muted">Hedef: ${target}</span>
         <label style="margin:0">Üretilen:</label>
-        <input type="number" class="ex-produced-input" min="0" max="${target}" value="${produced}" style="width:70px" data-oid="${order.id}" data-id="${item.id}">
+        <input type="number" class="ex-produced-input" min="0" max="${target}" value="${produced}" style="width:70px" data-oid="${order.id}" data-key="${isPair?group[0].setLabel:group[0].id}">
         <span class="muted">Kalan: ${remaining}</span>
         <span class="pill ${pct>=100?'pill-produced':'pill-pending'}">${pct}%</span>
-        <button class="ghost small ex-update-produced" data-oid="${order.id}" data-id="${item.id}">Güncelle</button>
-        ${pct>=100 ? `<button class="small ex-finalize" data-oid="${order.id}" data-id="${item.id}">Tamamlandı olarak kapat</button>` : ''}
+        <button class="ghost small ex-update-produced" data-oid="${order.id}" data-key="${isPair?group[0].setLabel:group[0].id}">Güncelle</button>
+        ${pct>=100 ? `<button class="small ex-finalize" data-oid="${order.id}" data-key="${isPair?group[0].setLabel:group[0].id}">Tamamlandı olarak kapat</button>` : ''}
       `;
       g.appendChild(row);
     });
     wrap.appendChild(g);
   });
 
+  // Every handler below resolves the group fresh from the row key: either a
+  // setLabel (collapsed pair — applies to both items, keeping them in
+  // lockstep) or a plain item id (everything else — applies to just that
+  // one piece, unchanged from before).
+  function resolveGroup(oid, key){
+    const order = state.orders.find(o=>o.id===oid);
+    if(!order) return {order:null, group:[]};
+    const bySetLabel = order.items.filter(i=>i.setLabel===key);
+    const group = bySetLabel.length>1 ? bySetLabel : order.items.filter(i=>i.id===key);
+    return {order, group};
+  }
   wrap.querySelectorAll('.ex-edit-code').forEach(b=>{
     b.onclick = ()=>{
-      exportCodeEditingKey = b.dataset.oid + '::' + b.dataset.id;
+      exportCodeEditingKey = b.dataset.oid + '::' + b.dataset.key;
       renderExportProduction();
     };
   });
   wrap.querySelectorAll('.ex-save-code').forEach(b=>{
     b.onclick = ()=>{
-      const input = wrap.querySelector(`.ex-code-input[data-oid="${b.dataset.oid}"][data-id="${b.dataset.id}"]`);
+      const input = wrap.querySelector(`.ex-code-input[data-oid="${b.dataset.oid}"][data-key="${b.dataset.key}"]`);
       const code = input.value.trim();
       if(!code){ input.style.borderColor = 'var(--rust)'; return; }
-      const order = state.orders.find(o=>o.id===b.dataset.oid);
-      const item = order.items.find(i=>i.id===b.dataset.id);
-      const oldCode = item.code;
-      item.code = code;
-      logActivity(`İhracat kodu düzeltildi: ${item.size} — ${order.customerName}: ${oldCode} → ${code}`);
+      const {order, group} = resolveGroup(b.dataset.oid, b.dataset.key);
+      if(!order || !group.length) return;
+      const oldCode = group[0].code;
+      group.forEach(i=>{ i.code = code; });
+      logActivity(`İhracat kodu düzeltildi: ${group.map(i=>i.size).join(', ')} — ${order.customerName}: ${oldCode} → ${code}`);
       exportCodeEditingKey = null;
       saveState(); render();
     };
   });
   wrap.querySelectorAll('.ex-update-produced').forEach(b=>{
     b.onclick = ()=>{
-      const order = state.orders.find(o=>o.id===b.dataset.oid);
-      const item = order.items.find(i=>i.id===b.dataset.id);
-      const input = wrap.querySelector(`.ex-produced-input[data-oid="${b.dataset.oid}"][data-id="${b.dataset.id}"]`);
+      const {order, group} = resolveGroup(b.dataset.oid, b.dataset.key);
+      if(!order || !group.length) return;
+      const input = wrap.querySelector(`.ex-produced-input[data-oid="${b.dataset.oid}"][data-key="${b.dataset.key}"]`);
+      const target = group[0].qty || 1;
       let val = parseInt(input.value)||0;
-      val = Math.max(0, Math.min(val, item.qty));
-      const prevQty = item.producedQty || 0;
-      item.producedQty = val;
-      logActivity(`Üretim güncellendi: ${item.size} — ${order.customerName} (${prevQty} → ${val} / ${item.qty})`);
+      val = Math.max(0, Math.min(val, target));
+      const prevQty = group[0].producedQty || 0;
+      group.forEach(i=>{ i.producedQty = val; });
+      logActivity(`Üretim güncellendi: ${group.map(i=>i.size).join(', ')} — ${order.customerName} (${prevQty} → ${val} / ${target})`);
       saveState(); render();
     };
   });
   wrap.querySelectorAll('.ex-finalize').forEach(b=>{
     b.onclick = ()=>{
-      const order = state.orders.find(o=>o.id===b.dataset.oid);
-      const item = order.items.find(i=>i.id===b.dataset.id);
-      item.status = 'produced';
-      item.producedAt = new Date().toISOString();
-      logActivity(`Üretim tamamlandı olarak kapatıldı: ${item.size} — ${order.customerName} (${item.producedQty}/${item.qty})`);
-      saveState(); render();
-    };
-  });
-  renderYollandiReady();
-}
-
-// İhracat's own version of the Kargoya Hazır / Teslim Edildi card —
-// separate wording again ("Yollandı") since export shipping is its own
-// process, not DHL and not a direct local handover. Every item on the
-// order finalized (status 'produced', same finish line as the target-
-// quantity tracking above ends at) but not yet marked dispatched.
-function renderYollandiReady(){
-  const wrap = document.getElementById('yollandiReadyList');
-  if(!wrap) return;
-  const ready = state.orders.filter(o=>
-    o.channel==='İhracat' && o.items.length && o.items.every(i=>i.status==='produced')
-    && !o.dispatchedAt && o.saleType!=='Kayıp Kargo'
-  ).sort((a,b)=>{
-    const ad = a.items.reduce((m,i)=>i.producedAt && (!m||i.producedAt<m) ? i.producedAt : m, null);
-    const bd = b.items.reduce((m,i)=>i.producedAt && (!m||i.producedAt<m) ? i.producedAt : m, null);
-    return (ad||'').localeCompare(bd||'');
-  });
-  document.getElementById('yollandiReadyEmpty').style.display = ready.length ? 'none' : 'block';
-  wrap.innerHTML = ready.map(o=>{
-    const sizes = o.items.map(i=>`${i.size} ×${i.qty}`).join(', ');
-    return `<div class="tag" style="display:flex;align-items:center;justify-content:space-between;width:100%;">
-      <span>${chanBadgeHtml(o.channel)} <strong>${o.customerName||''}</strong> — ${sizes}</span>
-      <button class="ghost small mark-dispatched" data-oid="${o.id}">Yollandı olarak kapat</button>
-    </div>`;
-  }).join('');
-  wrap.querySelectorAll('.mark-dispatched').forEach(b=>{
-    b.onclick = ()=>{
-      const order = state.orders.find(o=>o.id===b.dataset.oid);
-      if(!order) return;
-      order.dispatchedAt = new Date().toISOString();
-      logActivity(`Yollandı olarak kapatıldı: ${order.customerName} (${order.channel})`);
+      const {order, group} = resolveGroup(b.dataset.oid, b.dataset.key);
+      if(!order || !group.length) return;
+      const finishedAt = new Date().toISOString();
+      group.forEach(i=>{ i.status = 'produced'; i.producedAt = finishedAt; });
+      logActivity(`Üretim tamamlandı olarak kapatıldı: ${group.map(i=>i.size).join(', ')} — ${order.customerName} (${group[0].producedQty}/${group[0].qty})`);
       saveState(); render();
     };
   });
