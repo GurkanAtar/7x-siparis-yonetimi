@@ -841,11 +841,7 @@
     <div class="card" style="margin-top:16px;">
       <h2>Üretim Süresi (Lead Time)</h2>
       <p class="muted" style="margin-top:-6px">Siparişin sisteme girdiği andan (Instagram için sipariş tarihi, diğer kanallar için sisteme kaydedildiği an — her yerde kullanılan aynı kural) tüm kalemleri üretildi olana kadar geçen süre. Sadece tamamen üretilmiş siparişler dahildir; Kayıp Kargo hariç.</p>
-      <h3 style="font-family:'Fraunces',serif;font-size:15px;margin:16px 0 10px;">Aylık Ortalama (son 12 ay)</h3>
-      <div style="max-width:700px;">
-        <canvas id="chartLeadTime" height="220"></canvas>
-      </div>
-      <div class="row" style="margin-top:20px;gap:28px;">
+      <div class="row" style="margin-top:16px;gap:28px;">
         <div style="flex:1;">
           <h3 style="font-family:'Fraunces',serif;font-size:15px;margin:0 0 10px;">Kanala Göre Ortalama</h3>
           <div id="leadTimeByChannel"></div>
@@ -4562,7 +4558,6 @@ function renderTrendCharts(){
   renderWeeklyTrendChart();
   renderMonthlyComparisonChart();
   renderChannelMixChart();
-  renderLeadTimeChart();
   renderLeadTimeBreakdowns();
 }
 
@@ -4587,40 +4582,6 @@ function orderLeadTimeDays(order){
 }
 function leadTimeEligibleOrders(){
   return state.orders.filter(o=>o.saleType!=='Kayıp Kargo');
-}
-function renderLeadTimeChart(){
-  const canvas = document.getElementById('chartLeadTime');
-  if(!canvas || typeof Chart==='undefined') return;
-  const today = new Date();
-  const months = [];
-  for(let i=11;i>=0;i--) months.push(new Date(today.getFullYear(), today.getMonth()-i, 1));
-  const orders = leadTimeEligibleOrders();
-  const avgs = months.map(m=>{
-    const key = monthKey(m);
-    const vals = [];
-    orders.forEach(o=>{
-      const days = orderLeadTimeDays(o);
-      if(days===null) return;
-      // Bucketed by COMPLETION month — this chart is about recent
-      // operational performance, not which month the order was placed in.
-      let completedAt = null;
-      o.items.forEach(i=>{ if(i.producedAt && (!completedAt||i.producedAt>completedAt)) completedAt = i.producedAt; });
-      if(!completedAt || monthKey(new Date(completedAt))!==key) return;
-      vals.push(days);
-    });
-    return vals.length ? vals.reduce((s,v)=>s+v,0)/vals.length : null;
-  });
-  destroyTrendChart('leadTime');
-  trendCharts.leadTime = new Chart(canvas.getContext('2d'), {
-    type:'line',
-    data:{ labels: months.map(monthLabel), datasets:[{
-      label:'Ortalama gün', data: avgs, borderColor:'#6B4C93', backgroundColor:'rgba(107,76,147,.12)',
-      fill:true, tension:.25, pointRadius:3, spanGaps:true,
-    }] },
-    options:{ responsive:true, plugins:{ legend:{display:false},
-      tooltip:{ callbacks:{ label: ctx => ctx.parsed.y===null ? 'Veri yok' : `${ctx.parsed.y.toFixed(1)} gün` } } },
-      scales:{ y:{ beginAtZero:true, ticks:{callback:v=>v+' gün'} } } }
-  });
 }
 function renderLeadTimeBreakdowns(){
   const chanEl = document.getElementById('leadTimeByChannel');
