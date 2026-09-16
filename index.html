@@ -839,24 +839,6 @@
     </div>
 
     <div class="card" style="margin-top:16px;">
-      <h2>Üretim Süresi (Lead Time)</h2>
-      <p class="muted" style="margin-top:-6px">Siparişin sisteme girdiği andan (Instagram için sipariş tarihi, diğer kanallar için sisteme kaydedildiği an — her yerde kullanılan aynı kural) tüm kalemleri üretildi olana kadar geçen süre. Sadece tamamen üretilmiş siparişler dahildir; Kayıp Kargo hariç.</p>
-      <h3 style="font-family:'Fraunces',serif;font-size:15px;margin:16px 0 10px;">Aylık Ortalama (son 12 ay)</h3>
-      <div style="max-width:700px;">
-        <canvas id="chartLeadTime" height="220"></canvas>
-      </div>
-      <div class="row" style="margin-top:20px;gap:28px;">
-        <div style="flex:1;">
-          <h3 style="font-family:'Fraunces',serif;font-size:15px;margin:0 0 10px;">Kanala Göre Ortalama</h3>
-          <div id="leadTimeByChannel"></div>
-        </div>
-        <div style="flex:1;">
-          <h3 style="font-family:'Fraunces',serif;font-size:15px;margin:0 0 10px;">Tabana Göre Ortalama</h3>
-          <div id="leadTimeByTaban"></div>
-        </div>
-      </div>
-    </div>
-    <div class="card" style="margin-top:16px;">
       <h2>En Çok Alışveriş Yapanlar</h2>
       <p class="muted" style="margin-top:-6px">Toplam sipariş tutarına göre sıralı — Kayıp Kargo vakaları hariç. Aynı kişi birden fazla kanaldan alışveriş yaptıysa buraya tek satır olarak toplanır (kanal ayrımı Müşteri Veritabanı'nda görülebilir).</p>
       <div class="row row3" style="margin-bottom:10px;">
@@ -2942,7 +2924,7 @@ function renderIadelerResults(){
       return `<tr><td>${item.size} ${item.taban||''}</td><td>${item.qty}</td><td colspan="2">${actionCell}</td><td></td></tr>`;
     }).join('');
     return `<div style="margin-bottom:18px;">
-      <p style="margin:0 0 6px;"><strong>${o.customerName||'(isimsiz)'}</strong> <span class="muted">${o.date||''}</span> ${chanBadgeHtml(o.channel)}</p>
+      <p style="margin:0 0 6px;"><strong>${o.customerName||'(isimsiz)'}</strong> <span class="muted">${o.date||''}</span> ${chanBadgeHtml(dealerChannelNameForOrder(o))}</p>
       <table><thead><tr><th>Ölçü/Taban</th><th>Adet</th><th colspan="2">Durum / İşlem</th><th>Tahmini Tutar</th></tr></thead><tbody>${rows}</tbody></table>
     </div>`;
   }).join('');
@@ -2980,7 +2962,7 @@ function renderRecentIadeler(){
   if(!rows.length){ container.innerHTML = '<p class="muted">Henüz kayıtlı iade yok.</p>'; return; }
   rows.sort((a,b)=> new Date(b.item.iade.at) - new Date(a.item.iade.at));
   container.innerHTML = `<table><thead><tr><th>Tarih</th><th>Müşteri</th><th>Kanal</th><th>Ölçü/Taban</th><th>Sebep</th><th>Tahmini Tutar</th></tr></thead><tbody>
-    ${rows.map(({o,item})=>`<tr><td>${new Date(item.iade.at).toLocaleDateString('tr-TR')}</td><td>${o.customerName||''}</td><td>${chanBadgeHtml(o.channel)}</td><td>${item.size} ${item.taban||''}</td><td>${escapeHtml(item.iade.reason)}</td><td>${formatTL(item.iade.estValue)} TL</td></tr>`).join('')}
+    ${rows.map(({o,item})=>`<tr><td>${new Date(item.iade.at).toLocaleDateString('tr-TR')}</td><td>${o.customerName||''}</td><td>${chanBadgeHtml(dealerChannelNameForOrder(o))}</td><td>${item.size} ${item.taban||''}</td><td>${escapeHtml(item.iade.reason)}</td><td>${formatTL(item.iade.estValue)} TL</td></tr>`).join('')}
   </tbody></table>`;
 }
 
@@ -3021,7 +3003,7 @@ function renderSiparisSorgula(){
       return `<span class="pill" style="margin-right:4px;">${label}: ${m.status}</span>`;
     }).join('');
     return `<div class="tag" style="display:block;width:100%;margin-bottom:12px;">
-      <p style="margin:0 0 6px;"><strong>${o.customerName||'(isimsiz)'}</strong> ${chanBadgeHtml(o.channel)} <span class="muted">${o.date||''}</span></p>
+      <p style="margin:0 0 6px;"><strong>${o.customerName||'(isimsiz)'}</strong> ${chanBadgeHtml(dealerChannelNameForOrder(o))} <span class="muted">${o.date||''}</span></p>
       <p style="margin:0 0 8px;">${headerNo}</p>
       <table><thead><tr><th>Kod</th><th>Ölçü/Taban</th><th>Adet</th><th>Durum</th></tr></thead><tbody>${itemRows}</tbody></table>
       ${shippedLine}
@@ -3072,8 +3054,9 @@ function renderCustomerDbResults(){
   // one it came through, rather than being silently merged together.
   const groups = new Map();
   matches.forEach(o=>{
-    const key = normText(o.customerName) + '::' + normText(o.phone) + '::' + normText(o.channel);
-    if(!groups.has(key)) groups.set(key, { name:o.customerName, phone:o.phone, address:o.address, channel:o.channel, orders:[], totalTutar:0 });
+    const dealerChan = dealerChannelNameForOrder(o);
+    const key = normText(o.customerName) + '::' + normText(o.phone) + '::' + normText(dealerChan);
+    if(!groups.has(key)) groups.set(key, { name:o.customerName, phone:o.phone, address:o.address, channel:dealerChan, orders:[], totalTutar:0 });
     const g = groups.get(key);
     g.orders.push(o);
     // Kayıp Kargo isn't a real sale (same exclusion as Raporlar/Trendler) —
@@ -3143,7 +3126,7 @@ function buildCustomerDbDetailHtml(customer){
     const items = o.items.map(i=>`${i.size} ×${i.qty}${i.iade?' <span style="color:var(--rust);font-weight:600;">(İADE)</span>':''}`).join(', ');
     const priceCell = o.price ? formatTL(priceToNumber(o.price))+' TL' : '-';
     const brand = getOrderBrand(o) || 'Marka adı yok';
-    return `<tr><td>${o.date||'-'}</td><td>${chanBadgeHtml(o.channel)}</td><td>${brand}</td><td>${items}</td><td>${priceCell}</td></tr>`;
+    return `<tr><td>${o.date||'-'}</td><td>${chanBadgeHtml(dealerChannelNameForOrder(o))}</td><td>${brand}</td><td>${items}</td><td>${priceCell}</td></tr>`;
   }).join('');
   return `
     <div style="background:var(--paper);border-radius:8px;padding:10px 14px;margin:4px 0 10px;">
@@ -4343,7 +4326,7 @@ function renderReport(){
           const adet = isCollapsiblePair(bundle) ? (bundle[0].qty||1) : bundle.reduce((s,i)=>s+i.qty,0);
           const m2Total = group.reduce((s,g)=>s+g.m2, 0);
           const numKey = itemGroupKey(o, bundle[0]);
-          return `<tr><td class="ts">${itemNumbers[numKey]||'—'}</td><td>${o.date}</td><td>${chanBadgeHtml(o.channel)}</td><td>${o.customerName}</td><td>${sizeText}</td><td>${adet}</td><td>${m2Total.toFixed(2)}</td><td>${bundle[0].taban}</td><td>${pill(bundle[0].status==='sorted'?'in production':bundle[0].status)}</td></tr>`;
+          return `<tr><td class="ts">${itemNumbers[numKey]||'—'}</td><td>${o.date}</td><td>${chanBadgeHtml(dealerChannelNameForOrder(o))}</td><td>${o.customerName}</td><td>${sizeText}</td><td>${adet}</td><td>${m2Total.toFixed(2)}</td><td>${bundle[0].taban}</td><td>${pill(bundle[0].status==='sorted'?'in production':bundle[0].status)}</td></tr>`;
         }).join('');
       })()}</tbody>
     </table>`;
@@ -4553,97 +4536,8 @@ function renderTrendCharts(){
   renderWeeklyTrendChart();
   renderMonthlyComparisonChart();
   renderChannelMixChart();
-  renderLeadTimeChart();
-  renderLeadTimeBreakdowns();
 }
 
-// ---------------- Üretim Süresi (Lead Time) ----------------
-// How long a fully-completed order took from the same "placed at" moment
-// used everywhere else in the app (orderPlacedAt — Instagram by its own
-// order date, every other channel by when it was actually recorded) to
-// the LATEST producedAt among its items — i.e. when the whole order, not
-// just its first piece, was actually finished. Only counts orders where
-// every item has reached 'produced'; one still in progress has no lead
-// time yet, not a partial one.
-function orderLeadTimeDays(order){
-  if(!order.items.length || !order.items.every(i=>i.status==='produced')) return null;
-  const placedAt = orderPlacedAt(order);
-  if(!placedAt) return null;
-  let completedAt = null;
-  order.items.forEach(i=>{
-    if(i.producedAt && (!completedAt || i.producedAt>completedAt)) completedAt = i.producedAt;
-  });
-  if(!completedAt) return null;
-  return Math.max(0, (new Date(completedAt).getTime() - placedAt.getTime()) / (24*60*60*1000));
-}
-function leadTimeEligibleOrders(){
-  return state.orders.filter(o=>o.saleType!=='Kayıp Kargo');
-}
-function renderLeadTimeChart(){
-  const canvas = document.getElementById('chartLeadTime');
-  if(!canvas || typeof Chart==='undefined') return;
-  const today = new Date();
-  const months = [];
-  for(let i=11;i>=0;i--) months.push(new Date(today.getFullYear(), today.getMonth()-i, 1));
-  const orders = leadTimeEligibleOrders();
-  const avgs = months.map(m=>{
-    const key = monthKey(m);
-    const vals = [];
-    orders.forEach(o=>{
-      const days = orderLeadTimeDays(o);
-      if(days===null) return;
-      // Bucketed by COMPLETION month — this chart is about recent
-      // operational performance, not which month the order was placed in.
-      let completedAt = null;
-      o.items.forEach(i=>{ if(i.producedAt && (!completedAt||i.producedAt>completedAt)) completedAt = i.producedAt; });
-      if(!completedAt || monthKey(new Date(completedAt))!==key) return;
-      vals.push(days);
-    });
-    return vals.length ? vals.reduce((s,v)=>s+v,0)/vals.length : null;
-  });
-  destroyTrendChart('leadTime');
-  trendCharts.leadTime = new Chart(canvas.getContext('2d'), {
-    type:'line',
-    data:{ labels: months.map(monthLabel), datasets:[{
-      label:'Ortalama gün', data: avgs, borderColor:'#6B4C93', backgroundColor:'rgba(107,76,147,.12)',
-      fill:true, tension:.25, pointRadius:3, spanGaps:true,
-    }] },
-    options:{ responsive:true, plugins:{ legend:{display:false},
-      tooltip:{ callbacks:{ label: ctx => ctx.parsed.y===null ? 'Veri yok' : `${ctx.parsed.y.toFixed(1)} gün` } } },
-      scales:{ y:{ beginAtZero:true, ticks:{callback:v=>v+' gün'} } } }
-  });
-}
-function renderLeadTimeBreakdowns(){
-  const chanEl = document.getElementById('leadTimeByChannel');
-  const tabanEl = document.getElementById('leadTimeByTaban');
-  if(!chanEl || !tabanEl) return;
-  const byChannel = {}, byTaban = {};
-  leadTimeEligibleOrders().forEach(o=>{
-    const days = orderLeadTimeDays(o);
-    if(days===null) return;
-    const fam = channelCategoryForNumbering(o.channel);
-    byChannel[fam] = byChannel[fam] || [];
-    byChannel[fam].push(days);
-    // An order can span more than one taban (mixed-item orders) — counted
-    // once per taban actually present, same convention the rest of the app
-    // already uses for a mixed order's taban-level stats.
-    const tabans = [...new Set(o.items.map(i=>i.taban).filter(Boolean))];
-    tabans.forEach(t=>{ byTaban[t] = byTaban[t] || []; byTaban[t].push(days); });
-  });
-  const chanRows = Object.keys(CHANNEL_FAMILY_LABELS)
-    .filter(f=>byChannel[f] && byChannel[f].length)
-    .map(f=>({ label: CHANNEL_FAMILY_LABELS[f], avg: byChannel[f].reduce((s,v)=>s+v,0)/byChannel[f].length, count: byChannel[f].length }))
-    .sort((a,b)=>b.avg-a.avg);
-  chanEl.innerHTML = chanRows.length ? `<table><thead><tr><th>Kanal</th><th>Ortalama</th><th>Sipariş</th></tr></thead><tbody>
-    ${chanRows.map(r=>`<tr><td>${r.label}</td><td>${r.avg.toFixed(1)} gün</td><td>${r.count}</td></tr>`).join('')}
-  </tbody></table>` : '<p class="muted">Henüz tamamlanmış sipariş yok.</p>';
-  const tabanRows = Object.keys(byTaban)
-    .map(t=>({ label:t, avg: byTaban[t].reduce((s,v)=>s+v,0)/byTaban[t].length, count: byTaban[t].length }))
-    .sort((a,b)=>b.avg-a.avg);
-  tabanEl.innerHTML = tabanRows.length ? `<table><thead><tr><th>Taban</th><th>Ortalama</th><th>Sipariş</th></tr></thead><tbody>
-    ${tabanRows.map(r=>`<tr><td>${r.label}</td><td>${r.avg.toFixed(1)} gün</td><td>${r.count}</td></tr>`).join('')}
-  </tbody></table>` : '<p class="muted">Henüz tamamlanmış sipariş yok.</p>';
-}
 
 // En Çok Alışveriş Yapanlar — same exclusion rule as everything else here
 // (Kayıp Kargo is never a real sale). Grouped by name+phone only, NOT by
@@ -4668,7 +4562,7 @@ function renderTopCustomers(){
     const key = normText(o.customerName) + '::' + normText(o.phone);
     if(!groups.has(key)) groups.set(key, { name:o.customerName||'(isimsiz)', channels:new Set(), count:0, tutar:0 });
     const g = groups.get(key);
-    g.channels.add(o.channel);
+    g.channels.add(dealerChannelNameForOrder(o));
     g.count += 1;
     g.tutar += priceToNumber(o.price);
   });
@@ -4967,7 +4861,7 @@ function renderWaQueue(){
     ${rows.map(({o,m})=>`<tr>
       <td>${new Date(m.createdAt).toLocaleString('tr-TR')}</td>
       <td>${o.customerName||''}</td>
-      <td>${chanBadgeHtml(o.channel)}</td>
+      <td>${chanBadgeHtml(dealerChannelNameForOrder(o))}</td>
       <td>${typeLabels[m.type]||m.type}</td>
       <td>${m.templateParams && m.templateParams.orderNo || '-'}</td>
       <td style="color:${statusColors[m.status]||'inherit'};font-weight:600;">${m.status}</td>
@@ -7246,6 +7140,26 @@ function ensureAllChannelCodes(){
 // Small HTML tag showing a channel's code, meant to sit right next to its
 // existing badge-chan pill — kept as one shared helper so every one of the
 // several places a channel badge is printed stays visually consistent.
+// order.channel is stored as the bare category ('Sıcak Satış' / 'İhracat')
+// for these two specifically — unlike every other channel, where
+// order.channel already IS the exact registry name (the full dealer
+// string, e.g. "Ugur Bey — Bursa"). That's fine for numbering/production
+// logic, which only needs the category — but it means a badge built
+// straight from order.channel can never find that dealer's letter code,
+// since the registry lookup is an exact-name match against entries like
+// "Ugur Bey — Bursa", not the bare category. This reconstructs the same
+// name the registry itself would use (see Kanal ekle / the
+// auto-registration on first order), so the lookup actually finds it.
+function dealerChannelNameForOrder(order){
+  if(order.channel==='Sıcak Satış' && order.city){
+    return `${order.customerName} — ${order.city}`;
+  }
+  if(order.channel==='İhracat'){
+    const location = [order.city, order.country].filter(Boolean).join(', ');
+    if(location) return `${order.customerName} — ${location}`;
+  }
+  return order.channel;
+}
 function chanCodeTagHtml(channelName){
   const chan = state.channels.find(c=>normText(c.name)===normText(channelName));
   if(!chan || !chan.code) return '';
@@ -7772,7 +7686,7 @@ function renderOrders(){
       }
       const missingContactBadge = missingContactInfo
         ? ' <span class="pill" style="background:var(--rust);color:#fff;">İletişim bilgisi eksik</span>' : '';
-      tr.innerHTML = `<td>${numCell}</td><td>${o.date||'-'}</td><td>${chanBadgeHtml(o.channel)}</td>
+      tr.innerHTML = `<td>${numCell}</td><td>${o.date||'-'}</td><td>${chanBadgeHtml(dealerChannelNameForOrder(o))}</td>
         <td>${o.customerName}${missingContactBadge}</td><td>${o.phone||'-'}</td><td>${o.address||'-'}</td>
         <td>${sizeCell}</td><td>${tabanCell}</td><td>${fringeCell}</td><td>${shapeCell}</td>
         <td>${groupCarpetCount}</td>
@@ -7928,7 +7842,7 @@ function renderOrders(){
         ? formatTL(priceToNumber(group[0].pricePerM2))+' TL'
         : (impliedPriceM2!==null ? formatTL(impliedPriceM2)+' TL' : '-');
       if(gi===0){
-        tr.innerHTML = `<td>${numCell}</td><td rowspan="${rowspan}">${o.date||'-'}</td><td rowspan="${rowspan}">${chanBadgeHtml(o.channel)}</td>
+        tr.innerHTML = `<td>${numCell}</td><td rowspan="${rowspan}">${o.date||'-'}</td><td rowspan="${rowspan}">${chanBadgeHtml(dealerChannelNameForOrder(o))}</td>
           <td rowspan="${rowspan}">${o.customerName}${missingContactBadge}</td><td rowspan="${rowspan}">${o.phone||'-'}</td><td rowspan="${rowspan}">${o.address||'-'}</td>
           <td>${sizeCell}</td><td>${tabanCell}</td><td>${fringeCell}</td><td>${shapeCell}</td>
           <td>${groupCarpetCount}</td>
@@ -8551,7 +8465,7 @@ function renderQueue(){
       }
 
       if(gi===0){
-        tr.innerHTML = `<td>${numCell}</td><td rowspan="${rowspan}">${o.date||'-'}</td><td rowspan="${rowspan}">${chanBadgeHtml(o.channel)}</td>
+        tr.innerHTML = `<td>${numCell}</td><td rowspan="${rowspan}">${o.date||'-'}</td><td rowspan="${rowspan}">${chanBadgeHtml(dealerChannelNameForOrder(o))}</td>
           <td rowspan="${rowspan}">${o.customerName}</td>${hidePhoneAdres ? '' : `<td rowspan="${rowspan}">${o.phone||'-'}</td><td rowspan="${rowspan}">${o.address||'-'}</td>`}${hidePhoneAdres ? `<td>${groupCarpetCount}</td>` : ''}
           <td>${sizeCell}</td>
           <td rowspan="${rowspan}">${o.price||'-'}</td><td rowspan="${rowspan}">${o.prepaidAmount||'-'}</td><td rowspan="${rowspan}">${collectCell}</td>
@@ -9270,7 +9184,7 @@ function renderShippedReady(){
   wrap.innerHTML = ready.map(o=>{
     const sizes = o.items.map(i=>`${i.size} ×${i.qty}`).join(', ');
     return `<div class="tag" style="display:flex;align-items:center;justify-content:space-between;width:100%;">
-      <span>${chanBadgeHtml(o.channel)} <strong>${o.customerName||''}</strong> — ${sizes}</span>
+      <span>${chanBadgeHtml(dealerChannelNameForOrder(o))} <strong>${o.customerName||''}</strong> — ${sizes}</span>
       <button class="ghost small mark-shipped" data-oid="${o.id}">Kargoya verildi</button>
     </div>`;
   }).join('');
