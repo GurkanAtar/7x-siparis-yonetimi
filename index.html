@@ -7589,14 +7589,14 @@ function computeTopDesigns(orderFilter){
 }
 function topDesignsGridHtml(rows, emptyMsg){
   if(!rows.length) return `<p class="muted">${emptyMsg}</p>`;
-  return `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(420px,1fr));gap:20px;">
+  return `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:16px;">
     ${rows.map((r,i)=>`
-      <div class="tag" style="display:flex;flex-direction:column;align-items:center;text-align:center;padding:14px;">
+      <div class="tag" style="display:flex;flex-direction:column;align-items:center;text-align:center;padding:12px;">
         <span style="font-weight:600;color:var(--ink-soft);font-size:12px;">#${i+1}</span>
         ${r.image
-          ? `<img src="${r.image}" class="thumb" style="width:400px;height:400px;object-fit:cover;border-radius:10px;margin:8px 0;${r.suggested?'opacity:.45;':''}" title="${r.suggested?'Aynı siparişteki başka bir üründen — bu tasarıma özel doğrulanmış bir fotoğraf değil':'Büyütmek için tıklayın'}">
+          ? `<img src="${r.image}" class="thumb" style="width:200px;height:200px;object-fit:cover;border-radius:9px;margin:6px 0;${r.suggested?'opacity:.45;':''}" title="${r.suggested?'Aynı siparişteki başka bir üründen — bu tasarıma özel doğrulanmış bir fotoğraf değil':'Büyütmek için tıklayın'}">
              ${r.suggested?'<span class="muted" style="font-size:10px;">(tahmini görsel)</span>':''}`
-          : `<div style="width:400px;height:400px;background:var(--paper);border-radius:10px;margin:8px 0;display:flex;align-items:center;justify-content:center;color:var(--ink-soft);font-size:11px;">Görsel yok</div>`}
+          : `<div style="width:200px;height:200px;background:var(--paper);border-radius:9px;margin:6px 0;display:flex;align-items:center;justify-content:center;color:var(--ink-soft);font-size:11px;">Görsel yok</div>`}
         <strong style="font-family:'IBM Plex Mono',monospace;margin-top:4px;">${r.code}</strong>
         <span class="muted" style="font-size:12px;margin-top:4px;">${r.pieces} adet · ${r.orders} sipariş</span>
         <span class="muted" style="font-size:12px;">${r.m2.toFixed(2)} m²</span>
