@@ -5106,7 +5106,7 @@ function wireMyPinSave(){
       return;
     }
     const { error } = await sb.from('profiles').update({ pin: val || null }).eq('id', currentUser.id);
-    if(error){ statusEl.style.color='var(--rust)'; statusEl.textContent = 'Kaydedilemedi.'; return; }
+    if(error){ statusEl.style.color='var(--rust)'; statusEl.textContent = 'Kaydedilemedi: ' + error.message; return; }
     if(currentProfile) currentProfile.pin = val || null;
     const mine = allProfiles.find(p=>p.id===currentUser.id);
     if(mine) mine.pin = val || null;
