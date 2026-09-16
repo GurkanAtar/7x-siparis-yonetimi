@@ -7259,6 +7259,18 @@ function chanCodeTagHtml(channelName){
   return `<span style="font-size:10px;background:var(--paper);color:var(--ink-soft);border:1px solid var(--line);padding:1px 6px;border-radius:5px;margin-left:4px;font-family:'IBM Plex Mono',monospace;">${chan.code}</span>`;
 }
 function chanBadgeHtml(channelName){
+  const category = channelCategoryForNumbering(channelName);
+  // Sıcak Satış/İhracat "channel names" are the dealer's own personal name
+  // (plus city) — already shown separately as the customer name everywhere
+  // this badge appears, so repeating it here just says the same name
+  // twice. Every other category keeps showing its name normally, since
+  // there it's a genuinely distinct business identity (a brand or dealer
+  // account), not a repeat of a column already on screen. Falls back to
+  // the plain name only if this particular dealer has no code yet.
+  if(category==='sicaksatis' || category==='ihracat'){
+    const codeTag = chanCodeTagHtml(channelName);
+    return codeTag || `<span class="badge-chan">${channelName||''}</span>`;
+  }
   return `<span class="badge-chan">${channelName||''}</span>${chanCodeTagHtml(channelName)}`;
 }
 // Shared by both the row highlight/badge and the list's sort order, so the
@@ -7430,34 +7442,41 @@ function computeItemNumbers(){
 // on (channel.waEnabled) send anything — every other channel/category, and
 // every Instagram channel that hasn't been opted in, is silently skipped.
 // ---------------- Fused Sipariş Numarası (permanent, order-level) ----------------
-// Format: [kanal+hesap kodu][YYMMDD][4 haneli sıra] — e.g. IGQA2609150001.
-// Genuinely different job from the short "IG-305" day-digit code above:
-// the short code + item suffix (-1/2, -2/2) is a PRODUCTION-tracking tool,
-// useful only while pieces of one order are still moving independently
-// through coding/sorting/production. This fused number is the order's
-// permanent identity, generated once (same moment as the short code, at
-// first coding) and never changing after — but deliberately not surfaced
-// in the operational tables while items are still in progress, since the
-// short code is what staff actually need on the floor. It "pops up" and
-// becomes the number that matters everywhere else (Müşteri Veritabanı
-// history, İadeler, Sipariş Sorgula, WhatsApp) once every item is produced
-// and the order is whole again.
-//
-// The daily sequence is a single counter SHARED across every channel — the
-// next order coded today gets the next number, regardless of which
-// channel it belongs to — not a separate counter per channel/account.
-function generateSiparisNumarasi(order){
+// Format: [kanal 2 harf][hesap/bayi 2 harf][DDMMYY][üretim sıra no] —
+// e.g. IG7X150926201, TY7X1109264005, SSUB110926202, EXHA110926201.
+// The first 4 characters are just the channel's own letter code (already
+// built elsewhere — category prefix + account code, e.g. "IG"+"7X"). The
+// date is day-month-year, not year-month-day. The final segment is NOT a
+// separately generated number — it's the EXACT SAME number already in the
+// order's own short floor code (IG-201 → 201, TY-4005 → 4005), just
+// without its category prefix and dash, reused as-is. That's naturally 3
+// characters for IG/Sıcak Satış/İhracat (a 1-digit weekday + 2-digit daily
+// count) and Trendyol carries its own permanent 4-digit counter.
+// Hepsiburada currently shares the same 3-character day-digit scheme as
+// IG/SS/EX rather than its own permanent counter — left-padded to 4 digits
+// here only, so the fused number's width still matches Trendyol's, without
+// changing Hepsiburada's actual floor-code system itself.
+function generateSiparisNumarasi(order, firstItem){
   const chan = state.channels.find(c=>normText(c.name)===normText(order.channel));
   const code = (chan && chan.code) ? chan.code : 'XXXX';
   const now = new Date();
-  const dateSegment = String(now.getFullYear()).slice(2) + String(now.getMonth()+1).padStart(2,'0') + String(now.getDate()).padStart(2,'0');
-  const usedToday = state.orders.filter(o=>o.siparisNumarasi && o.siparisNumarasi.slice(4,10)===dateSegment).length;
-  const seq = String(usedToday+1).padStart(4,'0');
+  const dateSegment = String(now.getDate()).padStart(2,'0') + String(now.getMonth()+1).padStart(2,'0') + String(now.getFullYear()).slice(2);
+  let seq;
+  if(order.trendyolNumber){
+    seq = String(order.trendyolNumber);
+  } else {
+    const category = channelCategoryForNumbering(order.channel);
+    const itemNumbers = computeItemNumbers();
+    const item = firstItem || order.items.find(i=>i.codedAt);
+    const key = item ? itemGroupKey(order, item) : null;
+    const floorNum = key && itemNumbers[key] ? itemNumbers[key].replace(/^[A-Z]+-/, '') : '000';
+    seq = category==='hepsiburada' ? floorNum.padStart(4,'0') : floorNum;
+  }
   return code + dateSegment + seq;
 }
-function ensureSiparisNumarasi(order){
+function ensureSiparisNumarasi(order, firstItem){
   if(order.siparisNumarasi) return;
-  order.siparisNumarasi = generateSiparisNumarasi(order);
+  order.siparisNumarasi = generateSiparisNumarasi(order, firstItem);
   logActivity(`Sipariş numarası atandı: ${order.customerName||''} → ${order.siparisNumarasi}`);
 }
 // The fused number only ever shows once the order is whole again (every
@@ -8636,7 +8655,7 @@ function wireQueueHandlers(tbody){
     }
     // Generated for every channel (not just Instagram) — this is the
     // general permanent order identity, WhatsApp is just one consumer of it.
-    ensureSiparisNumarasi(order);
+    ensureSiparisNumarasi(order, group[0]);
     // whatsAppEligible() already filters this down to Instagram + opted-in
     // channels only — safe to call unconditionally on every coding action,
     // İhracat included, since it'll just no-op for anything that doesn't
