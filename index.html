@@ -256,6 +256,7 @@
         <div class="entry-subtab" data-mode="trendyol-bayi">Trendyol Bayileri</div>
         <div class="entry-subtab" data-mode="hepsiburada-kurumsal">Hepsiburada Kurumsal</div>
         <div class="entry-subtab" data-mode="hepsiburada-bayi">Hepsiburada Bayileri</div>
+        <div class="entry-subtab" data-mode="sicaksatis-ihracat">Sıcak Satış / İhracat</div>
       </div>
       <div class="row" style="margin-top:10px;gap:10px;align-items:flex-end;">
         <div style="flex:1;"><input id="cdbSearch" placeholder="İsim, soyisim, telefon veya adres..."></div>
@@ -3105,15 +3106,28 @@ document.getElementById('siparisSorgulaInput').addEventListener('input', renderS
 
 // Each channel is fully separate in the per-channel tabs — Instagram
 // Kurumsal, Instagram Bayileri, Trendyol Kurumsal, Trendyol Bayileri,
-// Hepsiburada Kurumsal, Hepsiburada Bayileri — never mixed together.
-// "Tüm Kanallar" is the exception and searches everything at once,
-// Sıcak Satış and İhracat included: when you only know a name or half a
-// phone number and NOT which channel the person bought through, having to
-// guess the right tab first is exactly the wrong thing to ask. Results stay
-// grouped by channel either way (see the grouping key below), so a combined
-// search still shows plainly which channel each hit came through.
+// Hepsiburada Kurumsal, Hepsiburada Bayileri, Sıcak Satış / İhracat — never
+// mixed together. "Tüm Kanallar" searches Instagram/Trendyol/Hepsiburada
+// together (when you only know a name or half a phone number and NOT
+// which of those three the person bought through, having to guess the
+// right tab first is exactly the wrong thing to ask) — but deliberately
+// stops short of Sıcak Satış/İhracat, which get their own combined tab
+// instead. Results stay grouped by channel either way (see the grouping
+// key below), so a combined search still shows plainly which channel each
+// hit came through.
 function customerDbOrders(){
-  if(cdbMode === 'all') return state.orders;
+  if(cdbMode === 'all'){
+    return state.orders.filter(o=>{
+      const cat = channelCategoryForNumbering(o.channel);
+      return cat!=='sicaksatis' && cat!=='ihracat';
+    });
+  }
+  if(cdbMode === 'sicaksatis-ihracat'){
+    return state.orders.filter(o=>{
+      const cat = channelCategoryForNumbering(o.channel);
+      return cat==='sicaksatis' || cat==='ihracat';
+    });
+  }
   const [cat, kind] = cdbMode.split('-'); // e.g. 'ig'/'kurumsal', 'trendyol'/'bayi'
   return state.orders.filter(o=>{
     if(channelCategoryForNumbering(o.channel) !== cat) return false;
