@@ -235,6 +235,7 @@
       <div class="entry-subtab" id="waQueueBtn">WhatsApp Kuyruğu</div>
       <div class="entry-subtab" id="siparisSorgulaBtn">Sipariş Sorgula</div>
       <div class="entry-subtab" id="overallDesignsBtn">Genel Çok Satanlar</div>
+      <div class="entry-subtab" id="siparislerDurumuBtn">Siparişler Durumu</div>
     </div>
     <div class="entry-subtabs" id="stageSelector" style="margin-top:6px;">
       <div class="entry-subtab active" data-stage="entry">Sipariş girişi</div>
@@ -295,6 +296,18 @@
       <h2>Genel Çok Satanlar</h2>
       <p class="muted" style="margin-top:-6px">Tüm kanallar birlikte — Instagram, Trendyol, Hepsiburada, Sıcak Satış ve İhracat'ı tek listede birleştirip en çok satılan ilk 10 tasarımı gösterir. Aynı kod farklı kanallarda kullanılmışsa hepsi birlikte sayılır. Sadece kodlanmış kalemler dahildir; Kayıp Kargo hariç.</p>
       <div id="overallDesignsTable"></div>
+    </div>
+
+    <div id="siparislerDurumuPanel" class="card" style="display:none;">
+      <h2>Siparişler Durumu <button class="ghost small print-btn" data-print="siparislerDurumu" style="margin-left:8px;font-weight:normal;font-family:'Inter',sans-serif;font-size:12px;">Listeyi yazdır</button> <button class="ghost small excel-btn" data-excel="siparislerDurumu" style="font-weight:normal;font-family:'Inter',sans-serif;font-size:12px;">Excel'e aktar</button></h2>
+      <p class="muted" style="margin-top:-6px">Her kalemin Sipariş No, tarih, kanal, müşteri, ölçü, adet, m², taban ve durumu — tek bir listede. Kayıp Kargo hariç.</p>
+      <div class="row row3">
+        <div><label>Başlangıç</label><input type="date" id="sdFrom"></div>
+        <div><label>Bitiş</label><input type="date" id="sdTo"></div>
+        <div><label>Kanal</label><select id="sdChannel"><option value="">Tüm kanallar</option></select></div>
+      </div>
+      <button id="runSiparislerDurumu">Listeyi çalıştır</button>
+      <div id="siparislerDurumuResults" style="margin-top:14px"></div>
     </div>
 
   <div id="entry" class="stage-panel active">
@@ -690,7 +703,6 @@
     </div>
     </div>
   </div>
-  </div>
 
   <div id="designs" class="stage-panel">
     <div class="card">
@@ -698,6 +710,7 @@
       <p class="muted" style="margin-top:-6px">Baskı öncesi'nde verilen tasarım koduna göre en çok satılan ilk 10 tasarım — sıralama görsele değil sadece koda göre yapılır, ama her tasarımın yanında tanıma kolaylığı için (varsa, en fazla 10 adet) gerçek fotoğraflar da gösterilir. Şu an açık olan kanala göre hesaplanır. Sadece kodlanmış kalemler dahildir; Kayıp Kargo hariç.</p>
       <div id="topDesignsTable" style="margin-top:16px;"></div>
     </div>
+  </div>
   </div>
 
   <div id="overview" class="panel">
@@ -2721,6 +2734,8 @@ document.querySelectorAll('.entry-subtab[data-sub]').forEach(t=>{
     document.getElementById('siparisSorgulaPanel').style.display = 'none';
     document.getElementById('overallDesignsBtn').classList.remove('active');
     document.getElementById('overallDesignsPanel').style.display = 'none';
+    document.getElementById('siparislerDurumuBtn').classList.remove('active');
+    document.getElementById('siparislerDurumuPanel').style.display = 'none';
     document.getElementById('stageSelector').style.display = '';
     document.querySelectorAll('.entry-subtab[data-sub]').forEach(x=>x.classList.remove('active'));
     document.querySelectorAll('.entry-sub-panel[id^="entrySub-"]').forEach(x=>x.classList.remove('active'));
@@ -2755,13 +2770,13 @@ document.querySelectorAll('.entry-subtab[data-sub]').forEach(t=>{
   };
 });
 
-// Müşteri Veritabanı, İadeler, WhatsApp Kuyruğu, Sipariş Sorgula, and Genel
-// Çok Satanlar are independent views, not real channel modes
-// (currentEntryMode never becomes any of their names) — so none of the
-// category-based logic elsewhere (numbering, stage tabs, entry forms)
-// needs to know they exist. Each one just hides the normal channel content
-// and the other four, then shows itself; clicking any real channel button
-// restores everything.
+// Müşteri Veritabanı, İadeler, WhatsApp Kuyruğu, Sipariş Sorgula, Genel
+// Çok Satanlar, and Siparişler Durumu are independent views, not real
+// channel modes (currentEntryMode never becomes any of their names) — so
+// none of the category-based logic elsewhere (numbering, stage tabs, entry
+// forms) needs to know they exist. Each one just hides the normal channel
+// content and the other five, then shows itself; clicking any real channel
+// button restores everything.
 document.getElementById('musteriDbBtn').onclick = ()=>{
   document.querySelectorAll('.entry-subtab[data-sub]').forEach(x=>x.classList.remove('active'));
   document.getElementById('musteriDbBtn').classList.add('active');
@@ -2773,6 +2788,8 @@ document.getElementById('musteriDbBtn').onclick = ()=>{
   document.getElementById('siparisSorgulaPanel').style.display = 'none';
   document.getElementById('overallDesignsBtn').classList.remove('active');
   document.getElementById('overallDesignsPanel').style.display = 'none';
+  document.getElementById('siparislerDurumuBtn').classList.remove('active');
+  document.getElementById('siparislerDurumuPanel').style.display = 'none';
   document.getElementById('stageSelector').style.display = 'none';
   ['entry','queue','sort','production','designs'].forEach(id=>document.getElementById(id).classList.remove('active'));
   document.getElementById('sharedItemsCard').style.display = 'none';
@@ -2791,6 +2808,8 @@ document.getElementById('iadelerBtn').onclick = ()=>{
   document.getElementById('siparisSorgulaPanel').style.display = 'none';
   document.getElementById('overallDesignsBtn').classList.remove('active');
   document.getElementById('overallDesignsPanel').style.display = 'none';
+  document.getElementById('siparislerDurumuBtn').classList.remove('active');
+  document.getElementById('siparislerDurumuPanel').style.display = 'none';
   document.getElementById('stageSelector').style.display = 'none';
   ['entry','queue','sort','production','designs'].forEach(id=>document.getElementById(id).classList.remove('active'));
   document.getElementById('sharedItemsCard').style.display = 'none';
@@ -2815,6 +2834,8 @@ document.getElementById('waQueueBtn').onclick = ()=>{
   document.getElementById('siparisSorgulaPanel').style.display = 'none';
   document.getElementById('overallDesignsBtn').classList.remove('active');
   document.getElementById('overallDesignsPanel').style.display = 'none';
+  document.getElementById('siparislerDurumuBtn').classList.remove('active');
+  document.getElementById('siparislerDurumuPanel').style.display = 'none';
   document.getElementById('stageSelector').style.display = 'none';
   ['entry','queue','sort','production','designs'].forEach(id=>document.getElementById(id).classList.remove('active'));
   document.getElementById('sharedItemsCard').style.display = 'none';
@@ -2838,6 +2859,8 @@ document.getElementById('siparisSorgulaBtn').onclick = ()=>{
   document.getElementById('siparisSorgulaBtn').classList.add('active');
   document.getElementById('overallDesignsBtn').classList.remove('active');
   document.getElementById('overallDesignsPanel').style.display = 'none';
+  document.getElementById('siparislerDurumuBtn').classList.remove('active');
+  document.getElementById('siparislerDurumuPanel').style.display = 'none';
   document.getElementById('stageSelector').style.display = 'none';
   ['entry','queue','sort','production','designs'].forEach(id=>document.getElementById(id).classList.remove('active'));
   document.getElementById('sharedItemsCard').style.display = 'none';
@@ -2859,6 +2882,8 @@ document.getElementById('overallDesignsBtn').onclick = ()=>{
   document.getElementById('waQueuePanel').style.display = 'none';
   document.getElementById('siparisSorgulaBtn').classList.remove('active');
   document.getElementById('siparisSorgulaPanel').style.display = 'none';
+  document.getElementById('siparislerDurumuBtn').classList.remove('active');
+  document.getElementById('siparislerDurumuPanel').style.display = 'none';
   document.getElementById('overallDesignsBtn').classList.add('active');
   document.getElementById('stageSelector').style.display = 'none';
   ['entry','queue','sort','production','designs'].forEach(id=>document.getElementById(id).classList.remove('active'));
@@ -2866,6 +2891,31 @@ document.getElementById('overallDesignsBtn').onclick = ()=>{
   document.getElementById('lostCargoLookupCard').style.display = 'none';
   document.getElementById('overallDesignsPanel').style.display = 'block';
   renderOverallDesigns();
+};
+// Siparişler Durumu — moved here from Raporlar's own report (was the "Halı
+// listesi" table at the bottom of it) so it's reachable directly rather
+// than buried under a much longer report. Same filtering and same table
+// exactly as before, just with its own independent Başlangıç/Bitiş/Kanal
+// filters instead of sharing Raporlar's.
+document.getElementById('siparislerDurumuBtn').onclick = ()=>{
+  document.querySelectorAll('.entry-subtab[data-sub]').forEach(x=>x.classList.remove('active'));
+  document.getElementById('musteriDbBtn').classList.remove('active');
+  document.getElementById('musteriDbPanel').style.display = 'none';
+  document.getElementById('iadelerBtn').classList.remove('active');
+  document.getElementById('iadelerPanel').style.display = 'none';
+  document.getElementById('waQueueBtn').classList.remove('active');
+  document.getElementById('waQueuePanel').style.display = 'none';
+  document.getElementById('siparisSorgulaBtn').classList.remove('active');
+  document.getElementById('siparisSorgulaPanel').style.display = 'none';
+  document.getElementById('overallDesignsBtn').classList.remove('active');
+  document.getElementById('overallDesignsPanel').style.display = 'none';
+  document.getElementById('siparislerDurumuBtn').classList.add('active');
+  document.getElementById('stageSelector').style.display = 'none';
+  ['entry','queue','sort','production','designs'].forEach(id=>document.getElementById(id).classList.remove('active'));
+  document.getElementById('sharedItemsCard').style.display = 'none';
+  document.getElementById('lostCargoLookupCard').style.display = 'none';
+  document.getElementById('siparislerDurumuPanel').style.display = 'block';
+  renderSiparislerDurumu();
 };
 let cdbMode = 'all';
 document.querySelectorAll('.entry-subtab[data-mode]').forEach(b=>{
@@ -3696,6 +3746,12 @@ function channelOptions(){
     repSel.innerHTML = '<option value="">Tüm kanallar</option>' + state.channels.map(c=>`<option value="${c.name}">${c.name}</option>`).join('');
     repSel.value = current;
   }
+  const sdSel = document.getElementById('sdChannel');
+  if(sdSel){
+    const current = sdSel.value;
+    sdSel.innerHTML = '<option value="">Tüm kanallar</option>' + state.channels.map(c=>`<option value="${c.name}">${c.name}</option>`).join('');
+    sdSel.value = current;
+  }
 }
 
 // A repeat Instagram customer's phone and address auto-fill from their most
@@ -4312,20 +4368,55 @@ function renderReport(){
       return Object.entries(byBrand).sort((a,b)=>b[1].tutar-a[1].tutar).map(([brand,s])=>
         `<tr><td>${brand}</td><td>${s.orders}</td><td>${s.carpets}</td><td>${s.m2.toFixed(2)}</td><td>${formatTL(s.tutar)}</td></tr>`
       ).join('');
-    })()}</tbody></table>
+    })()}</tbody></table>`;
+}
+document.getElementById('runReport').onclick = renderReport;
+['repFrom','repTo','repChannel'].forEach(id=>{
+  document.getElementById(id).addEventListener('change', renderReport);
+});
 
-    <h3 style="font-family:'Fraunces',serif;font-size:15px;margin:20px 0 8px;">Halı listesi</h3>
-    <table>
-      <thead><tr><th>#</th><th>Sipariş No</th><th>Tarih</th><th>Kanal</th><th>Müşteri</th><th>Ölçü</th><th>Adet</th><th>m²</th><th>Taban</th><th>Durum</th></tr></thead>
+// ---------------- Siparişler Durumu ----------------
+// Moved out of Raporlar's own report into its own screen — same filtering
+// and same table exactly as it was (Sipariş No, Tarih, Kanal, Müşteri,
+// Ölçü, Adet, m², Taban, Durum), just with its own independent
+// Başlangıç/Bitiş/Kanal filters rather than sharing Raporlar's.
+function renderSiparislerDurumu(){
+  const fromVal = document.getElementById('sdFrom').value;
+  const toVal = document.getElementById('sdTo').value;
+  const chanFilter = document.getElementById('sdChannel').value;
+  const from = fromVal ? (()=>{ const [y,m,d]=fromVal.split('-').map(Number); return new Date(y,m-1,d); })() : null;
+  const to = toVal ? (()=>{ const [y,m,d]=toVal.split('-').map(Number); return new Date(y,m-1,d,23,59,59,999); })() : null;
+
+  const matchingOrders = state.orders.filter(o=>{
+    if(o.saleType==='Kayıp Kargo') return false;
+    if(chanFilter && o.channel !== chanFilter) return false;
+    if(!from && !to) return true;
+    const d = parseDMY(o.date);
+    if(!d) return false;
+    if(from && d < from) return false;
+    if(to && d > to) return false;
+    return true;
+  });
+  const el = document.getElementById('siparislerDurumuResults');
+  if(!matchingOrders.length){
+    el.innerHTML = '<div class="empty">Bu döneme/kanala uyan sipariş yok.</div>';
+    return;
+  }
+  const rows = [];
+  matchingOrders.forEach(o=>{
+    o.items.forEach(item=>{
+      const m2 = sizeToM2(item.size) * item.qty;
+      rows.push({ o, item, m2 });
+    });
+  });
+
+  el.innerHTML = `<table>
+      <thead><tr><th>Sipariş No</th><th>Tarih</th><th>Kanal</th><th>Müşteri</th><th>Ölçü</th><th>Adet</th><th>m²</th><th>Taban</th><th>Durum</th></tr></thead>
       <tbody>${(()=>{
         // Grouped by (order, setLabel/id) so a set — including a collapsible
         // pair — shows as ONE row here, matching how Ayırma & etiketler and
         // Tüm siparişler already display it, instead of one row per stored
-        // item (which was showing a 2-piece pair's two sizes as two separate
-        // rows/Adet values, disagreeing with Halı sayısı at the top of this
-        // same report). m² still sums every physical piece's real area either
-        // way — only Adet and how many rows appear here follow the
-        // collapsible-pair convention.
+        // item.
         const groupedForList = {};
         const groupOrder = [];
         rows.forEach(r=>{
@@ -4340,22 +4431,20 @@ function renderReport(){
           const sizeText = bundle.map(i=>i.size).join(', ');
           const adet = isCollapsiblePair(bundle) ? (bundle[0].qty||1) : bundle.reduce((s,i)=>s+i.qty,0);
           const m2Total = group.reduce((s,g)=>s+g.m2, 0);
-          const numKey = itemGroupKey(o, bundle[0]);
           // Only shows once the WHOLE order is fully produced — before that,
-          // displaySiparisNumarasi() deliberately returns null (see its own
-          // definition for why), so this column stays blank while an order
-          // is still in progress rather than showing a number that isn't
-          // final yet.
+          // displaySiparisNumarasi() deliberately returns null, so this
+          // column stays blank while an order is still in progress rather
+          // than showing a number that isn't final yet.
           const finalNo = displaySiparisNumarasi(o);
           const finalNoCell = finalNo ? `<span style="font-family:'IBM Plex Mono',monospace;">${finalNo}</span>` : '<span class="muted">—</span>';
-          return `<tr><td class="ts">${itemNumbers[numKey]||'—'}</td><td>${finalNoCell}</td><td>${o.date}</td><td>${chanBadgeHtml(dealerChannelNameForOrder(o))}</td><td>${o.customerName}</td><td>${sizeText}</td><td>${adet}</td><td>${m2Total.toFixed(2)}</td><td>${bundle[0].taban}</td><td>${pill(bundle[0].status==='sorted'?'in production':bundle[0].status)}</td></tr>`;
+          return `<tr><td>${finalNoCell}</td><td>${o.date}</td><td>${chanBadgeHtml(dealerChannelNameForOrder(o))}</td><td>${o.customerName}</td><td>${sizeText}</td><td>${adet}</td><td>${m2Total.toFixed(2)}</td><td>${bundle[0].taban}</td><td>${pill(bundle[0].status==='sorted'?'in production':bundle[0].status)}</td></tr>`;
         }).join('');
       })()}</tbody>
     </table>`;
 }
-document.getElementById('runReport').onclick = renderReport;
-['repFrom','repTo','repChannel'].forEach(id=>{
-  document.getElementById(id).addEventListener('change', renderReport);
+document.getElementById('runSiparislerDurumu').onclick = renderSiparislerDurumu;
+['sdFrom','sdTo','sdChannel'].forEach(id=>{
+  document.getElementById(id).addEventListener('change', renderSiparislerDurumu);
 });
 
 // ---------------- Trendler (Raporlar charts) ----------------
