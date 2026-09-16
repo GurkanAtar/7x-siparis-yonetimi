@@ -930,6 +930,12 @@
       <button id="fullBackupBtn">Yedek dosyasını indir</button>
       <p class="muted" id="fullBackupStatus" style="margin-top:8px;"></p>
     </div>
+    <div class="card" id="regenNumbersCard" style="display:none;margin-top:16px;">
+      <h2>Sipariş Numaralarını yeniden oluştur</h2>
+      <p class="muted" style="margin-top:-6px">Format düzeltmesinden (DDMMYY tarih sırası, üretim sıra numarasının yeniden kullanılması) önce atanmış eski Sipariş Numaralarını yeni formata çevirir — sipariş, üretim geçmişi ve her şey aynı kalır, sadece numaranın kendisi yeniden hesaplanır. Her siparişin ORİJİNAL kodlama tarihi kullanılır, bugünün tarihi değil. Zaten yeni formatta olanlara dokunulmaz. Daha önce gönderilmiş bir WhatsApp mesajında veya pakette yazılı eski numarayla artık eşleşmeyebilir — bunu göz önünde bulundurun.</p>
+      <button id="regenNumbersBtn">Eski numaraları yeniden oluştur</button>
+      <p class="muted" id="regenNumbersStatus" style="margin-top:8px;"></p>
+    </div>
     <div class="card" id="ownerDmOversightCard" style="display:none;margin-top:16px;">
       <h2>Yönetici görünümü — tüm özel mesajlar</h2>
       <p class="muted" style="margin-top:-6px">İki kişi seçin, aralarındaki özel mesajları görüntüleyin. Bu görünüm salt okunurdur — buradan mesaj gönderilemez.</p>
@@ -1275,6 +1281,56 @@ document.getElementById('fullBackupBtn').onclick = async ()=>{
   btn.disabled = true;
   await performBackup(t=>status.textContent=t);
   btn.disabled = false;
+};
+// One-time cleanup for orders that got their Sipariş Numarası assigned
+// before the DDMMYY-and-reused-floor-number format was fixed — only
+// touches orders that already HAVE a number (a still-unassigned order
+// naturally gets the correct format the first time it's coded, nothing to
+// do there). Uses each order's own ORIGINAL coding date, not today's, so
+// regenerating doesn't silently shift when the number claims the order
+// was made.
+document.getElementById('regenNumbersBtn').onclick = async ()=>{
+  const status = document.getElementById('regenNumbersStatus');
+  const targets = state.orders.filter(o=>o.siparisNumarasi);
+  if(!targets.length){ status.textContent = 'Yeniden oluşturulacak sipariş yok.'; return; }
+  const confirmed = await showConfirm(`${targets.length} siparişin Sipariş Numarası yeniden oluşturulacak — daha önce gönderilmiş bir WhatsApp mesajında veya pakette yazılı eski numarayla artık eşleşmeyebilir. Devam edilsin mi?`);
+  if(!confirmed) return;
+  const auth = await requireAdmin(`${targets.length} Sipariş Numarasını yeniden oluşturma`);
+  if(!auth) return;
+  const btn = document.getElementById('regenNumbersBtn');
+  btn.disabled = true;
+  status.textContent = 'Yeniden oluşturuluyor...';
+  const previous = targets.map(o=>({ id:o.id, old:o.siparisNumarasi }));
+  let changed = 0;
+  targets.forEach(o=>{
+    // The earliest-coded item on this order — the same one that was
+    // actually used the moment this number was first assigned, so the
+    // date segment correctly reflects when it was originally coded, not
+    // today.
+    let firstItem = null;
+    o.items.forEach(i=>{
+      if(!i.codedAt) return;
+      if(!firstItem || i.codedAt < firstItem.codedAt) firstItem = i;
+    });
+    const origDate = firstItem ? new Date(firstItem.codedAt) : null;
+    const newNo = generateSiparisNumarasi(o, firstItem, origDate);
+    if(newNo !== o.siparisNumarasi){
+      o.siparisNumarasi = newNo;
+      changed++;
+    }
+  });
+  logActivity(`${changed} Sipariş Numarası yeni formata göre yeniden oluşturuldu.`, auth==='pin' ? 'Admin' : undefined);
+  saveState(); render();
+  btn.disabled = false;
+  status.textContent = `${changed} sipariş numarası güncellendi.`;
+  showUndoToast(`${changed} Sipariş Numarası yeniden oluşturuldu`, ()=>{
+    previous.forEach(p=>{
+      const o = state.orders.find(x=>x.id===p.id);
+      if(o) o.siparisNumarasi = p.old;
+    });
+    logActivity(`Yeniden oluşturma geri alındı: ${changed} sipariş numarası eski haline döndürüldü.`, auth==='pin' ? 'Admin' : undefined);
+    saveState(); render();
+  });
 };
 // Month-start nudge — persistent (no dismiss button on purpose) until an
 // actual backup succeeds, at which point it hides itself and stays hidden
@@ -5123,6 +5179,7 @@ function renderUsers(){
   // panel below it — this is a whole-business export, not a routine action
   // any team member should be triggering.
   document.getElementById('fullBackupCard').style.display = isOwner ? '' : 'none';
+  document.getElementById('regenNumbersCard').style.display = isOwner ? '' : 'none';
 
   const roleLabels = { owner:'Yönetici', sales:'Satış', production:'Üretim', finance:'Finans' };
   const myPinRow = `
@@ -7602,10 +7659,10 @@ function computeItemNumbers(){
 // IG/SS/EX rather than its own permanent counter — left-padded to 4 digits
 // here only, so the fused number's width still matches Trendyol's, without
 // changing Hepsiburada's actual floor-code system itself.
-function generateSiparisNumarasi(order, firstItem){
+function generateSiparisNumarasi(order, firstItem, dateOverride){
   const chan = state.channels.find(c=>normText(c.name)===normText(order.channel));
   const code = (chan && chan.code) ? chan.code : 'XXXX';
-  const now = new Date();
+  const now = dateOverride || new Date();
   const dateSegment = String(now.getDate()).padStart(2,'0') + String(now.getMonth()+1).padStart(2,'0') + String(now.getFullYear()).slice(2);
   let seq;
   if(order.trendyolNumber){
