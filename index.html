@@ -230,12 +230,12 @@
       <div class="entry-subtab" data-sub="hepsiburada">Hepsiburada</div>
       <div class="entry-subtab" data-sub="sicaksatis">Sıcak Satış</div>
       <div class="entry-subtab" data-sub="ihracat">İhracat</div>
-      <div class="entry-subtab" id="musteriDbBtn">Müşteri Veritabanı</div>
       <div class="entry-subtab" id="iadelerBtn">İadeler</div>
-      <div class="entry-subtab" id="waQueueBtn">WhatsApp Kuyruğu</div>
       <div class="entry-subtab" id="siparisSorgulaBtn">Sipariş Sorgula</div>
-      <div class="entry-subtab" id="overallDesignsBtn">Genel Çok Satanlar</div>
       <div class="entry-subtab" id="siparislerDurumuBtn">Siparişler Durumu</div>
+      <div class="entry-subtab" id="waQueueBtn">WhatsApp Yazışmaları</div>
+      <div class="entry-subtab" id="musteriDbBtn">Müşteri Veritabanı</div>
+      <div class="entry-subtab" id="overallDesignsBtn">Genel Çok Satanlar</div>
     </div>
     <div class="entry-subtabs" id="stageSelector" style="margin-top:6px;">
       <div class="entry-subtab active" data-stage="entry">Sipariş girişi</div>
@@ -247,9 +247,9 @@
 
     <div id="musteriDbPanel" class="card" style="display:none;">
       <h2>Müşteri Veritabanı</h2>
-      <p class="muted" style="margin-top:-6px">Müşterileri isim, telefon veya adrese göre arayın — kısmi eşleşme de çalışır (örn. sadece adı, sadece soyadı, veya adresin bir kısmı). "Tüm Kanallar" tüm satış kanallarında birden arar; diğer sekmeler aramayı tek bir kanalla sınırlar.</p>
+      <p class="muted" style="margin-top:-6px">Müşterileri isim, telefon veya adrese göre arayın — kısmi eşleşme de çalışır (örn. sadece adı, sadece soyadı, veya adresin bir kısmı). "Tüm Perakende Kanalları" tüm perakende satış kanallarında birden arar; diğer sekmeler aramayı tek bir kanalla sınırlar.</p>
       <div class="entry-subtabs">
-        <div class="entry-subtab active" data-mode="all">Tüm Kanallar</div>
+        <div class="entry-subtab active" data-mode="all">Tüm Perakende Kanalları</div>
         <div class="entry-subtab" data-mode="ig-kurumsal">Instagram Kurumsal</div>
         <div class="entry-subtab" data-mode="ig-bayi">Instagram Bayileri</div>
         <div class="entry-subtab" data-mode="trendyol-kurumsal">Trendyol Kurumsal</div>
@@ -280,7 +280,7 @@
     </div>
 
     <div id="waQueuePanel" class="card" style="display:none;">
-      <h2>WhatsApp Kuyruğu</h2>
+      <h2>WhatsApp Yazışmaları</h2>
       <p class="muted" style="margin-top:-6px">"Sipariş onaylandı" kodlandığında, "Kargoya verildi" Üretim'de işaretlendiğinde otomatik kuyruğa girer — yalnızca WhatsApp bildirimi açık bir Instagram kanalına ait siparişler için. Gerçek gönderim için Meta tarafı henüz bağlanmadı; buradaki kayıtlar şimdilik doğru anda doğru içerikle kuyruğa girdiğini görmek/test etmek içindir.</p>
       <div id="waQueueList"></div>
       <p class="muted" id="waQueueEmpty" style="display:none;">Kuyrukta henüz mesaj yok.</p>
@@ -3107,7 +3107,7 @@ document.getElementById('siparisSorgulaInput').addEventListener('input', renderS
 // Each channel is fully separate in the per-channel tabs — Instagram
 // Kurumsal, Instagram Bayileri, Trendyol Kurumsal, Trendyol Bayileri,
 // Hepsiburada Kurumsal, Hepsiburada Bayileri, Sıcak Satış / İhracat — never
-// mixed together. "Tüm Kanallar" searches Instagram/Trendyol/Hepsiburada
+// mixed together. "Tüm Perakende Kanalları" searches Instagram/Trendyol/Hepsiburada
 // together (when you only know a name or half a phone number and NOT
 // which of those three the person bought through, having to guess the
 // right tab first is exactly the wrong thing to ask) — but deliberately
