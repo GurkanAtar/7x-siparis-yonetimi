@@ -1019,18 +1019,15 @@
 <div id="pinLockOverlay" style="display:none;position:fixed;inset:0;background:var(--paper);z-index:302;align-items:center;justify-content:center;">
   <div style="background:var(--card);border-radius:12px;padding:32px;width:340px;box-shadow:0 8px 28px rgba(0,0,0,.2);">
     <h1 style="font-size:20px;margin:0 0 4px;">Kimliğinizi doğrulayın</h1>
-    <p class="muted" style="margin:0 0 18px;">Bu cihaz paylaşılıyor olabilir — devam etmeden önce isminizi seçip PIN'inizi girin.</p>
-    <div id="pinLockNameList" style="display:flex;flex-direction:column;gap:6px;margin-bottom:6px;"></div>
-    <div id="pinLockPinRow" style="display:none;flex-direction:column;gap:10px;">
-      <p style="margin:0;font-weight:600;" id="pinLockSelectedName"></p>
-      <div style="position:relative;">
-        <input id="pinLockInput" type="password" placeholder="PIN" autocomplete="off" inputmode="numeric" style="width:100%;padding-right:36px;">
-        <button type="button" class="pw-toggle" data-target="pinLockInput" style="position:absolute;right:8px;top:50%;transform:translateY(-50%);background:none;border:none;padding:2px;cursor:pointer;font-size:15px;line-height:1;">👁</button>
-      </div>
-      <button id="pinLockSubmit">Kilidi aç</button>
-      <button class="ghost small" id="pinLockChangeUser">Başka biri</button>
-      <span id="pinLockStatus" class="muted" style="min-height:16px;"></span>
+    <p class="muted" style="margin:0 0 18px;">Devam etmeden önce PIN'inizi girin.</p>
+    <p style="margin:0 0 10px;font-weight:600;" id="pinLockSelectedName"></p>
+    <div style="position:relative;">
+      <input id="pinLockInput" type="password" placeholder="PIN" autocomplete="off" inputmode="numeric" style="width:100%;padding-right:36px;">
+      <button type="button" class="pw-toggle" data-target="pinLockInput" style="position:absolute;right:8px;top:50%;transform:translateY(-50%);background:none;border:none;padding:2px;cursor:pointer;font-size:15px;line-height:1;">👁</button>
     </div>
+    <button id="pinLockSubmit" style="margin-top:10px;">Kilidi aç</button>
+    <span id="pinLockStatus" class="muted" style="min-height:16px;display:block;margin-top:6px;"></span>
+  </div>
   </div>
 </div>
 
@@ -1464,74 +1461,56 @@ async function enterApp(user){
 // account on this browser, not whichever profile unlocked here. It's an
 // attribution layer, not a second real security boundary.
 let isPinUnlocked = false;
-let pinLockSelectedProfileId = null;
+// Shows only the person actually authenticated via Supabase on this
+// browser (currentProfile/currentUser) — never a list of every registered
+// name. Each team member now has their own real Supabase login, so there's
+// no legitimate reason for one person to be able to pick a DIFFERENT
+// person's name here and guess at their PIN; this screen exists purely to
+// confirm "yes, it's really you" as a fast second step, not to let anyone
+// choose who they're claiming to be.
 function showPinLockOverlay(){
   isPinUnlocked = false;
-  pinLockSelectedProfileId = null;
-  document.getElementById('pinLockNameList').style.display = '';
-  document.getElementById('pinLockPinRow').style.display = 'none';
-  renderPinLockNames();
+  const roleLabels = { owner:'Yönetici', sales:'Satış', production:'Üretim', finance:'Finans' };
+  const name = (currentProfile && currentProfile.name) || currentUser.email;
+  const role = currentProfile ? (roleLabels[currentProfile.role] || currentProfile.role) : '';
+  document.getElementById('pinLockSelectedName').textContent = role ? `${name} — ${role}` : name;
+  document.getElementById('pinLockInput').value = '';
+  document.getElementById('pinLockStatus').textContent = '';
   document.getElementById('pinLockOverlay').style.display = 'flex';
+  // No PIN configured for this account yet — there's nothing to verify
+  // against, so blocking here would be a dead end with no way out (this
+  // screen is the only path back to Hesabım & Yetkiler, where a PIN
+  // actually gets set). Let them straight in instead, same as how the app
+  // behaved before this feature existed — once they set a real PIN, this
+  // bypass stops applying to their account specifically.
+  if(!currentProfile || !currentProfile.pin){
+    unlockAs(currentProfile, 'PIN henüz belirlenmemişti');
+    return;
+  }
+  document.getElementById('pinLockInput').focus();
 }
-// Shared by both paths below: a normal verified-PIN unlock, and the
-// no-PIN-set-yet bypass — one place that actually flips the lock state,
-// so both stay in sync.
+// Shared by both paths: a normal verified-PIN unlock, and the
+// no-PIN-set-yet bypass — one place that actually flips the lock state.
 function unlockAs(p, note){
   currentProfile = p;
-  operatorName = p.name || currentUser.email;
+  operatorName = (p && p.name) || currentUser.email;
   isPinUnlocked = true;
   document.getElementById('pinLockOverlay').style.display = 'none';
   logActivity(`Kilit açıldı: ${operatorName}${note ? ` (${note})` : ''}`);
   saveState(); render();
 }
-function renderPinLockNames(){
-  const el = document.getElementById('pinLockNameList');
-  const roleLabels = { owner:'Yönetici', sales:'Satış', production:'Üretim', finance:'Finans' };
-  el.innerHTML = allProfiles.map(p=>
-    `<button class="ghost small pin-lock-name" data-id="${p.id}" style="text-align:left;">${p.name||'(isimsiz)'} <span class="muted">— ${roleLabels[p.role]||p.role||''}</span></button>`
-  ).join('');
-  el.querySelectorAll('.pin-lock-name').forEach(b=>{
-    b.onclick = ()=>{
-      pinLockSelectedProfileId = b.dataset.id;
-      const p = allProfiles.find(x=>x.id===pinLockSelectedProfileId);
-      // No PIN configured for this person at all yet — there's nothing to
-      // verify against, so blocking here would be a dead end with no way
-      // out (this screen is the only path back to Hesabım & Yetkiler,
-      // where a PIN actually gets set). Let them straight in instead, same
-      // as how the app behaved before this feature existed — once they (or
-      // the owner) sets a real PIN for this profile, this bypass stops
-      // applying to it specifically.
-      if(!p.pin){
-        unlockAs(p, 'PIN henüz belirlenmemişti');
-        return;
-      }
-      document.getElementById('pinLockSelectedName').textContent = p.name || '(isimsiz)';
-      document.getElementById('pinLockNameList').style.display = 'none';
-      document.getElementById('pinLockPinRow').style.display = 'flex';
-      document.getElementById('pinLockInput').value = '';
-      document.getElementById('pinLockStatus').textContent = '';
-      document.getElementById('pinLockInput').focus();
-    };
-  });
-}
-document.getElementById('pinLockChangeUser').onclick = ()=>{
-  pinLockSelectedProfileId = null;
-  document.getElementById('pinLockNameList').style.display = '';
-  document.getElementById('pinLockPinRow').style.display = 'none';
-};
 function attemptPinUnlock(){
   const entered = document.getElementById('pinLockInput').value.trim();
   const statusEl = document.getElementById('pinLockStatus');
-  const p = allProfiles.find(x=>x.id===pinLockSelectedProfileId);
-  if(!p) return;
-  if(entered !== p.pin){
+  if(!currentProfile) return;
+  if(entered !== currentProfile.pin){
     statusEl.style.color = 'var(--rust)';
     statusEl.textContent = 'PIN yanlış.';
     document.getElementById('pinLockInput').value = '';
     document.getElementById('pinLockInput').focus();
     return;
   }
-  unlockAs(p);
+  unlockAs(currentProfile);
 }
 document.getElementById('pinLockSubmit').onclick = attemptPinUnlock;
 document.getElementById('pinLockInput').onkeydown = (e)=>{ if(e.key==='Enter') attemptPinUnlock(); };
@@ -5210,6 +5189,7 @@ function wireMyPinSave(){
     logActivity(`PIN güncellendi: ${operatorName}`);
     statusEl.style.color = 'var(--forest)';
     statusEl.textContent = 'Kaydedildi.';
+    btn.textContent = val ? 'Değiştir' : 'Kaydet';
   };
 }
 function renderUsers(){
@@ -5239,7 +5219,7 @@ function renderUsers(){
         <input id="myPinInput" type="password" inputmode="numeric" placeholder="PIN" value="${currentProfile && currentProfile.pin ? currentProfile.pin : ''}" style="width:100px;padding-right:30px;">
         <button type="button" class="pw-toggle" data-target="myPinInput" style="position:absolute;right:4px;top:50%;transform:translateY(-50%);background:none;border:none;padding:2px;cursor:pointer;font-size:14px;line-height:1;">👁</button>
       </div>
-      <button class="ghost small" id="myPinSave">Kaydet</button>
+      <button class="ghost small" id="myPinSave">${currentProfile && currentProfile.pin ? 'Değiştir' : 'Kaydet'}</button>
       <span class="muted" id="myPinStatus"></span>
     </div>`;
   const myRow = `
@@ -5292,7 +5272,7 @@ function renderUsers(){
         <input class="user-pin-input" id="userPinInput-${p.id}" data-id="${p.id}" type="password" inputmode="numeric" placeholder="PIN" value="${p.pin||''}" style="width:90px;padding-right:28px;">
         <button type="button" class="pw-toggle" data-target="userPinInput-${p.id}" style="position:absolute;right:3px;top:50%;transform:translateY(-50%);background:none;border:none;padding:2px;cursor:pointer;font-size:13px;line-height:1;">👁</button>
       </span>
-      <button class="ghost small user-pin-save" data-id="${p.id}">Kaydet</button>
+      <button class="ghost small user-pin-save" data-id="${p.id}">${p.pin ? 'Değiştir' : 'Kaydet'}</button>
     </div>`).join('') || '<p class="muted">Başka hesap yok.</p>';
   const grantRows = otherProfiles.map(p=>{
     const grant = activeGrants.find(g=>g.user_id===p.id);
@@ -5337,7 +5317,7 @@ function renderUsers(){
       if(error){ showMessage('PIN kaydedilemedi: ' + error.message); return; }
       if(target) target.pin = val || null;
       logActivity(`PIN güncellendi: ${target ? target.name : userId}`, 'Admin');
-      const originalLabel = b.textContent;
+      const originalLabel = val ? 'Değiştir' : 'Kaydet';
       b.textContent = 'Kaydedildi ✓';
       b.disabled = true;
       setTimeout(()=>{ b.textContent = originalLabel; b.disabled = false; }, 1500);
