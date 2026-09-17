@@ -1023,7 +1023,10 @@
     <div id="pinLockNameList" style="display:flex;flex-direction:column;gap:6px;margin-bottom:6px;"></div>
     <div id="pinLockPinRow" style="display:none;flex-direction:column;gap:10px;">
       <p style="margin:0;font-weight:600;" id="pinLockSelectedName"></p>
-      <input id="pinLockInput" type="password" placeholder="PIN" autocomplete="off" inputmode="numeric">
+      <div style="position:relative;">
+        <input id="pinLockInput" type="password" placeholder="PIN" autocomplete="off" inputmode="numeric" style="width:100%;padding-right:36px;">
+        <button type="button" class="pw-toggle" data-target="pinLockInput" style="position:absolute;right:8px;top:50%;transform:translateY(-50%);background:none;border:none;padding:2px;cursor:pointer;font-size:15px;line-height:1;">👁</button>
+      </div>
       <button id="pinLockSubmit">Kilidi aç</button>
       <button class="ghost small" id="pinLockChangeUser">Başka biri</button>
       <span id="pinLockStatus" class="muted" style="min-height:16px;"></span>
@@ -1533,18 +1536,24 @@ function attemptPinUnlock(){
 document.getElementById('pinLockSubmit').onclick = attemptPinUnlock;
 document.getElementById('pinLockInput').onkeydown = (e)=>{ if(e.key==='Enter') attemptPinUnlock(); };
 
-// Show/hide password — one shared handler for every field marked this way,
-// so adding the toggle to a future password field is just adding the
-// button with the right data-target, no new JS needed.
-document.querySelectorAll('.pw-toggle').forEach(btn=>{
-  btn.onclick = ()=>{
-    const input = document.getElementById(btn.dataset.target);
-    if(!input) return;
-    const showing = input.type === 'text';
-    input.type = showing ? 'password' : 'text';
-    btn.textContent = showing ? '👁' : '🙈';
-  };
-});
+// Show/hide password/PIN — one shared handler for every field marked this
+// way, so adding the toggle to a future field is just adding the button
+// with the right data-target, no new JS needed. Called once at page load
+// for static fields, and again after any screen that rebuilds its own
+// PIN/password inputs dynamically (their toggle buttons wouldn't exist yet
+// the first time this ran).
+function wirePwToggles(){
+  document.querySelectorAll('.pw-toggle').forEach(btn=>{
+    btn.onclick = ()=>{
+      const input = document.getElementById(btn.dataset.target);
+      if(!input) return;
+      const showing = input.type === 'text';
+      input.type = showing ? 'password' : 'text';
+      btn.textContent = showing ? '👁' : '🙈';
+    };
+  });
+}
+wirePwToggles();
 document.getElementById('loginSubmit').onclick = attemptLogin;
 document.getElementById('forgotPasswordLink').onclick = async (e)=>{
   e.preventDefault();
@@ -5217,7 +5226,10 @@ function renderUsers(){
   const myPinRow = `
     <div style="display:flex;align-items:center;gap:8px;margin-top:6px;">
       <label class="muted" style="margin:0;">Kilit ekranı PIN'iniz:</label>
-      <input id="myPinInput" type="password" inputmode="numeric" placeholder="PIN" value="${currentProfile && currentProfile.pin ? currentProfile.pin : ''}" style="width:100px;">
+      <div style="position:relative;display:inline-block;">
+        <input id="myPinInput" type="password" inputmode="numeric" placeholder="PIN" value="${currentProfile && currentProfile.pin ? currentProfile.pin : ''}" style="width:100px;padding-right:30px;">
+        <button type="button" class="pw-toggle" data-target="myPinInput" style="position:absolute;right:4px;top:50%;transform:translateY(-50%);background:none;border:none;padding:2px;cursor:pointer;font-size:14px;line-height:1;">👁</button>
+      </div>
       <button class="ghost small" id="myPinSave">Kaydet</button>
       <span class="muted" id="myPinStatus"></span>
     </div>`;
@@ -5237,6 +5249,7 @@ function renderUsers(){
       : `<p class="muted">Şu anda yönetici yetkiniz yok. Silme/24 saatten eski düzenleme gibi işlemler için yöneticinizden geçici yetki isteyin.</p>`;
     el.innerHTML = myRow + grantNote;
     wireMyPinSave();
+    wirePwToggles();
     return;
   }
 
@@ -5254,7 +5267,21 @@ function renderUsers(){
     { minutes: 1440, label: '24 saat' },
   ];
   const otherProfiles = allProfiles.filter(p=>p.id !== currentUser.id);
-  const profileRows = otherProfiles.map(p=>{
+  // Two fully separate lists, not one combined row per person — a PIN and a
+  // temporary authority grant are unrelated systems (a PIN only identifies
+  // who's at a shared device; a grant is a time-limited admin permission),
+  // and showing them side by side in one row was making that easy to
+  // mistake for one thing with two settings.
+  const pinRows = otherProfiles.map(p=>`
+    <div class="row" style="grid-template-columns:1fr auto auto;display:grid;gap:8px;align-items:center;margin-bottom:8px;">
+      <span>${p.name||'(isimsiz)'} — <span class="muted">${roleLabels[p.role]||p.role}</span></span>
+      <span style="position:relative;display:inline-block;">
+        <input class="user-pin-input" id="userPinInput-${p.id}" data-id="${p.id}" type="password" inputmode="numeric" placeholder="PIN" value="${p.pin||''}" style="width:90px;padding-right:28px;">
+        <button type="button" class="pw-toggle" data-target="userPinInput-${p.id}" style="position:absolute;right:3px;top:50%;transform:translateY(-50%);background:none;border:none;padding:2px;cursor:pointer;font-size:13px;line-height:1;">👁</button>
+      </span>
+      <button class="ghost small user-pin-save" data-id="${p.id}">Kaydet</button>
+    </div>`).join('') || '<p class="muted">Başka hesap yok.</p>';
+  const grantRows = otherProfiles.map(p=>{
     const grant = activeGrants.find(g=>g.user_id===p.id);
     const grantNote = grant
       ? `<span class="tag">Geçici yetki — ${Math.max(0,Math.round((new Date(grant.expires_at).getTime()-Date.now())/60000))} dk kaldı <button class="ghost small revoke-grant" data-id="${p.id}" style="margin-left:6px">Geri al</button></span>`
@@ -5263,22 +5290,22 @@ function renderUsers(){
          </select>
          <button class="ghost small grant-temp" data-id="${p.id}">Yetki ver</button>`;
     return `
-    <div class="row" style="grid-template-columns:1fr auto auto auto;display:grid;gap:8px;align-items:center;margin-bottom:8px;">
+    <div class="row" style="grid-template-columns:1fr auto;display:grid;gap:8px;align-items:center;margin-bottom:8px;">
       <span>${p.name||'(isimsiz)'} — <span class="muted">${roleLabels[p.role]||p.role}</span></span>
-      <span style="display:flex;align-items:center;gap:6px;">
-        <input class="user-pin-input" data-id="${p.id}" type="password" inputmode="numeric" placeholder="PIN" value="${p.pin||''}" style="width:90px;">
-        <button class="ghost small user-pin-save" data-id="${p.id}">Kaydet</button>
-      </span>
       <span>${grantNote}</span>
     </div>`;
-  }).join('') || '<p class="muted">Başka hesap yok. Yeni bir kullanıcı için Supabase panelinden hesap oluşturup profiles tablosuna ekleyin.</p>';
+  }).join('') || '<p class="muted">Başka hesap yok.</p>';
 
   el.innerHTML = myRow + `
-    <h3 style="font-family:'Fraunces',serif;font-size:15px;margin:0 0 8px;">Ekip &amp; geçici yetkiler</h3>
-    <p class="muted" style="margin-top:-4px">Silme ve 24 saatten eski düzenleme gibi yönetici işlemleri için, seçilen kişiye seçtiğiniz süre kadar yetki verir. Süre dolunca otomatik biter. Yeni hesap eklemek Supabase panelinden yapılır. PIN sütunu, paylaşılan bir cihazda kilit ekranından açılırken kullanılan kişiye özel koddur.</p>
-    ${profileRows}
+    <h3 style="font-family:'Fraunces',serif;font-size:15px;margin:0 0 8px;">Kilit ekranı PIN'leri</h3>
+    <p class="muted" style="margin-top:-4px">Paylaşılan bir cihazda kilit ekranından açılırken kullanılan, kişiye özel koddur — yetki veya izinle ilgisi yoktur, sadece "şu an ekranda kim var" sorusuna cevap verir.</p>
+    ${pinRows}
+    <h3 style="font-family:'Fraunces',serif;font-size:15px;margin:24px 0 8px;">Geçici yetkiler</h3>
+    <p class="muted" style="margin-top:-4px">Silme ve 24 saatten eski düzenleme gibi yönetici işlemleri için, seçilen kişiye seçtiğiniz süre kadar yetki verir. Süre dolunca otomatik biter. Yeni hesap eklemek Supabase panelinden yapılır.</p>
+    ${grantRows}
   `;
   wireMyPinSave();
+  wirePwToggles();
   el.querySelectorAll('.user-pin-save').forEach(b=>{
     b.onclick = async ()=>{
       const userId = b.dataset.id;
