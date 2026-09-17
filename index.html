@@ -236,6 +236,7 @@
       <div class="entry-subtab" id="waQueueBtn">WhatsApp Yazışmaları</div>
       <div class="entry-subtab" id="musteriDbBtn">Müşteri Veritabanı</div>
       <div class="entry-subtab" id="overallDesignsBtn">Genel Çok Satanlar</div>
+      <div class="entry-subtab" id="cancelledListBtn">İptal Edilenler</div>
     </div>
     <div class="entry-subtabs" id="stageSelector" style="margin-top:6px;">
       <div class="entry-subtab active" data-stage="entry">Sipariş girişi</div>
@@ -309,6 +310,18 @@
       </div>
       <button id="runSiparislerDurumu">Listeyi çalıştır</button>
       <div id="siparislerDurumuResults" style="margin-top:14px"></div>
+    </div>
+
+    <div id="cancelledListPanel" class="card" style="display:none;">
+      <h2>İptal Edilenler</h2>
+      <p class="muted" style="margin-top:-6px">Her iptal edilen kalem — kanal, müşteri, ölçü, hangi aşamada iptal edildiği, kim tarafından ve ne zaman. Baskı öncesi, Ayırma & etiketler, Üretim veya Kargoya Hazır Siparişler'den yapılan her iptal burada listelenir.</p>
+      <div class="row row3">
+        <div><label>Başlangıç</label><input type="date" id="cancFrom"></div>
+        <div><label>Bitiş</label><input type="date" id="cancTo"></div>
+        <div><label>Kanal</label><select id="cancChannel"><option value="">Tüm kanallar</option></select></div>
+      </div>
+      <button id="runCancelledList">Listeyi çalıştır</button>
+      <div id="cancelledListResults" style="margin-top:14px"></div>
     </div>
 
   <div id="entry" class="stage-panel active">
@@ -689,7 +702,7 @@
     </div>
 
     <div class="card" id="shippedReadyCard">
-      <h2 id="shippedReadyTitle">Kargoya Hazır Siparişler</h2>
+      <h2 id="shippedReadyTitle">Kargoya Hazır Siparişler <span id="shippedReadyCancelToolbar"></span></h2>
       <p class="muted" style="margin-top:-6px" id="shippedReadySubtitle"></p>
       <div id="shippedReadyList"></div>
       <div class="empty" id="shippedReadyEmpty" style="display:none"></div>
@@ -2890,6 +2903,8 @@ document.querySelectorAll('.entry-subtab[data-sub]').forEach(t=>{
     document.getElementById('overallDesignsPanel').style.display = 'none';
     document.getElementById('siparislerDurumuBtn').classList.remove('active');
     document.getElementById('siparislerDurumuPanel').style.display = 'none';
+    document.getElementById('cancelledListBtn').classList.remove('active');
+    document.getElementById('cancelledListPanel').style.display = 'none';
     document.getElementById('stageSelector').style.display = '';
     document.querySelectorAll('.entry-subtab[data-sub]').forEach(x=>x.classList.remove('active'));
     document.querySelectorAll('.entry-sub-panel[id^="entrySub-"]').forEach(x=>x.classList.remove('active'));
@@ -2944,6 +2959,8 @@ document.getElementById('musteriDbBtn').onclick = ()=>{
   document.getElementById('overallDesignsPanel').style.display = 'none';
   document.getElementById('siparislerDurumuBtn').classList.remove('active');
   document.getElementById('siparislerDurumuPanel').style.display = 'none';
+  document.getElementById('cancelledListBtn').classList.remove('active');
+  document.getElementById('cancelledListPanel').style.display = 'none';
   document.getElementById('stageSelector').style.display = 'none';
   ['entry','queue','sort','production','designs'].forEach(id=>document.getElementById(id).classList.remove('active'));
   document.getElementById('sharedItemsCard').style.display = 'none';
@@ -2964,6 +2981,8 @@ document.getElementById('iadelerBtn').onclick = ()=>{
   document.getElementById('overallDesignsPanel').style.display = 'none';
   document.getElementById('siparislerDurumuBtn').classList.remove('active');
   document.getElementById('siparislerDurumuPanel').style.display = 'none';
+  document.getElementById('cancelledListBtn').classList.remove('active');
+  document.getElementById('cancelledListPanel').style.display = 'none';
   document.getElementById('stageSelector').style.display = 'none';
   ['entry','queue','sort','production','designs'].forEach(id=>document.getElementById(id).classList.remove('active'));
   document.getElementById('sharedItemsCard').style.display = 'none';
@@ -2990,6 +3009,8 @@ document.getElementById('waQueueBtn').onclick = ()=>{
   document.getElementById('overallDesignsPanel').style.display = 'none';
   document.getElementById('siparislerDurumuBtn').classList.remove('active');
   document.getElementById('siparislerDurumuPanel').style.display = 'none';
+  document.getElementById('cancelledListBtn').classList.remove('active');
+  document.getElementById('cancelledListPanel').style.display = 'none';
   document.getElementById('stageSelector').style.display = 'none';
   ['entry','queue','sort','production','designs'].forEach(id=>document.getElementById(id).classList.remove('active'));
   document.getElementById('sharedItemsCard').style.display = 'none';
@@ -3015,6 +3036,8 @@ document.getElementById('siparisSorgulaBtn').onclick = ()=>{
   document.getElementById('overallDesignsPanel').style.display = 'none';
   document.getElementById('siparislerDurumuBtn').classList.remove('active');
   document.getElementById('siparislerDurumuPanel').style.display = 'none';
+  document.getElementById('cancelledListBtn').classList.remove('active');
+  document.getElementById('cancelledListPanel').style.display = 'none';
   document.getElementById('stageSelector').style.display = 'none';
   ['entry','queue','sort','production','designs'].forEach(id=>document.getElementById(id).classList.remove('active'));
   document.getElementById('sharedItemsCard').style.display = 'none';
@@ -3038,6 +3061,8 @@ document.getElementById('overallDesignsBtn').onclick = ()=>{
   document.getElementById('siparisSorgulaPanel').style.display = 'none';
   document.getElementById('siparislerDurumuBtn').classList.remove('active');
   document.getElementById('siparislerDurumuPanel').style.display = 'none';
+  document.getElementById('cancelledListBtn').classList.remove('active');
+  document.getElementById('cancelledListPanel').style.display = 'none';
   document.getElementById('overallDesignsBtn').classList.add('active');
   document.getElementById('stageSelector').style.display = 'none';
   ['entry','queue','sort','production','designs'].forEach(id=>document.getElementById(id).classList.remove('active'));
@@ -3063,6 +3088,8 @@ document.getElementById('siparislerDurumuBtn').onclick = ()=>{
   document.getElementById('siparisSorgulaPanel').style.display = 'none';
   document.getElementById('overallDesignsBtn').classList.remove('active');
   document.getElementById('overallDesignsPanel').style.display = 'none';
+  document.getElementById('cancelledListBtn').classList.remove('active');
+  document.getElementById('cancelledListPanel').style.display = 'none';
   document.getElementById('siparislerDurumuBtn').classList.add('active');
   document.getElementById('stageSelector').style.display = 'none';
   ['entry','queue','sort','production','designs'].forEach(id=>document.getElementById(id).classList.remove('active'));
@@ -3070,6 +3097,30 @@ document.getElementById('siparislerDurumuBtn').onclick = ()=>{
   document.getElementById('lostCargoLookupCard').style.display = 'none';
   document.getElementById('siparislerDurumuPanel').style.display = 'block';
   renderSiparislerDurumu();
+};
+// İptal Edilenler — every cancelled item across every channel and every
+// stage it could have been cancelled from, one flat browsable list.
+document.getElementById('cancelledListBtn').onclick = ()=>{
+  document.querySelectorAll('.entry-subtab[data-sub]').forEach(x=>x.classList.remove('active'));
+  document.getElementById('musteriDbBtn').classList.remove('active');
+  document.getElementById('musteriDbPanel').style.display = 'none';
+  document.getElementById('iadelerBtn').classList.remove('active');
+  document.getElementById('iadelerPanel').style.display = 'none';
+  document.getElementById('waQueueBtn').classList.remove('active');
+  document.getElementById('waQueuePanel').style.display = 'none';
+  document.getElementById('siparisSorgulaBtn').classList.remove('active');
+  document.getElementById('siparisSorgulaPanel').style.display = 'none';
+  document.getElementById('overallDesignsBtn').classList.remove('active');
+  document.getElementById('overallDesignsPanel').style.display = 'none';
+  document.getElementById('siparislerDurumuBtn').classList.remove('active');
+  document.getElementById('siparislerDurumuPanel').style.display = 'none';
+  document.getElementById('cancelledListBtn').classList.add('active');
+  document.getElementById('stageSelector').style.display = 'none';
+  ['entry','queue','sort','production','designs'].forEach(id=>document.getElementById(id).classList.remove('active'));
+  document.getElementById('sharedItemsCard').style.display = 'none';
+  document.getElementById('lostCargoLookupCard').style.display = 'none';
+  document.getElementById('cancelledListPanel').style.display = 'block';
+  renderCancelledList();
 };
 let cdbMode = 'all';
 document.querySelectorAll('.entry-subtab[data-mode]').forEach(b=>{
@@ -3919,6 +3970,12 @@ function channelOptions(){
     sdSel.innerHTML = '<option value="">Tüm kanallar</option>' + state.channels.map(c=>`<option value="${c.name}">${c.name}</option>`).join('');
     sdSel.value = current;
   }
+  const cancSel = document.getElementById('cancChannel');
+  if(cancSel){
+    const current = cancSel.value;
+    cancSel.innerHTML = '<option value="">Tüm kanallar</option>' + state.channels.map(c=>`<option value="${c.name}">${c.name}</option>`).join('');
+    cancSel.value = current;
+  }
 }
 
 // A repeat Instagram customer's phone and address auto-fill from their most
@@ -4641,6 +4698,50 @@ function renderSiparislerDurumu(){
 document.getElementById('runSiparislerDurumu').onclick = renderSiparislerDurumu;
 ['sdFrom','sdTo','sdChannel'].forEach(id=>{
   document.getElementById(id).addEventListener('change', renderSiparislerDurumu);
+});
+
+// ---------------- İptal Edilenler ----------------
+// Every cancelled item, across every channel and every stage it could have
+// been cancelled from (Baskı öncesi, Ayırma & etiketler, Üretim, or
+// Kargoya Hazır Siparişler) — one flat list, filterable by when the
+// CANCELLATION itself happened (not the order's own date), since that's
+// what "browsing cancellations" naturally means.
+function renderCancelledList(){
+  const fromVal = document.getElementById('cancFrom').value;
+  const toVal = document.getElementById('cancTo').value;
+  const chanFilter = document.getElementById('cancChannel').value;
+  const from = fromVal ? (()=>{ const [y,m,d]=fromVal.split('-').map(Number); return new Date(y,m-1,d); })() : null;
+  const to = toVal ? (()=>{ const [y,m,d]=toVal.split('-').map(Number); return new Date(y,m-1,d,23,59,59,999); })() : null;
+  const stageLabels = { pending:'Kod bekliyor', coded:'Kodlandı', sorted:'Üretimde', produced:'Üretildi' };
+  const rows = [];
+  state.orders.forEach(o=>{
+    if(chanFilter && o.channel !== chanFilter) return;
+    o.items.forEach(item=>{
+      if(item.status!=='cancelled' || !item.cancelledAt) return;
+      const d = new Date(item.cancelledAt);
+      if(from && d < from) return;
+      if(to && d > to) return;
+      rows.push({ o, item });
+    });
+  });
+  rows.sort((a,b)=> (b.item.cancelledAt||'').localeCompare(a.item.cancelledAt||''));
+  const el = document.getElementById('cancelledListResults');
+  if(!rows.length){
+    el.innerHTML = '<div class="empty">Bu döneme/kanala uyan iptal edilmiş kalem yok.</div>';
+    return;
+  }
+  el.innerHTML = `<table>
+    <thead><tr><th>Kanal</th><th>Müşteri</th><th>Ölçü</th><th>Hangi aşamada iptal edildi</th><th>Kim iptal etti</th><th>Ne zaman</th></tr></thead>
+    <tbody>${rows.map(({o,item})=>{
+      const stage = stageLabels[item.cancelledFromStatus] || item.cancelledFromStatus || '—';
+      const whenTxt = item.cancelledAt ? new Date(item.cancelledAt).toLocaleString('tr-TR') : '—';
+      return `<tr><td>${chanBadgeHtml(dealerChannelNameForOrder(o))}</td><td>${o.customerName}</td><td>${item.size}</td><td>${stage}</td><td>${item.cancelledBy||'—'}</td><td>${whenTxt}</td></tr>`;
+    }).join('')}</tbody>
+  </table>`;
+}
+document.getElementById('runCancelledList').onclick = renderCancelledList;
+['cancFrom','cancTo','cancChannel'].forEach(id=>{
+  document.getElementById(id).addEventListener('change', renderCancelledList);
 });
 
 // ---------------- Trendler (Raporlar charts) ----------------
@@ -9636,11 +9737,17 @@ function renderShippedReady(){
   document.getElementById('shippedReadyEmpty').style.display = ready.length ? 'none' : 'block';
   wrap.innerHTML = ready.map(o=>{
     const sizes = o.items.map(i=>`${i.size} ×${i.qty}`).join(', ');
+    const ids = o.items.map(i=>i.id).join(',');
+    const cancelBox = cancelModeActive
+      ? `<label style="margin-right:6px;"><input type="checkbox" class="cancel-select-box" data-ids="${ids}" ${ids.split(',').every(id=>cancelSelectedIds.has(id)) ? 'checked' : ''}></label>`
+      : '';
     return `<div class="tag" style="display:flex;align-items:center;justify-content:space-between;width:100%;">
-      <span>${chanBadgeHtml(dealerChannelNameForOrder(o))} <strong>${o.customerName||''}</strong> — ${sizes}</span>
+      <span>${cancelBox}${chanBadgeHtml(dealerChannelNameForOrder(o))} <strong>${o.customerName||''}</strong> — ${sizes}</span>
       <button class="ghost small mark-shipped" data-oid="${o.id}">Kargoya verildi</button>
     </div>`;
   }).join('');
+  document.getElementById('shippedReadyCancelToolbar').innerHTML = cancelToolbarHtml();
+  wireCancelToolbar(renderShippedReady);
   wrap.querySelectorAll('.mark-shipped').forEach(b=>{
     b.onclick = ()=>{
       const order = state.orders.find(o=>o.id===b.dataset.oid);
