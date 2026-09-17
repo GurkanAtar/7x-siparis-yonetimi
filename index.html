@@ -5215,6 +5215,15 @@ function wireMyPinSave(){
 function renderUsers(){
   const el = document.getElementById('adminPanel');
   if(!el) return;
+  // Any PIN typed but not yet saved is preserved across this rebuild —
+  // otherwise an unrelated action on this same screen (revoking someone's
+  // temporary authority, which triggers a full render()) would silently
+  // wipe out whatever anyone was mid-typing into a completely different
+  // PIN box.
+  const unsavedPinValues = {};
+  el.querySelectorAll('input[id^="userPinInput-"], #myPinInput').forEach(inp=>{
+    if(inp.value) unsavedPinValues[inp.id] = inp.value;
+  });
   const isOwner = currentProfile && currentProfile.role === 'owner';
   // Full data backup is owner-only, same reasoning as the DM oversight
   // panel below it — this is a whole-business export, not a routine action
@@ -5250,6 +5259,10 @@ function renderUsers(){
     el.innerHTML = myRow + grantNote;
     wireMyPinSave();
     wirePwToggles();
+    Object.keys(unsavedPinValues).forEach(id=>{
+      const inp = document.getElementById(id);
+      if(inp) inp.value = unsavedPinValues[id];
+    });
     return;
   }
 
@@ -5306,6 +5319,10 @@ function renderUsers(){
   `;
   wireMyPinSave();
   wirePwToggles();
+  Object.keys(unsavedPinValues).forEach(id=>{
+    const inp = document.getElementById(id);
+    if(inp) inp.value = unsavedPinValues[id];
+  });
   el.querySelectorAll('.user-pin-save').forEach(b=>{
     b.onclick = async ()=>{
       const userId = b.dataset.id;
@@ -5320,8 +5337,10 @@ function renderUsers(){
       if(error){ showMessage('PIN kaydedilemedi: ' + error.message); return; }
       if(target) target.pin = val || null;
       logActivity(`PIN güncellendi: ${target ? target.name : userId}`, 'Admin');
-      input.style.borderColor = 'var(--forest)';
-      setTimeout(()=>{ input.style.borderColor=''; }, 1200);
+      const originalLabel = b.textContent;
+      b.textContent = 'Kaydedildi ✓';
+      b.disabled = true;
+      setTimeout(()=>{ b.textContent = originalLabel; b.disabled = false; }, 1500);
     };
   });
 
