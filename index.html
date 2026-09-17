@@ -601,7 +601,7 @@
 
   <div id="queue" class="stage-panel">
     <div class="card">
-      <h2>Baskı departmanı — kod sırası <button class="ghost small print-btn" data-print="queue" style="margin-left:8px;font-weight:normal;font-family:'Inter',sans-serif;font-size:12px;">Listeyi yazdır</button> <button class="ghost small excel-btn" data-excel="queue" style="font-weight:normal;font-family:'Inter',sans-serif;font-size:12px;">Excel'e aktar</button></h2>
+      <h2>Baskı departmanı — kod sırası <button class="ghost small print-btn" data-print="queue" style="margin-left:8px;font-weight:normal;font-family:'Inter',sans-serif;font-size:12px;">Listeyi yazdır</button> <button class="ghost small excel-btn" data-excel="queue" style="font-weight:normal;font-family:'Inter',sans-serif;font-size:12px;">Excel'e aktar</button> <span id="queueCancelToolbar"></span></h2>
       <p class="muted" style="margin-top:-6px">Bu listenin tek amacı: tasarımı görüp baskı operatörünün bilmesi gereken kodu girmek.</p>
       <div class="row row3" style="margin-bottom:10px;">
         <div><label>Başlangıç</label><input type="date" id="queueTsFrom"></div>
@@ -622,7 +622,7 @@
         </div>
       </div>
       <table>
-        <thead><tr><th>Sipariş #</th><th>Sipariş tarihi</th><th>Satış Kanalı</th><th>Müşteri</th><th id="thQueuePhone">Telefon</th><th id="thQueueAdres">Adres</th><th id="thQueueCarpetCount" style="display:none;">Halı Sayısı</th><th>Ölçü</th><th>Toplam Tutar</th><th>Peşinat</th><th>Bakiye</th><th>Süre</th><th>Görsel</th><th>Kod</th><th></th></tr></thead>
+        <thead><tr><th id="thQueueCancelBox" style="display:none;"></th><th>Sipariş #</th><th>Sipariş tarihi</th><th>Satış Kanalı</th><th>Müşteri</th><th id="thQueuePhone">Telefon</th><th id="thQueueAdres">Adres</th><th id="thQueueCarpetCount" style="display:none;">Halı Sayısı</th><th>Ölçü</th><th>Toplam Tutar</th><th>Peşinat</th><th>Bakiye</th><th>Süre</th><th>Görsel</th><th>Kod</th><th></th></tr></thead>
         <tbody id="queueBody"></tbody>
       </table>
       <div class="empty" id="queueEmpty" style="display:none">Kod bekleyen yok. Her şey tamam.</div>
@@ -635,6 +635,7 @@
         <h2 style="margin:0">Ayırma &amp; etiketler</h2>
         <button class="ghost small" id="printAllStickers">Tüm etiketleri yazdır</button>
         <button class="ghost small print-btn" data-print="sort">Listeyi yazdır</button> <button class="ghost small excel-btn" data-excel="sort">Excel'e aktar</button>
+        <span id="sortCancelToolbar"></span>
       </div>
       <p class="muted" style="margin-top:-6px">Kodlanmış ürünler tabana göre gruplanmıştır. Etiket kağıda yapıştırıldığında grubun etiketini basıldı olarak işaretleyin — bu, ürünü Üretim'e taşır.</p>
       <div class="row row3" style="margin-bottom:10px;">
@@ -663,7 +664,7 @@
   <div id="production" class="stage-panel">
     <div id="prodSub-main" class="entry-sub-panel active">
     <div class="card">
-      <h2>Üretim <button class="ghost small print-btn" data-print="production" style="margin-left:8px;font-weight:normal;font-family:'Inter',sans-serif;font-size:12px;">Listeyi yazdır</button> <button class="ghost small excel-btn" data-excel="production" style="font-weight:normal;font-family:'Inter',sans-serif;font-size:12px;">Excel'e aktar</button></h2>
+      <h2>Üretim <button class="ghost small print-btn" data-print="production" style="margin-left:8px;font-weight:normal;font-family:'Inter',sans-serif;font-size:12px;">Listeyi yazdır</button> <button class="ghost small excel-btn" data-excel="production" style="font-weight:normal;font-family:'Inter',sans-serif;font-size:12px;">Excel'e aktar</button> <span id="productionCancelToolbar"></span></h2>
       <p class="muted" style="margin-top:-6px">Etiket basıldı, üretim başladı. Her ürünü gerçekten bittiğinde üretildi olarak işaretleyin. En uzun bekleyen en üstte, kaç gündür burada beklediğini gösteren bir rozetle birlikte — bir süredir bekleyen ve hâlâ işaretlenmemiş her şey, planlandığı gibi gitmediğinin işaretidir (gecikme, müşteri tarafından durdurulmuş, kalite kontrolden geçememiş, iptal edilmiş veya başka bir sebep) — elle kontrol etmeye değer.</p>
       <div class="row row3" style="margin-bottom:10px;">
         <div><label>Başlangıç</label><input type="date" id="prodTsFrom"></div>
@@ -929,12 +930,6 @@
       <p class="muted" style="margin-top:-6px">Supabase'teki tüm gerçek veriyi — siparişler, kanallar, marka kayıtları, ürün kataloğu, yükleme geçmişi, hesaplar ve mesajlar — tek bir dosyada indirir. Supabase'in kendi yedeklemesinden bağımsız, kendi bilgisayarınızda tutabileceğiniz ayrı bir kopya — Supabase'e hiçbir şey olmasa bile elinizde kalır. Ayda bir kez indirip saklamanız önerilir.</p>
       <button id="fullBackupBtn">Yedek dosyasını indir</button>
       <p class="muted" id="fullBackupStatus" style="margin-top:8px;"></p>
-    </div>
-    <div class="card" id="regenNumbersCard" style="display:none;margin-top:16px;">
-      <h2>Sipariş Numaralarını yeniden oluştur</h2>
-      <p class="muted" style="margin-top:-6px">Format düzeltmesinden (DDMMYY tarih sırası, üretim sıra numarasının yeniden kullanılması) önce atanmış eski Sipariş Numaralarını yeni formata çevirir — sipariş, üretim geçmişi ve her şey aynı kalır, sadece numaranın kendisi yeniden hesaplanır. Her siparişin ORİJİNAL kodlama tarihi kullanılır, bugünün tarihi değil. Zaten yeni formatta olanlara dokunulmaz. Daha önce gönderilmiş bir WhatsApp mesajında veya pakette yazılı eski numarayla artık eşleşmeyebilir — bunu göz önünde bulundurun.</p>
-      <button id="regenNumbersBtn">Eski numaraları yeniden oluştur</button>
-      <p class="muted" id="regenNumbersStatus" style="margin-top:8px;"></p>
     </div>
     <div class="card" id="ownerDmOversightCard" style="display:none;margin-top:16px;">
       <h2>Yönetici görünümü — tüm özel mesajlar</h2>
@@ -1281,56 +1276,6 @@ document.getElementById('fullBackupBtn').onclick = async ()=>{
   btn.disabled = true;
   await performBackup(t=>status.textContent=t);
   btn.disabled = false;
-};
-// One-time cleanup for orders that got their Sipariş Numarası assigned
-// before the DDMMYY-and-reused-floor-number format was fixed — only
-// touches orders that already HAVE a number (a still-unassigned order
-// naturally gets the correct format the first time it's coded, nothing to
-// do there). Uses each order's own ORIGINAL coding date, not today's, so
-// regenerating doesn't silently shift when the number claims the order
-// was made.
-document.getElementById('regenNumbersBtn').onclick = async ()=>{
-  const status = document.getElementById('regenNumbersStatus');
-  const targets = state.orders.filter(o=>o.siparisNumarasi);
-  if(!targets.length){ status.textContent = 'Yeniden oluşturulacak sipariş yok.'; return; }
-  const confirmed = await showConfirm(`${targets.length} siparişin Sipariş Numarası yeniden oluşturulacak — daha önce gönderilmiş bir WhatsApp mesajında veya pakette yazılı eski numarayla artık eşleşmeyebilir. Devam edilsin mi?`);
-  if(!confirmed) return;
-  const auth = await requireAdmin(`${targets.length} Sipariş Numarasını yeniden oluşturma`);
-  if(!auth) return;
-  const btn = document.getElementById('regenNumbersBtn');
-  btn.disabled = true;
-  status.textContent = 'Yeniden oluşturuluyor...';
-  const previous = targets.map(o=>({ id:o.id, old:o.siparisNumarasi }));
-  let changed = 0;
-  targets.forEach(o=>{
-    // The earliest-coded item on this order — the same one that was
-    // actually used the moment this number was first assigned, so the
-    // date segment correctly reflects when it was originally coded, not
-    // today.
-    let firstItem = null;
-    o.items.forEach(i=>{
-      if(!i.codedAt) return;
-      if(!firstItem || i.codedAt < firstItem.codedAt) firstItem = i;
-    });
-    const origDate = firstItem ? new Date(firstItem.codedAt) : null;
-    const newNo = generateSiparisNumarasi(o, firstItem, origDate);
-    if(newNo !== o.siparisNumarasi){
-      o.siparisNumarasi = newNo;
-      changed++;
-    }
-  });
-  logActivity(`${changed} Sipariş Numarası yeni formata göre yeniden oluşturuldu.`, auth==='pin' ? 'Admin' : undefined);
-  saveState(); render();
-  btn.disabled = false;
-  status.textContent = `${changed} sipariş numarası güncellendi.`;
-  showUndoToast(`${changed} Sipariş Numarası yeniden oluşturuldu`, ()=>{
-    previous.forEach(p=>{
-      const o = state.orders.find(x=>x.id===p.id);
-      if(o) o.siparisNumarasi = p.old;
-    });
-    logActivity(`Yeniden oluşturma geri alındı: ${changed} sipariş numarası eski haline döndürüldü.`, auth==='pin' ? 'Admin' : undefined);
-    saveState(); render();
-  });
 };
 // Month-start nudge — persistent (no dismiss button on purpose) until an
 // actual backup succeeds, at which point it hides itself and stays hidden
@@ -2109,6 +2054,95 @@ async function requireDeleteAuth(actionLabel, order){
   const ageMs = order && order.recordedAt ? (Date.now() - new Date(order.recordedAt).getTime()) : Infinity;
   if(ageMs < 24*3600*1000) return 'fresh';
   return requireAdmin(actionLabel);
+}
+
+// ---------------- İptal (cancellation) ----------------
+// A checkbox-based multi-select cancel flow, shared across Baskı öncesi,
+// Ayırma & etiketler, and Üretim — the three stages an item can realistically
+// still be cancelled from (before it's shipped). Clicking "Siparişi iptal
+// et" toggles selection mode on whichever screen is currently open;
+// checkboxes appear next to each row, any combination can be picked (one
+// piece, several, or a whole set), and confirming cancels ONLY what's
+// checked — everything else on that same order is left completely alone.
+// A cancelled item isn't deleted: its status simply becomes 'cancelled',
+// which — since every existing screen filters by an explicit whitelist of
+// statuses, never a blacklist — automatically and safely removes it from
+// Baskı öncesi/Ayırma/Üretim/Çok Satanlar without needing to touch those
+// screens individually. It still exists for reporting, split by whether it
+// had already been produced at the moment it was cancelled (producedAt
+// tells us that) or not.
+let cancelModeActive = false;
+let cancelSelectedIds = new Set();
+function toggleCancelMode(renderFn){
+  cancelModeActive = !cancelModeActive;
+  cancelSelectedIds.clear();
+  renderFn();
+}
+async function cancelSelectedItems(renderFn){
+  if(!cancelSelectedIds.size) return;
+  const refs = []; // {order, item}
+  state.orders.forEach(o=>{
+    o.items.forEach(i=>{
+      if(cancelSelectedIds.has(i.id)) refs.push({order:o, item:i});
+    });
+  });
+  if(!refs.length) return;
+  const confirmed = await showConfirm(`${refs.length} kalem iptal edilecek — üretimden çekilecek, ama silinmeyecek; raporlarda "iptal edilen" olarak görünmeye devam edecek. Devam edilsin mi?`);
+  if(!confirmed) return;
+  // Age-gated the same way a delete is — using the OLDEST order among
+  // everything selected, so a batch that mixes a fresh order with an old
+  // one is held to the stricter standard rather than slipping through on
+  // the newest one's leniency.
+  let oldestOrder = refs[0].order;
+  refs.forEach(r=>{
+    const age = r.order.recordedAt ? new Date(r.order.recordedAt).getTime() : 0;
+    const oldestAge = oldestOrder.recordedAt ? new Date(oldestOrder.recordedAt).getTime() : 0;
+    if(age < oldestAge) oldestOrder = r.order;
+  });
+  const auth = await requireDeleteAuth(`${refs.length} kalemi iptal etme`, oldestOrder);
+  if(!auth) return;
+  const cancelledAt = new Date().toISOString();
+  const previous = refs.map(r=>({ id:r.item.id, status:r.item.status, cancelledAt:r.item.cancelledAt, cancelledBy:r.item.cancelledBy }));
+  refs.forEach(r=>{
+    r.item.cancelledFromStatus = r.item.status; // preserved so an undo restores exactly where it was
+    r.item.status = 'cancelled';
+    r.item.cancelledAt = cancelledAt;
+    r.item.cancelledBy = operatorName;
+  });
+  logActivity(`${refs.length} kalem iptal edildi.`, auth==='pin' ? 'Admin' : undefined);
+  cancelModeActive = false;
+  cancelSelectedIds.clear();
+  saveState(); renderFn();
+  showUndoToast(`${refs.length} kalem iptal edildi`, ()=>{
+    previous.forEach(p=>{
+      state.orders.forEach(o=>{
+        const item = o.items.find(i=>i.id===p.id);
+        if(item){ item.status = p.status; item.cancelledAt = p.cancelledAt; item.cancelledBy = p.cancelledBy; delete item.cancelledFromStatus; }
+      });
+    });
+    logActivity(`İptal geri alındı: ${refs.length} kalem.`, auth==='pin' ? 'Admin' : undefined);
+    saveState(); renderFn();
+  });
+}
+// Small reusable toolbar block — same on all three screens, differing only
+// in which render function it hands control back to.
+function cancelToolbarHtml(){
+  if(!cancelModeActive){
+    return `<button class="ghost small cancel-mode-toggle">Siparişi iptal et</button>`;
+  }
+  return `<button class="ghost small cancel-mode-toggle">Vazgeç</button>
+    <button class="small cancel-confirm" style="background:var(--rust);border-color:var(--rust);" ${cancelSelectedIds.size?'':'disabled'}>Seçilenleri iptal et (${cancelSelectedIds.size})</button>`;
+}
+function wireCancelToolbar(renderFn){
+  document.querySelectorAll('.cancel-mode-toggle').forEach(b=>{ b.onclick = ()=>toggleCancelMode(renderFn); });
+  document.querySelectorAll('.cancel-confirm').forEach(b=>{ b.onclick = ()=>cancelSelectedItems(renderFn); });
+  document.querySelectorAll('.cancel-select-box').forEach(cb=>{
+    cb.onchange = ()=>{
+      const ids = cb.dataset.ids.split(',');
+      ids.forEach(id=>{ if(cb.checked) cancelSelectedIds.add(id); else cancelSelectedIds.delete(id); });
+      renderFn();
+    };
+  });
 }
 
 // Shared "undo" toast for every delete action in the app — appears for 10
@@ -4219,6 +4253,7 @@ function renderReport(){
 
   matchingOrders.forEach(o=>{
     o.items.forEach(item=>{
+      if(item.status==='cancelled') return;
       const m2 = sizeToM2(item.size) * item.qty;
       totalM2Ordered += m2;
       if(item.status==='produced') totalM2Produced += m2;
@@ -4228,7 +4263,7 @@ function renderReport(){
       byTaban[item.taban].m2Ordered += m2;
       if(item.status==='produced') byTaban[item.taban].m2Produced += m2;
     });
-    totalCarpets += countCarpets(o.items);
+    totalCarpets += countCarpets(o.items.filter(i=>i.status!=='cancelled'));
   });
 
   // Taban'a göre carpet count needs its own per-order counting (countCarpets is
@@ -4236,6 +4271,7 @@ function renderReport(){
   matchingOrders.forEach(o=>{
     const seen = new Set();
     o.items.forEach(item=>{
+      if(item.status==='cancelled') return;
       const key = item.setLabel || item.id;
       if(seen.has(key)) return;
       seen.add(key);
@@ -4266,6 +4302,31 @@ function renderReport(){
     <div class="stat-grid">
       <div class="stat" style="background:var(--rust-bg);border-color:var(--rust);"><div class="n" style="color:var(--rust);">${iadeCount}</div><div class="l" style="color:#3a3a3a;">İade edilen kalem</div></div>
       <div class="stat" style="background:var(--rust-bg);border-color:var(--rust);"><div class="n" style="color:var(--rust);">${formatTL(iadeValue)} TL</div><div class="l" style="color:#3a3a3a;">Tahmini İade Tutarı</div></div>
+    </div>` : '';
+
+  // İptal edilenler — split by whether the item had already been produced
+  // at the moment it was cancelled (cancelledFromStatus tells us that
+  // directly) or not, since those are two very different situations: a
+  // pre-production cancellation cost nothing but the paper it was written
+  // on, while a post-production one means real materials and floor time
+  // were spent on something that never shipped.
+  let cancelledBeforeCount = 0, cancelledBeforeM2 = 0, cancelledAfterCount = 0, cancelledAfterM2 = 0;
+  matchingOrders.forEach(o=>{
+    o.items.forEach(item=>{
+      if(item.status!=='cancelled') return;
+      const m2 = sizeToM2(item.size) * (item.qty||1);
+      if(item.cancelledFromStatus==='produced'){ cancelledAfterCount++; cancelledAfterM2 += m2; }
+      else { cancelledBeforeCount++; cancelledBeforeM2 += m2; }
+    });
+  });
+  const cancelSectionHtml = (cancelledBeforeCount || cancelledAfterCount) ? `
+    <h3 style="font-family:'Fraunces',serif;font-size:15px;margin:20px 0 8px;">İptal Edilenler</h3>
+    <p class="muted" style="margin-top:-4px">Üretim öncesi iptaller hiçbir maliyet doğurmaz; üretilip sonra iptal edilenler gerçek malzeme ve üretim süresi kaybıdır — bu yüzden ayrı gösterilir.</p>
+    <div class="stat-grid">
+      <div class="stat"><div class="n">${cancelledBeforeCount}</div><div class="l">Üretim öncesi iptal edilen (kalem)</div></div>
+      <div class="stat"><div class="n">${cancelledBeforeM2.toFixed(2)} m²</div><div class="l">Üretim öncesi iptal — m²</div></div>
+      <div class="stat" style="background:var(--rust-bg);border-color:var(--rust);"><div class="n" style="color:var(--rust);">${cancelledAfterCount}</div><div class="l" style="color:#3a3a3a;">Üretilip sonra iptal edilen (kalem)</div></div>
+      <div class="stat" style="background:var(--rust-bg);border-color:var(--rust);"><div class="n" style="color:var(--rust);">${cancelledAfterM2.toFixed(2)} m²</div><div class="l" style="color:#3a3a3a;">Üretilip iptal — m²</div></div>
     </div>` : '';
 
   // İade Oranı (%) per channel family — deliberately ignores the Kanal
@@ -4478,6 +4539,8 @@ function renderReport(){
     <p class="muted" style="margin-top:8px">Üretilen Ürün Tutarı, sadece TÜM kalemleri üretilmiş siparişlerin tutarını sayar — kısmen üretilmiş bir siparişin tutarı, tutar sipariş bazında kayıtlı olduğundan (kalem bazında değil) bölüştürülemez ve dahil edilmez.</p>
 
     ${iadeSectionHtml}
+
+    ${cancelSectionHtml}
 
     ${iadeRateSectionHtml}
 
@@ -5209,7 +5272,6 @@ function renderUsers(){
   // panel below it — this is a whole-business export, not a routine action
   // any team member should be triggering.
   document.getElementById('fullBackupCard').style.display = isOwner ? '' : 'none';
-  document.getElementById('regenNumbersCard').style.display = isOwner ? '' : 'none';
 
   const roleLabels = { owner:'Yönetici', sales:'Satış', production:'Üretim', finance:'Finans' };
   const myPinRow = `
@@ -7306,9 +7368,9 @@ function orderStatus(o){
   return 'pending';
 }
 function pill(status){
-  const labels = {pending:'Bekliyor', coded:'Kodlandı', 'in production':'Üretimde', produced:'Üretildi'};
-  const cls = {pending:'pending', coded:'coded', 'in production':'sorted', produced:'produced'};
-  return `<span class="pill pill-${cls[status]}">${labels[status]}</span>`;
+  const labels = {pending:'Bekliyor', coded:'Kodlandı', 'in production':'Üretimde', produced:'Üretildi', cancelled:'İptal edildi'};
+  const cls = {pending:'pending', coded:'coded', 'in production':'sorted', produced:'produced', cancelled:'pending'};
+  return `<span class="pill pill-${cls[status]}" style="${status==='cancelled'?'background:#f0f0f0;color:var(--ink-soft);text-decoration:line-through;':''}">${labels[status]}</span>`;
 }
 
 function toDateInputValue(date){
@@ -7839,6 +7901,7 @@ function computeTopDesigns(orderFilter){
     if(!orderFilter(o)) return;
     o.items.forEach(item=>{
       if(!item.code) return;
+      if(item.status==='cancelled') return;
       byCode[item.code] = byCode[item.code] || { pieces:0, orders:new Set(), m2:0, image:null, suggested:false };
       const qty = item.qty || 1;
       byCode[item.code].pieces += qty;
@@ -8838,8 +8901,11 @@ function renderQueue(){
           <td><span style="color:var(--forest);font-weight:600">✓ Onaylandı</span> <button class="ghost small edit-code" data-oid="${o.id}" data-ids="${ids}">Düzenle</button></td>`;
       }
 
+      const cancelBox = cancelModeActive
+        ? `<td><input type="checkbox" class="cancel-select-box" data-ids="${ids}" ${ids.split(',').every(id=>cancelSelectedIds.has(id)) ? 'checked' : ''}></td>`
+        : '';
       if(gi===0){
-        tr.innerHTML = `<td>${numCell}</td><td rowspan="${rowspan}">${o.date||'-'}</td><td rowspan="${rowspan}">${chanBadgeHtml(dealerChannelNameForOrder(o))}</td>
+        tr.innerHTML = `${cancelBox}<td>${numCell}</td><td rowspan="${rowspan}">${o.date||'-'}</td><td rowspan="${rowspan}">${chanBadgeHtml(dealerChannelNameForOrder(o))}</td>
           <td rowspan="${rowspan}">${o.customerName}</td>${hidePhoneAdres ? '' : `<td rowspan="${rowspan}">${o.phone||'-'}</td><td rowspan="${rowspan}">${o.address||'-'}</td>`}${hidePhoneAdres ? `<td>${groupCarpetCount}</td>` : ''}
           <td>${sizeCell}</td>
           <td rowspan="${rowspan}">${o.price||'-'}</td><td rowspan="${rowspan}">${o.prepaidAmount||'-'}</td><td rowspan="${rowspan}">${collectCell}</td>
@@ -8847,13 +8913,16 @@ function renderQueue(){
           <td>${thumb}</td>
           ${codeCell}`;
       } else {
-        tr.innerHTML = `<td>${numCell}</td>${hidePhoneAdres ? `<td>${groupCarpetCount}</td>` : ''}<td>${sizeCell}</td><td>${thumb}</td>
+        tr.innerHTML = `${cancelBox}<td>${numCell}</td>${hidePhoneAdres ? `<td>${groupCarpetCount}</td>` : ''}<td>${sizeCell}</td><td>${thumb}</td>
           ${codeCell}`;
       }
       tbody.appendChild(tr);
     });
   });
 
+  document.getElementById('queueCancelToolbar').innerHTML = cancelToolbarHtml();
+  document.getElementById('thQueueCancelBox').style.display = cancelModeActive ? '' : 'none';
+  wireCancelToolbar(renderQueue);
   document.getElementById('queueEmpty').style.display = count? 'none':'block';
   wireQueueHandlers(tbody);
 }
@@ -9098,13 +9167,18 @@ function renderSort(){
             ? `<span style="color:var(--forest);font-weight:600">✓ Etiket basıldı</span>
                <button class="ghost small reprint-sticker" data-oid="${order.id}" data-ids="${ids}" data-copy-idx="${copyIdx}">Tekrar etiket bastır</button>`
             : `<button class="ghost small mark-sorted" data-oid="${order.id}" data-ids="${ids}" data-copy-idx="${copyIdx}" data-copy-total="${copyCount}">Etiket bastır</button>`;
-          tag.innerHTML = `${thumb} <span class="ts">${pos}</span> ${bundle[0].code} — ${order.customerName} — ${sizes}${setNote}${extraNote} ${ageBadge(order, bundle[0])}
+          const cancelBox = (cancelModeActive && copyIdx===1)
+            ? `<label style="margin-right:6px;"><input type="checkbox" class="cancel-select-box" data-ids="${ids}" ${ids.split(',').every(id=>cancelSelectedIds.has(id)) ? 'checked' : ''}></label>`
+            : '';
+          tag.innerHTML = `${cancelBox}${thumb} <span class="ts">${pos}</span> ${bundle[0].code} — ${order.customerName} — ${sizes}${setNote}${extraNote} ${ageBadge(order, bundle[0])}
             ${actionHtml}`;
           g.appendChild(tag);
         }
     });
     wrap.appendChild(g);
   });
+  document.getElementById('sortCancelToolbar').innerHTML = cancelToolbarHtml();
+  wireCancelToolbar(renderSort);
 
   wrap.querySelectorAll('.mark-sorted').forEach(b=>{
     b.onclick = ()=>{
@@ -9463,13 +9537,18 @@ function renderProduction(){
           } else {
             actionHtml = `<span style="color:var(--forest);font-weight:600">✓ Üretildi</span> <button class="ghost small edit-produced" data-oid="${order.id}" data-ids="${ids}">Düzenle</button>`;
           }
-          tag.innerHTML = `${thumb} <span class="ts">${pos}</span> ${bundle[0].code} — ${order.customerName} — ${sizes}${setNote} ${ageBadge(order, bundle[0])}
+          const cancelBox = (cancelModeActive && copyIdx===1)
+            ? `<label style="margin-right:6px;"><input type="checkbox" class="cancel-select-box" data-ids="${ids}" ${ids.split(',').every(id=>cancelSelectedIds.has(id)) ? 'checked' : ''}></label>`
+            : '';
+          tag.innerHTML = `${cancelBox}${thumb} <span class="ts">${pos}</span> ${bundle[0].code} — ${order.customerName} — ${sizes}${setNote} ${ageBadge(order, bundle[0])}
             ${actionHtml}`;
           g.appendChild(tag);
         }
       });
     wrap.appendChild(g);
   });
+  document.getElementById('productionCancelToolbar').innerHTML = cancelToolbarHtml();
+  wireCancelToolbar(renderProduction);
   wrap.querySelectorAll('.mark-produced').forEach(b=>{
     b.onclick = ()=>{
       const order = state.orders.find(o=>o.id===b.dataset.oid);
@@ -9752,7 +9831,7 @@ function renderOverview(){
   // it never quietly inflates the regular sales numbers.
   const orders = allOrders.filter(o=>o.saleType !== 'Kayıp Kargo');
 
-  const totalCarpetCount = orders.reduce((s,o)=>s+countCarpets(o.items), 0);
+  const totalCarpetCount = orders.reduce((s,o)=>s+countCarpets(o.items.filter(i=>i.status!=='cancelled')), 0);
   // Every stat here counts CARPETS (same rule as "Halı sayısı"), not raw item-lines
   // — a set's pieces always move through statuses together, so filtering an
   // order's items to one status before running the same set-aware count stays
@@ -9760,12 +9839,14 @@ function renderOverview(){
   const carpetsPending = orders.reduce((s,o)=>s+countCarpets(o.items.filter(i=>i.status==='pending')), 0);
   const carpetsSorted = orders.reduce((s,o)=>s+countCarpets(o.items.filter(i=>i.status==='sorted')), 0);
   const carpetsProduced = orders.reduce((s,o)=>s+countCarpets(o.items.filter(i=>i.status==='produced')), 0);
+  const carpetsCancelled = orders.reduce((s,o)=>s+countCarpets(o.items.filter(i=>i.status==='cancelled')), 0);
   const stats = [
     {n: orders.length, l:'Siparişler'},
     {n: totalCarpetCount, l:'Halı sayısı'},
     {n: carpetsPending, l:'Kod bekliyor'},
     {n: carpetsSorted, l:'Üretimde'},
     {n: carpetsProduced, l:'Üretildi'},
+    {n: carpetsCancelled, l:'İptal edilen'},
   ];
   document.getElementById('statGrid').innerHTML = stats.map(s=>`<div class="stat"${s.highlight?' style="background:var(--teal);border-color:var(--teal);"':''}><div class="n"${s.highlight?' style="color:#fff;"':''}>${s.n}</div><div class="l"${s.highlight?' style="color:#fff;opacity:.85;"':''}>${s.l}</div></div>`).join('');
 
@@ -9773,7 +9854,7 @@ function renderOverview(){
   orders.forEach(o=>{
     byChan[o.channel] = byChan[o.channel] || {orders:0, carpets:0, coded:0, sorted:0, produced:0};
     byChan[o.channel].orders++;
-    byChan[o.channel].carpets += countCarpets(o.items);
+    byChan[o.channel].carpets += countCarpets(o.items.filter(i=>i.status!=='cancelled'));
     byChan[o.channel].coded += countCarpets(o.items.filter(i=>i.status==='coded'||i.status==='sorted'||i.status==='produced'));
     byChan[o.channel].sorted += countCarpets(o.items.filter(i=>i.status==='sorted'||i.status==='produced'));
     byChan[o.channel].produced += countCarpets(o.items.filter(i=>i.status==='produced'));
@@ -9788,6 +9869,7 @@ function renderOverview(){
   orders.forEach(o=>{
     const seen = new Set();
     o.items.forEach(item=>{
+      if(item.status==='cancelled') return;
       const key = item.setLabel || item.id;
       if(seen.has(key)) return;
       seen.add(key);
