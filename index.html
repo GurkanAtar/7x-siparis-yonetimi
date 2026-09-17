@@ -2436,6 +2436,12 @@ async function loadState(){
   if(didReconcileBatches) saveState();
 }
 let saveTimer = null;
+// Set true only by the explicit "Kataloğu temizle" action, right before
+// its own saveState() — the one legitimate case where the catalog SHOULD
+// shrink. saveState()'s merge-guard below checks this and skips the merge
+// for that one save, then resets it — every other save keeps merging
+// normally.
+let catalogClearInProgress = false;
 function stripImages(obj){
   // Historically stripped "images" entirely before every save, since design
   // photos used to be kept as base64 data — far too large for a normal
@@ -2520,11 +2526,37 @@ function saveState(){
       }
       lastSyncedBatchIds = new Set(state.uploadBatches.map(b=>b.id));
 
+      // productCatalog is purely additive by design (an upload only ever
+      // adds or updates barkod entries, see its own upload handler) — so
+      // it's merged with whatever's CURRENTLY in the database here, rather
+      // than blindly overwritten like the rest of this shared row. Without
+      // this, a stale browser tab (one that's just been open a long time,
+      // or loaded before a later catalog upload happened in a different
+      // tab) would silently wipe out every entry that tab doesn't know
+      // about the next time ANY save fires from it — this was the actual
+      // cause of the catalog periodically "disappearing," nothing to do
+      // with redeploying the app itself. The one legitimate case where the
+      // catalog SHOULD shrink — "Kataloğu temizle" — sets
+      // catalogClearInProgress right before its own save specifically to
+      // skip this merge for that one write.
+      let mergedCatalog = state.productCatalog;
+      if(catalogClearInProgress){
+        catalogClearInProgress = false;
+      } else {
+        try{
+          const { data: currentAppState } = await sb.from('app_state').select('data').eq('id','global').maybeSingle();
+          const remoteCatalog = currentAppState && currentAppState.data && currentAppState.data.productCatalog;
+          if(remoteCatalog){
+            mergedCatalog = { ...remoteCatalog, ...state.productCatalog };
+            state.productCatalog = mergedCatalog;
+          }
+        }catch(e){ /* fall back to saving the local catalog as-is */ }
+      }
       const rest = {
         activityLog: state.activityLog,
         setTemplates: state.setTemplates,
         commonSizes: state.commonSizes,
-        productCatalog: state.productCatalog,
+        productCatalog: mergedCatalog,
         channels: state.channels,
         channelMerges: state.channelMerges,
         photoBackfillHistory: state.photoBackfillHistory,
@@ -7030,6 +7062,7 @@ document.getElementById('tyCatalogClear').onclick = async ()=>{
   const savedCatalog = state.productCatalog;
   state.productCatalog = {};
   logActivity(`Ürün görsel kataloğu temizlendi (${entries.length} ürün silindi).`, auth==='pin' ? 'Admin' : undefined);
+  catalogClearInProgress = true;
   saveState(); render();
   showUndoToast(`Ürün görsel kataloğu temizlendi (${entries.length} ürün)`, ()=>{
     state.productCatalog = savedCatalog;
