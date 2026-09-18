@@ -2071,32 +2071,45 @@ async function requireDeleteAuth(actionLabel, order){
 
 // ---------------- İptal (cancellation) ----------------
 // A checkbox-based multi-select cancel flow, shared across Baskı öncesi,
-// Ayırma & etiketler, and Üretim — the three stages an item can realistically
-// still be cancelled from (before it's shipped). Clicking "Siparişi iptal
-// et" toggles selection mode on whichever screen is currently open;
-// checkboxes appear next to each row, any combination can be picked (one
-// piece, several, or a whole set), and confirming cancels ONLY what's
-// checked — everything else on that same order is left completely alone.
-// A cancelled item isn't deleted: its status simply becomes 'cancelled',
-// which — since every existing screen filters by an explicit whitelist of
-// statuses, never a blacklist — automatically and safely removes it from
-// Baskı öncesi/Ayırma/Üretim/Çok Satanlar without needing to touch those
-// screens individually. It still exists for reporting, split by whether it
-// had already been produced at the moment it was cancelled (producedAt
-// tells us that) or not.
-let cancelModeActive = false;
-let cancelSelectedIds = new Set();
-function toggleCancelMode(renderFn){
-  cancelModeActive = !cancelModeActive;
-  cancelSelectedIds.clear();
+// Ayırma & etiketler, Üretim, İhracat Üretimi, and Kargoya Hazır Siparişler.
+// Clicking "Siparişi iptal et" toggles selection mode on whichever screen is
+// currently open; checkboxes appear next to each row, any combination can
+// be picked (one piece, several, or a whole set), and confirming cancels
+// ONLY what's checked — everything else on that same order is left
+// completely alone. A cancelled item isn't deleted: its status simply
+// becomes 'cancelled', which — since every existing screen filters by an
+// explicit whitelist of statuses, never a blacklist — automatically and
+// safely removes it from Baskı öncesi/Ayırma/Üretim/Çok Satanlar without
+// needing to touch those screens individually. It still exists for
+// reporting, split by whether it had already been produced at the moment
+// it was cancelled (producedAt tells us that) or not.
+//
+// Each of the five screens gets its OWN entry here (keyed by name), rather
+// than one shared flag/selection — otherwise turning on cancel mode on one
+// screen would turn it on everywhere at once, which is exactly what was
+// happening before this was keyed. wireCancelToolbar is also scoped to a
+// specific container element, not the whole document, so re-rendering one
+// screen can never silently steal or break another screen's button
+// handlers — the actual cause of clicks sometimes doing nothing.
+const cancelState = {
+  queue: { active:false, selected:new Set() },
+  sort: { active:false, selected:new Set() },
+  production: { active:false, selected:new Set() },
+  exportProduction: { active:false, selected:new Set() },
+  shippedReady: { active:false, selected:new Set() },
+};
+function toggleCancelMode(key, renderFn){
+  cancelState[key].active = !cancelState[key].active;
+  cancelState[key].selected.clear();
   renderFn();
 }
-async function cancelSelectedItems(renderFn){
-  if(!cancelSelectedIds.size) return;
+async function cancelSelectedItems(key, renderFn){
+  const selected = cancelState[key].selected;
+  if(!selected.size) return;
   const refs = []; // {order, item}
   state.orders.forEach(o=>{
     o.items.forEach(i=>{
-      if(cancelSelectedIds.has(i.id)) refs.push({order:o, item:i});
+      if(selected.has(i.id)) refs.push({order:o, item:i});
     });
   });
   if(!refs.length) return;
@@ -2123,8 +2136,8 @@ async function cancelSelectedItems(renderFn){
     r.item.cancelledBy = operatorName;
   });
   logActivity(`${refs.length} kalem iptal edildi.`, auth==='pin' ? 'Admin' : undefined);
-  cancelModeActive = false;
-  cancelSelectedIds.clear();
+  cancelState[key].active = false;
+  selected.clear();
   saveState(); renderFn();
   showUndoToast(`${refs.length} kalem iptal edildi`, ()=>{
     previous.forEach(p=>{
@@ -2137,22 +2150,27 @@ async function cancelSelectedItems(renderFn){
     saveState(); renderFn();
   });
 }
-// Small reusable toolbar block — same on all three screens, differing only
-// in which render function it hands control back to.
-function cancelToolbarHtml(){
-  if(!cancelModeActive){
+// Small reusable toolbar block — same on all five screens, differing only
+// in which cancelState entry and render function each one is bound to.
+function cancelToolbarHtml(key){
+  const st = cancelState[key];
+  if(!st.active){
     return `<button class="ghost small cancel-mode-toggle">Siparişi iptal et</button>`;
   }
   return `<button class="ghost small cancel-mode-toggle">Vazgeç</button>
-    <button class="small cancel-confirm" style="background:var(--rust);border-color:var(--rust);" ${cancelSelectedIds.size?'':'disabled'}>Seçilenleri iptal et (${cancelSelectedIds.size})</button>`;
+    <button class="small cancel-confirm" style="background:var(--rust);border-color:var(--rust);" ${st.selected.size?'':'disabled'}>Seçilenleri iptal et (${st.selected.size})</button>`;
 }
-function wireCancelToolbar(renderFn){
-  document.querySelectorAll('.cancel-mode-toggle').forEach(b=>{ b.onclick = ()=>toggleCancelMode(renderFn); });
-  document.querySelectorAll('.cancel-confirm').forEach(b=>{ b.onclick = ()=>cancelSelectedItems(renderFn); });
-  document.querySelectorAll('.cancel-select-box').forEach(cb=>{
+// containerEl scopes every querySelectorAll to that one screen's own DOM
+// subtree — never the whole document — so wiring one screen can't reach
+// into, and overwrite, a completely different screen's buttons.
+function wireCancelToolbar(key, renderFn, containerEl){
+  const selected = cancelState[key].selected;
+  containerEl.querySelectorAll('.cancel-mode-toggle').forEach(b=>{ b.onclick = ()=>toggleCancelMode(key, renderFn); });
+  containerEl.querySelectorAll('.cancel-confirm').forEach(b=>{ b.onclick = ()=>cancelSelectedItems(key, renderFn); });
+  containerEl.querySelectorAll('.cancel-select-box').forEach(cb=>{
     cb.onchange = ()=>{
       const ids = cb.dataset.ids.split(',');
-      ids.forEach(id=>{ if(cb.checked) cancelSelectedIds.add(id); else cancelSelectedIds.delete(id); });
+      ids.forEach(id=>{ if(cb.checked) selected.add(id); else selected.delete(id); });
       renderFn();
     };
   });
@@ -9035,8 +9053,8 @@ function renderQueue(){
           <td><span style="color:var(--forest);font-weight:600">✓ Onaylandı</span> <button class="ghost small edit-code" data-oid="${o.id}" data-ids="${ids}">Düzenle</button></td>`;
       }
 
-      const cancelBox = cancelModeActive
-        ? `<td><input type="checkbox" class="cancel-select-box" data-ids="${ids}" ${ids.split(',').every(id=>cancelSelectedIds.has(id)) ? 'checked' : ''}></td>`
+      const cancelBox = cancelState.queue.active
+        ? `<td><input type="checkbox" class="cancel-select-box" data-ids="${ids}" ${ids.split(',').every(id=>cancelState.queue.selected.has(id)) ? 'checked' : ''}></td>`
         : '';
       if(gi===0){
         tr.innerHTML = `${cancelBox}<td>${numCell}</td><td rowspan="${rowspan}">${o.date||'-'}</td><td rowspan="${rowspan}">${chanBadgeHtml(dealerChannelNameForOrder(o))}</td>
@@ -9054,9 +9072,9 @@ function renderQueue(){
     });
   });
 
-  document.getElementById('queueCancelToolbar').innerHTML = cancelToolbarHtml();
-  document.getElementById('thQueueCancelBox').style.display = cancelModeActive ? '' : 'none';
-  wireCancelToolbar(renderQueue);
+  document.getElementById('queueCancelToolbar').innerHTML = cancelToolbarHtml('queue');
+  document.getElementById('thQueueCancelBox').style.display = cancelState.queue.active ? '' : 'none';
+  wireCancelToolbar('queue', renderQueue, document.getElementById('queue'));
   document.getElementById('queueEmpty').style.display = count? 'none':'block';
   wireQueueHandlers(tbody);
 }
@@ -9302,8 +9320,8 @@ function renderSort(){
             ? `<span style="color:var(--forest);font-weight:600">✓ Etiket basıldı</span>
                <button class="ghost small reprint-sticker" data-oid="${order.id}" data-ids="${ids}" data-copy-idx="${copyIdx}">Tekrar etiket bastır</button>`
             : `<button class="ghost small mark-sorted" data-oid="${order.id}" data-ids="${ids}" data-copy-idx="${copyIdx}" data-copy-total="${copyCount}">Etiket bastır</button>`;
-          const cancelBox = (cancelModeActive && copyIdx===1)
-            ? `<label style="margin-right:6px;"><input type="checkbox" class="cancel-select-box" data-ids="${ids}" ${ids.split(',').every(id=>cancelSelectedIds.has(id)) ? 'checked' : ''}></label>`
+          const cancelBox = (cancelState.sort.active && copyIdx===1)
+            ? `<label style="margin-right:6px;"><input type="checkbox" class="cancel-select-box" data-ids="${ids}" ${ids.split(',').every(id=>cancelState.sort.selected.has(id)) ? 'checked' : ''}></label>`
             : '';
           tag.innerHTML = `${cancelBox}${thumb} <span class="ts">${pos}</span> ${bundle[0].code} — ${order.customerName} — ${sizes}${setNote}${extraNote} ${ageBadge(order, bundle[0])}
             ${actionHtml}`;
@@ -9312,8 +9330,8 @@ function renderSort(){
     });
     wrap.appendChild(g);
   });
-  document.getElementById('sortCancelToolbar').innerHTML = cancelToolbarHtml();
-  wireCancelToolbar(renderSort);
+  document.getElementById('sortCancelToolbar').innerHTML = cancelToolbarHtml('sort');
+  wireCancelToolbar('sort', renderSort, document.getElementById('sort'));
 
   wrap.querySelectorAll('.mark-sorted').forEach(b=>{
     b.onclick = ()=>{
@@ -9672,8 +9690,8 @@ function renderProduction(){
           } else {
             actionHtml = `<span style="color:var(--forest);font-weight:600">✓ Üretildi</span> <button class="ghost small edit-produced" data-oid="${order.id}" data-ids="${ids}">Düzenle</button>`;
           }
-          const cancelBox = (cancelModeActive && copyIdx===1)
-            ? `<label style="margin-right:6px;"><input type="checkbox" class="cancel-select-box" data-ids="${ids}" ${ids.split(',').every(id=>cancelSelectedIds.has(id)) ? 'checked' : ''}></label>`
+          const cancelBox = (cancelState.production.active && copyIdx===1)
+            ? `<label style="margin-right:6px;"><input type="checkbox" class="cancel-select-box" data-ids="${ids}" ${ids.split(',').every(id=>cancelState.production.selected.has(id)) ? 'checked' : ''}></label>`
             : '';
           tag.innerHTML = `${cancelBox}${thumb} <span class="ts">${pos}</span> ${bundle[0].code} — ${order.customerName} — ${sizes}${setNote} ${ageBadge(order, bundle[0])}
             ${actionHtml}`;
@@ -9682,8 +9700,8 @@ function renderProduction(){
       });
     wrap.appendChild(g);
   });
-  document.getElementById('productionCancelToolbar').innerHTML = cancelToolbarHtml();
-  wireCancelToolbar(renderProduction);
+  document.getElementById('productionCancelToolbar').innerHTML = cancelToolbarHtml('production');
+  wireCancelToolbar('production', renderProduction, document.getElementById('production'));
   wrap.querySelectorAll('.mark-produced').forEach(b=>{
     b.onclick = ()=>{
       const order = state.orders.find(o=>o.id===b.dataset.oid);
@@ -9772,16 +9790,16 @@ function renderShippedReady(){
   wrap.innerHTML = ready.map(o=>{
     const sizes = o.items.map(i=>`${i.size} ×${i.qty}`).join(', ');
     const ids = o.items.map(i=>i.id).join(',');
-    const cancelBox = cancelModeActive
-      ? `<label style="margin-right:6px;"><input type="checkbox" class="cancel-select-box" data-ids="${ids}" ${ids.split(',').every(id=>cancelSelectedIds.has(id)) ? 'checked' : ''}></label>`
+    const cancelBox = cancelState.shippedReady.active
+      ? `<label style="margin-right:6px;"><input type="checkbox" class="cancel-select-box" data-ids="${ids}" ${ids.split(',').every(id=>cancelState.shippedReady.selected.has(id)) ? 'checked' : ''}></label>`
       : '';
     return `<div class="tag" style="display:flex;align-items:center;justify-content:space-between;width:100%;">
       <span>${cancelBox}${chanBadgeHtml(dealerChannelNameForOrder(o))} <strong>${o.customerName||''}</strong> — ${sizes}</span>
       <button class="ghost small mark-shipped" data-oid="${o.id}">Kargoya verildi</button>
     </div>`;
   }).join('');
-  document.getElementById('shippedReadyCancelToolbar').innerHTML = cancelToolbarHtml();
-  wireCancelToolbar(renderShippedReady);
+  document.getElementById('shippedReadyCancelToolbar').innerHTML = cancelToolbarHtml('shippedReady');
+  wireCancelToolbar('shippedReady', renderShippedReady, document.getElementById('shippedReadyCard'));
   wrap.querySelectorAll('.mark-shipped').forEach(b=>{
     b.onclick = ()=>{
       const order = state.orders.find(o=>o.id===b.dataset.oid);
