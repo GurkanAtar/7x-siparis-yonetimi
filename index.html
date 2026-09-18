@@ -3722,11 +3722,31 @@ let fileListShowCount = {};
 // order rather than recalculated on every render. Assigned the moment an
 // order's FIRST item gets coded (whether through Baskı öncesi's Onayla, or a
 // code typed in directly at save time), whichever comes first.
+// Derives the next number by scanning every order already assigned one and
+// taking the highest + 1 — not a simple stored counter, deliberately.
+// state.nextTrendyolNumber/nextHepsiburadaNumber were never actually saved
+// to Supabase (only ever lived in memory for the current session), which
+// meant every fresh page load quietly reset back to 1001 and risked
+// handing out a number that already belonged to an older order. Scanning
+// existing data instead is self-healing — it always reflects reality, no
+// matter how many sessions/reloads happen in between, with nothing new
+// that needs to be persisted.
+function nextPermanentOrderNumber(field){
+  let max = 1000;
+  state.orders.forEach(o=>{ if(o[field] && o[field] > max) max = o[field]; });
+  return max + 1;
+}
 function assignTrendyolNumberIfNeeded(order){
   if(channelType(order.channel).startsWith('Trendyol') && !order.trendyolNumber){
-    state.nextTrendyolNumber = state.nextTrendyolNumber || 1001;
-    order.trendyolNumber = state.nextTrendyolNumber;
-    state.nextTrendyolNumber += 1;
+    order.trendyolNumber = nextPermanentOrderNumber('trendyolNumber');
+  }
+}
+// Same permanent, never-resetting counter as Trendyol's — Hepsiburada uses
+// HB-1001 style codes, climbing forever, never the day-based 3-digit
+// scheme IG/Sıcak Satış/İhracat use.
+function assignHepsiburadaNumberIfNeeded(order){
+  if(channelType(order.channel).startsWith('Hepsiburada') && !order.hepsiburadaNumber){
+    order.hepsiburadaNumber = nextPermanentOrderNumber('hepsiburadaNumber');
   }
 }
 
@@ -7553,7 +7573,7 @@ function getAllItemGroups(){
 // how many Instagram orders were coded first, rather than competing for
 // position in one shared pool. Trendyol keeps its own separate permanent
 // 1001+ scheme untouched (handled entirely outside this map).
-const NUMBERING_PREFIX = { ig:'IG-', sicaksatis:'SS-', ihracat:'EXP-', hepsiburada:'HB-' };
+const NUMBERING_PREFIX = { ig:'IG-', sicaksatis:'SS-', ihracat:'EX-', hepsiburada:'HB-' };
 
 // ---------------- Channel + account letter codes ----------------
 // A short, permanent, letter-only code per channel (e.g. IGQA, TY7X) —
@@ -7800,10 +7820,11 @@ function computeItemNumbers(){
   const allGroups = getAllItemGroups().filter(g => g.group[0].codedAt);
   const orderDayBuckets = {};
   allGroups.forEach(g=>{
-    // Trendyol orders carry their own permanent 1001+ number and never take a
-    // day-digit bucket slot, so they're skipped here — otherwise they'd consume
-    // day-digit positions and shift the other channels' numbering.
-    if(g.order.trendyolNumber) return;
+    // Trendyol and Hepsiburada both carry their own permanent 1001+ number
+    // and never take a day-digit bucket slot, so both are skipped here —
+    // otherwise they'd consume day-digit positions and shift the other
+    // channels' numbering.
+    if(g.order.trendyolNumber || g.order.hepsiburadaNumber) return;
     const dateKey = new Date(g.group[0].codedAt).toLocaleDateString('tr-TR', {timeZone:'Europe/Istanbul'});
     const bucketKey = g.order.id + '::' + dateKey;
     orderDayBuckets[bucketKey] = orderDayBuckets[bucketKey] || { order:g.order, dateKey, earliestCodedAt: g.group[0].codedAt };
@@ -7838,12 +7859,17 @@ function computeItemNumbers(){
   });
   const numbers = {};
   allGroups.forEach(g=>{
-    // Trendyol orders use their own permanent 1001+ number (assigned at coding
-    // time, stored on the order) as the base, instead of the day-digit bucket
-    // number the other channels use. The position suffix (-1/3, -2/3, ...) is
-    // added the same way for all channels by numberWithPosition downstream.
+    // Trendyol and Hepsiburada both use their own permanent 1001+ number
+    // (assigned at coding time, stored on the order) as the base, instead
+    // of the day-digit bucket number the other channels use. The position
+    // suffix (-1/3, -2/3, ...) is added the same way for all channels by
+    // numberWithPosition downstream.
     if(g.order.trendyolNumber){
       numbers[g.groupKey] = String(g.order.trendyolNumber);
+      return;
+    }
+    if(g.order.hepsiburadaNumber){
+      numbers[g.groupKey] = String(g.order.hepsiburadaNumber);
       return;
     }
     const dateKey = new Date(g.group[0].codedAt).toLocaleDateString('tr-TR', {timeZone:'Europe/Istanbul'});
@@ -7889,13 +7915,13 @@ function generateSiparisNumarasi(order, firstItem, dateOverride){
   let seq;
   if(order.trendyolNumber){
     seq = String(order.trendyolNumber);
+  } else if(order.hepsiburadaNumber){
+    seq = String(order.hepsiburadaNumber);
   } else {
-    const category = channelCategoryForNumbering(order.channel);
     const itemNumbers = computeItemNumbers();
     const item = firstItem || order.items.find(i=>i.codedAt);
     const key = item ? itemGroupKey(order, item) : null;
-    const floorNum = key && itemNumbers[key] ? itemNumbers[key].replace(/^[A-Z]+-/, '') : '000';
-    seq = category==='hepsiburada' ? floorNum.padStart(4,'0') : floorNum;
+    seq = key && itemNumbers[key] ? itemNumbers[key].replace(/^[A-Z]+-/, '') : '000';
   }
   return code + dateSegment + seq;
 }
@@ -7979,7 +8005,7 @@ function orderAgeBadge(o){
       if(lag!==null && (worst===null || lag>worst)) worst = lag;
     });
     if(worst===null) return '';
-    return worst===0 ? `<span class="pill pill-produced">Zamanında üretildi</span>` : `<span class="pill pill-produced">+${formatDurationLabel(worst, o)} üretim süresi</span>`;
+    return worst===0 ? `<span class="pill pill-produced">Zamanında üretildi</span>` : `<span class="pill pill-produced">${formatDurationLabel(worst, o)}</span>`;
   }
   return ageBadge(o, o.items[0]);
 }
@@ -9083,6 +9109,7 @@ function wireQueueHandlers(tbody){
     } else {
       group.forEach(i=>{ i.code = code; i.status = 'coded'; i.codedAt = codedAt; });
       assignTrendyolNumberIfNeeded(order);
+      assignHepsiburadaNumberIfNeeded(order);
       logActivity(`Kodlandı "${label}" — ${order.customerName} → ${code}${lostCargoTag}`);
     }
     // Generated for every channel (not just Instagram) — this is the
@@ -9774,6 +9801,7 @@ function renderExportProduction(){
   const wrap = document.getElementById('exportProductionGroups');
   if(!wrap) return;
   wrap.innerHTML = '';
+  const itemNumbers = computeItemNumbers();
   const rowGroups = [];
   const seenItemIds = new Set();
   state.orders.forEach(o=>{
@@ -9820,6 +9848,7 @@ function renderExportProduction(){
       const pct = target ? Math.min(100, Math.round(produced/target*100)) : 0;
       const rowKey = order.id + '::' + (isPair ? group[0].setLabel : group[0].id);
       const isEditingCode = exportCodeEditingKey === rowKey;
+      const numCell = groupNumCell(group, rowKey, itemNumbers);
       const codeCell = isEditingCode
         ? `<input class="ex-code-input" value="${group[0].code||''}" data-oid="${order.id}" data-key="${isPair?group[0].setLabel:group[0].id}" style="width:90px">
            <button class="ghost small ex-save-code" data-oid="${order.id}" data-key="${isPair?group[0].setLabel:group[0].id}">Kaydet</button>`
@@ -9831,6 +9860,7 @@ function renderExportProduction(){
       row.style.alignItems = 'center';
       row.style.gap = '10px';
       row.innerHTML = `
+        <span class="ts">${numCell}</span>
         <span>${order.customerName} — ${sizeLabel}${group[0].setLabel?` <span class="muted">(${displaySetLabel(group[0].setLabel)})</span>`:''}</span>
         ${codeCell}
         <span class="muted">Hedef: ${target}</span>
