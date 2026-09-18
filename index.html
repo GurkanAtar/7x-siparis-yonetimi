@@ -2861,6 +2861,13 @@ document.querySelectorAll('.tab').forEach(t=>{
       if(typeof renderTrendCharts==='function') renderTrendCharts();
       if(typeof renderTopCustomers==='function') renderTopCustomers();
     }
+    // PINs and grants can change from someone else's own session (a team
+    // member updating their own PIN, for instance) — refetch on open so
+    // this always shows current data instead of whatever was last loaded
+    // at login.
+    if(t.dataset.tab==='auth'){
+      fetchProfileAndGrants().then(renderUsers);
+    }
   };
 });
 
