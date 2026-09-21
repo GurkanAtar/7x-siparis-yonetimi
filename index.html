@@ -3653,7 +3653,7 @@ document.querySelectorAll('.excel-btn').forEach(btn=>{
     // button elsewhere in the app) keeps the plain data-only export as
     // before.
     if(btn.dataset.excel==='queue' && currentEntryMode!=='ihracat'){
-      exportQueueToExcelWithImages();
+      exportQueueToExcelWithImages(btn);
     } else {
       exportSectionToExcel(btn.dataset.excel);
     }
@@ -3670,14 +3670,60 @@ document.querySelectorAll('.excel-btn').forEach(btn=>{
 // 3cm (76×113px at 96dpi, set as real width/height attributes rather than
 // only CSS, since Excel's own HTML parser respects the attributes far more
 // reliably than a stylesheet rule).
-function exportQueueToExcelWithImages(){
+// Converts one image URL into a base64 data: URI by actually downloading
+// its bytes — cached per URL, since the same catalog photo is often reused
+// across many rows and there's no reason to fetch it more than once.
+const excelImageCache = new Map();
+async function urlToDataUri(url){
+  if(excelImageCache.has(url)) return excelImageCache.get(url);
+  const promise = (async ()=>{
+    try{
+      const res = await fetch(url);
+      if(!res.ok) throw new Error('fetch failed');
+      const blob = await res.blob();
+      return await new Promise((resolve, reject)=>{
+        const reader = new FileReader();
+        reader.onload = ()=>resolve(reader.result);
+        reader.onerror = reject;
+        reader.readAsDataURL(blob);
+      });
+    }catch(e){
+      return null; // that one photo is skipped, rest of the export still proceeds
+    }
+  })();
+  excelImageCache.set(url, promise);
+  return promise;
+}
+async function exportQueueToExcelWithImages(btn){
   const table = document.querySelector('#queue table');
   if(!table){ showMessage('Aktarılacak bir liste bulunamadı.'); return; }
   const clone = table.cloneNode(true);
   clone.querySelectorAll('button, input, select, label.upload-photo-wrap, .dropdown-menu, .upload-photo-label').forEach(n=>n.remove());
-  clone.querySelectorAll('img.thumb').forEach(img=>{
+  const thumbs = Array.from(clone.querySelectorAll('img.thumb'));
+  // A .xls with dozens of external links each needing a live fetch was the
+  // actual cause of "linked image cannot be displayed" — Excel has to
+  // independently re-fetch every one itself when the file opens, on
+  // whatever network it happens to be on, and any single failure there
+  // shows as a broken-image box. Downloading the real bytes here instead
+  // and baking them in as base64 means the file is fully self-contained —
+  // nothing left to fetch, nothing left to fail, once this step is done.
+  const originalLabel = btn ? btn.textContent : '';
+  if(btn){ btn.textContent = `Görseller indiriliyor (0/${thumbs.length})...`; btn.disabled = true; }
+  let done = 0, failed = 0;
+  await Promise.all(thumbs.map(async img=>{
     const url = img.getAttribute('data-src') || img.getAttribute('src');
-    img.setAttribute('src', url);
+    const dataUri = await urlToDataUri(url);
+    done++;
+    if(btn) btn.textContent = `Görseller indiriliyor (${done}/${thumbs.length})...`;
+    if(dataUri){
+      img.setAttribute('src', dataUri);
+    } else {
+      failed++;
+      img.remove(); // a broken link box is worse than an empty cell
+    }
+  }));
+  if(btn){ btn.textContent = originalLabel; btn.disabled = false; }
+  clone.querySelectorAll('img.thumb').forEach(img=>{
     img.setAttribute('width', '76');
     img.setAttribute('height', '113');
     img.removeAttribute('class');
@@ -3685,15 +3731,15 @@ function exportQueueToExcelWithImages(){
     img.style.cssText = 'width:76px;height:113px;object-fit:cover;';
     // Sizing the <img> tag alone doesn't grow Excel's own row/column to
     // match — a 3cm-tall image inside a normal text-height row just
-    // overflows downward across whatever rows happen to sit underneath it,
-    // which is exactly what showed up. mso-height-source:userset is what
-    // makes Excel's own HTML parser actually honor an explicit row height
-    // (a plain height style alone is often ignored); 92pt/62pt give the
-    // 113px/76px image a few points of breathing room on each side.
+    // overflows downward across whatever rows happen to sit underneath it.
+    // mso-height-source:userset is what makes Excel's own HTML parser
+    // actually honor an explicit row height (a plain height style alone is
+    // often ignored). Kept close to the literal 2×3cm ask (56.7pt/85pt)
+    // with only a couple of points of margin, not generously padded.
     const td = img.closest('td');
-    if(td){ td.style.cssText = (td.style.cssText||'') + ';width:62pt;vertical-align:middle;'; }
+    if(td){ td.style.cssText = (td.style.cssText||'') + ';width:59pt;vertical-align:middle;'; }
     const tr = img.closest('tr');
-    if(tr){ tr.style.cssText = (tr.style.cssText||'') + ';height:92pt;mso-height-source:userset;'; }
+    if(tr){ tr.style.cssText = (tr.style.cssText||'') + ';height:87pt;mso-height-source:userset;'; }
   });
   // A row with no photo at all (blank cell after stripping the upload
   // button) is left empty rather than showing a broken-image icon.
@@ -3721,6 +3767,7 @@ function exportQueueToExcelWithImages(){
   a.click();
   document.body.removeChild(a);
   URL.revokeObjectURL(a.href);
+  if(failed>0) showMessage(`${failed} görsel indirilemediği için dosyada boş bırakıldı (bağlantı sorunu olabilir). Geri kalan her şey aktarıldı.`);
 }
 
 
