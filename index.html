@@ -6,6 +6,11 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:wght@500;600&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@500&family=Archivo:wght@500;600;700&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<!-- ExcelJS is used only for the one export that needs real embedded images
+     (Baskı öncesi's photo export) — the free SheetJS library above cannot
+     write images into a file at all, that's a paid-only feature of it.
+     Every other Excel export in the app still uses SheetJS above. -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2"></script>
@@ -3540,6 +3545,29 @@ document.querySelectorAll('.print-btn').forEach(btn=>{
 // re-querying state, so filters, channel sub-tab, and grouping all carry over
 // exactly as displayed — and a section with several tables (Genel bakış,
 // Raporlar) exports each one stacked with its own heading above it.
+// Convert a cell's visible text to a real number ONLY when it's unambiguously
+// numeric, so Excel can sum/sort it — deliberately conservative: dates
+// (02.09.2026), phone numbers (0555...), and anything with letters or a
+// currency suffix stay as text, because guessing wrong here silently
+// corrupts the export (a date parsed as a number becomes 2092026, a phone
+// number loses its leading zero). Shared by every Excel export in the app
+// so this rule only needs to be right in one place.
+function parseExportCellValue(txt){
+  if(!/\d/.test(txt)) return txt;
+  if(/^0\d/.test(txt)) return txt;             // leading zero → phone/ID, keep as text
+  if(/^\d{1,2}\.\d{1,2}\.\d{4}$/.test(txt)) return txt; // dd.mm.yyyy date
+  // m² values are always rendered by .toFixed(2), i.e. exactly two decimal
+  // places after a period — unambiguous against a dd.mm.yyyy date (which has
+  // two dots and a 4-digit year), so safe to convert.
+  if(/^-?\d+\.\d{2}$/.test(txt)) return Number(txt);
+  // Plain integer, or Turkish decimal (comma), or thousands-grouped integer
+  // (1.234 / 1.234.567).
+  if(/^-?\d+$/.test(txt)) return Number(txt);
+  if(/^-?\d{1,3}(\.\d{3})+$/.test(txt)) return Number(txt.replace(/\./g,''));
+  if(/^-?\d+,\d+$/.test(txt)) return Number(txt.replace(',','.'));
+  if(/^-?\d{1,3}(\.\d{3})+,\d+$/.test(txt)) return Number(txt.replace(/\./g,'').replace(',','.'));
+  return txt;
+}
 function exportSectionToExcel(key){
   const { sourceEl, title, subtitle } = resolvePrintSource(key);
   if(!sourceEl){ showMessage('Aktarılacak bir liste bulunamadı.'); return; }
@@ -3602,27 +3630,7 @@ function exportSectionToExcel(key){
         }
         const td = tds[cellIdx];
         const txt = cellText(td);
-        let val;
-        // Convert to a real number ONLY when the text is unambiguously numeric,
-        // so Excel can sum/sort it. Deliberately conservative: dates
-        // (02.09.2026), phone numbers (0555...), and anything with letters or
-        // a currency suffix stay as text, because guessing wrong here silently
-        // corrupts the export — a date parsed as a number becomes 2092026, and
-        // a phone number loses its leading zero.
-        if(!/\d/.test(txt)) val = txt;
-        else if(/^0\d/.test(txt)) val = txt;             // leading zero → phone/ID, keep as text
-        else if(/^\d{1,2}\.\d{1,2}\.\d{4}$/.test(txt)) val = txt; // dd.mm.yyyy date
-        // m² values are always rendered by .toFixed(2), i.e. exactly two
-        // decimal places after a period — unambiguous against a dd.mm.yyyy
-        // date (which has two dots and a 4-digit year), so safe to convert.
-        else if(/^-?\d+\.\d{2}$/.test(txt)) val = Number(txt);
-        // Plain integer, or Turkish decimal (comma), or thousands-grouped
-        // integer (1.234 / 1.234.567).
-        else if(/^-?\d+$/.test(txt)) val = Number(txt);
-        else if(/^-?\d{1,3}(\.\d{3})+$/.test(txt)) val = Number(txt.replace(/\./g,''));
-        else if(/^-?\d+,\d+$/.test(txt)) val = Number(txt.replace(',','.'));
-        else if(/^-?\d{1,3}(\.\d{3})+,\d+$/.test(txt)) val = Number(txt.replace(/\./g,'').replace(',','.'));
-        else val = txt;
+        const val = parseExportCellValue(txt);
         expanded.push(val);
         const rowspan = parseInt(td.getAttribute('rowspan')||'1', 10);
         const colspan = parseInt(td.getAttribute('colspan')||'1', 10);
@@ -3660,33 +3668,31 @@ document.querySelectorAll('.excel-btn').forEach(btn=>{
   };
 });
 
-// A true .xlsx (via the XLSX library above) can't carry embedded images at
-// all — that's a paid-only feature of the free library this app uses, not
-// something we can build around. An HTML file saved with an .xls extension
-// is a long-standing, reliable way around that: Excel opens it natively as
-// a real spreadsheet, and because it's genuinely HTML underneath, it can
-// contain real <img> tags — including the design photo each row already
-// shows, just enlarged from its small on-screen thumbnail to roughly 2cm ×
-// 3cm (76×113px at 96dpi, set as real width/height attributes rather than
-// only CSS, since Excel's own HTML parser respects the attributes far more
-// reliably than a stylesheet rule).
-// Converts one image URL into a base64 data: URI by actually downloading
-// its bytes — cached per URL, since the same catalog photo is often reused
-// across many rows and there's no reason to fetch it more than once.
+// A true .xlsx written by the free SheetJS library above can't carry
+// embedded images at all — that's a paid-only feature of it. A prior
+// approach tried disguising an HTML file as a .xls (a long-standing trick
+// Excel does support for TEXT data), but that format was never built to
+// carry real embedded image bytes: external image links left Excel to
+// independently re-fetch every one itself when the file opened, failing
+// unpredictably depending on the network at that moment; switching those
+// links to base64 data URIs instead broke every image uniformly, since
+// Excel's own HTML-import apparently can't resolve a data: URI as an image
+// source at all. ExcelJS (loaded above, alongside SheetJS) writes a real,
+// true binary .xlsx with images genuinely embedded in it — nothing left to
+// fetch or resolve once the file is saved, so it works the same regardless
+// of anyone's connection at open time.
 const excelImageCache = new Map();
-async function urlToDataUri(url){
+async function urlToImageBuffer(url){
   if(excelImageCache.has(url)) return excelImageCache.get(url);
   const promise = (async ()=>{
     try{
       const res = await fetch(url);
       if(!res.ok) throw new Error('fetch failed');
       const blob = await res.blob();
-      return await new Promise((resolve, reject)=>{
-        const reader = new FileReader();
-        reader.onload = ()=>resolve(reader.result);
-        reader.onerror = reject;
-        reader.readAsDataURL(blob);
-      });
+      const buffer = await blob.arrayBuffer();
+      const mimeToExt = { 'image/png':'png', 'image/gif':'gif', 'image/jpeg':'jpeg', 'image/jpg':'jpeg' };
+      const extension = mimeToExt[blob.type] || 'jpeg';
+      return { buffer, extension };
     }catch(e){
       return null; // that one photo is skipped, rest of the export still proceeds
     }
@@ -3699,70 +3705,128 @@ async function exportQueueToExcelWithImages(btn){
   if(!table){ showMessage('Aktarılacak bir liste bulunamadı.'); return; }
   const clone = table.cloneNode(true);
   clone.querySelectorAll('button, input, select, label.upload-photo-wrap, .dropdown-menu, .upload-photo-label').forEach(n=>n.remove());
-  const thumbs = Array.from(clone.querySelectorAll('img.thumb'));
-  // A .xls with dozens of external links each needing a live fetch was the
-  // actual cause of "linked image cannot be displayed" — Excel has to
-  // independently re-fetch every one itself when the file opens, on
-  // whatever network it happens to be on, and any single failure there
-  // shows as a broken-image box. Downloading the real bytes here instead
-  // and baking them in as base64 means the file is fully self-contained —
-  // nothing left to fetch, nothing left to fail, once this step is done.
+
+  const theadTr = clone.querySelector('thead tr');
+  // Skip CSS-hidden header cells — Baskı öncesi shows either Telefon/Adres OR
+  // Halı Sayısı depending on the channel, toggling the unused one to
+  // display:none rather than removing it from the DOM. The empty checkbox
+  // header (cancel-select mode) is display:none outside cancel mode, which
+  // is always the case during a normal export, so it's naturally skipped
+  // here too without needing a separate check.
+  const headerCells = Array.from(theadTr.children).filter(th=>th.style.display!=='none');
+  const headerTexts = headerCells.map(th=>(th.textContent||'').replace(/\s+/g,' ').trim());
+  const gorselColIdx = headerTexts.indexOf('Görsel'); // 0-indexed among VISIBLE columns
+
   const originalLabel = btn ? btn.textContent : '';
-  if(btn){ btn.textContent = `Görseller indiriliyor (0/${thumbs.length})...`; btn.disabled = true; }
-  let done = 0, failed = 0;
-  await Promise.all(thumbs.map(async img=>{
-    const url = img.getAttribute('data-src') || img.getAttribute('src');
-    const dataUri = await urlToDataUri(url);
-    done++;
-    if(btn) btn.textContent = `Görseller indiriliyor (${done}/${thumbs.length})...`;
-    if(dataUri){
-      img.setAttribute('src', dataUri);
-    } else {
-      failed++;
-      img.remove(); // a broken link box is worse than an empty cell
-    }
-  }));
-  if(btn){ btn.textContent = originalLabel; btn.disabled = false; }
-  clone.querySelectorAll('img.thumb').forEach(img=>{
-    img.setAttribute('width', '76');
-    img.setAttribute('height', '113');
-    img.removeAttribute('class');
-    img.removeAttribute('loading');
-    img.style.cssText = 'width:76px;height:113px;object-fit:cover;';
-    // Sizing the <img> tag alone doesn't grow Excel's own row/column to
-    // match — a 3cm-tall image inside a normal text-height row just
-    // overflows downward across whatever rows happen to sit underneath it.
-    // mso-height-source:userset is what makes Excel's own HTML parser
-    // actually honor an explicit row height (a plain height style alone is
-    // often ignored). Kept close to the literal 2×3cm ask (56.7pt/85pt)
-    // with only a couple of points of margin, not generously padded.
-    const td = img.closest('td');
-    if(td){ td.style.cssText = (td.style.cssText||'') + ';width:59pt;vertical-align:middle;'; }
-    const tr = img.closest('tr');
-    if(tr){ tr.style.cssText = (tr.style.cssText||'') + ';height:87pt;mso-height-source:userset;'; }
-  });
-  // A row with no photo at all (blank cell after stripping the upload
-  // button) is left empty rather than showing a broken-image icon.
+  if(btn){ btn.textContent = 'Hazırlanıyor...'; btn.disabled = true; }
+
+  const modeLabel = { ig:'Instagram', trendyol:'Trendyol', hepsiburada:'Hepsiburada', sicaksatis:'Sıcak Satış' }[currentEntryMode] || '';
   const dateRangeText = (()=>{
     const from = document.getElementById('queueTsFrom') ? document.getElementById('queueTsFrom').value : '';
     const to = document.getElementById('queueTsTo') ? document.getElementById('queueTsTo').value : '';
     return (!from && !to) ? '' : `Tarih aralığı: ${from||'—'} – ${to||'—'}`;
   })();
-  const modeLabel = { ig:'Instagram', trendyol:'Trendyol', hepsiburada:'Hepsiburada', sicaksatis:'Sıcak Satış' }[currentEntryMode] || '';
-  const html = `<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40">
-    <head><meta charset="utf-8"><!--[if gte mso 9]><xml><x:ExcelWorkbook><x:ExcelWorksheets><x:ExcelWorksheet>
-    <x:Name>Baskı Öncesi</x:Name><x:WorksheetOptions><x:DisplayGridlines/></x:WorksheetOptions>
-    </x:ExcelWorksheet></x:ExcelWorksheets></x:ExcelWorkbook></xml><![endif]--></head>
-    <body>
-      <p style="font-weight:bold;font-size:14pt;">Baskı Öncesi — Kod Sırası${modeLabel?' — '+modeLabel:''}</p>
-      ${dateRangeText ? `<p>${dateRangeText}</p>` : ''}
-      ${clone.outerHTML}
-    </body></html>`;
-  const blob = new Blob([html], { type: 'application/vnd.ms-excel' });
+
+  const workbook = new ExcelJS.Workbook();
+  const sheet = workbook.addWorksheet('Baskı Öncesi');
+  const colCount = headerTexts.length;
+
+  let rowCursor = 1;
+  sheet.mergeCells(rowCursor,1,rowCursor,colCount);
+  sheet.getCell(rowCursor,1).value = `Baskı Öncesi — Kod Sırası${modeLabel?' — '+modeLabel:''}`;
+  sheet.getCell(rowCursor,1).font = { bold:true, size:14 };
+  rowCursor++;
+  if(dateRangeText){
+    sheet.mergeCells(rowCursor,1,rowCursor,colCount);
+    sheet.getCell(rowCursor,1).value = dateRangeText;
+    rowCursor++;
+  }
+  rowCursor++; // blank spacer row
+
+  headerTexts.forEach((txt,i)=>{
+    const c = sheet.getCell(rowCursor,i+1);
+    c.value = txt;
+    c.font = { bold:true };
+  });
+  rowCursor++;
+
+  // Same rowspan-tracking walk exportSectionToExcel uses (a continuation
+  // row — fewer actual <td> cells, relying on an earlier row's rowspan for
+  // the rest — would otherwise have its real cells written starting at
+  // column 1, landing them under the wrong header). Redirected into real
+  // ExcelJS cells and merges instead of a flat array, and the Görsel column
+  // is queued for image embedding instead of getting a text value.
+  const rowspanCarry = [];
+  const pendingImages = []; // {url, row, col} — embedded after all text is written
+  const bodyRows = Array.from(clone.querySelectorAll('tbody tr'));
+  bodyRows.forEach(tr=>{
+    const tds = Array.from(tr.children).filter(td=>td.style.display!=='none');
+    let col = 0, cellIdx = 0;
+    const rowNum = rowCursor;
+    while(cellIdx < tds.length || (rowspanCarry[col]||0) > 0){
+      if((rowspanCarry[col]||0) > 0){
+        rowspanCarry[col]--;
+        col++;
+        continue;
+      }
+      const td = tds[cellIdx];
+      const rowspan = parseInt(td.getAttribute('rowspan')||'1', 10);
+      const colspan = parseInt(td.getAttribute('colspan')||'1', 10);
+      if(col === gorselColIdx){
+        const img = td.querySelector('img.thumb');
+        if(img){
+          const url = img.getAttribute('data-src') || img.getAttribute('src');
+          pendingImages.push({ url, row: rowNum, col });
+        }
+      } else {
+        const txt = (td.textContent||'').replace(/\s+/g,' ').trim();
+        sheet.getCell(rowNum, col+1).value = parseExportCellValue(txt);
+      }
+      if(rowspan>1 || colspan>1){
+        sheet.mergeCells(rowNum, col+1, rowNum+rowspan-1, col+colspan);
+      }
+      for(let k=0;k<colspan;k++){
+        if(rowspan>1) rowspanCarry[col+k] = rowspan-1;
+      }
+      col += colspan;
+      cellIdx++;
+    }
+    rowCursor++;
+  });
+
+  // Column width is in "characters" (Excel's own native unit, roughly
+  // pixels ≈ characters×7 + 5) — sized for the 2cm-wide photo.
+  if(gorselColIdx>=0) sheet.getColumn(gorselColIdx+1).width = 11;
+
+  let done = 0, failed = 0;
+  await Promise.all(pendingImages.map(async ({url,row,col})=>{
+    const img = await urlToImageBuffer(url);
+    done++;
+    if(btn) btn.textContent = `Görseller indiriliyor (${done}/${pendingImages.length})...`;
+    if(img){
+      const imageId = workbook.addImage({ buffer: img.buffer, extension: img.extension });
+      // tl (top-left anchor) is 0-indexed, unlike cell references elsewhere
+      // in ExcelJS which are 1-indexed — row/col here are converted down by
+      // one accordingly. ext is a literal pixel size, anchored at that
+      // corner rather than stretched to fill the cell.
+      sheet.addImage(imageId, { tl: { col, row: row-1 }, ext: { width:76, height:113 } });
+      // Row height is in points, Excel's own native row-height unit — no
+      // CSS/mso workaround needed here, unlike the earlier HTML-based
+      // attempt; ExcelJS writes it directly into the real file format.
+      sheet.getRow(row).height = 87;
+    } else {
+      failed++;
+    }
+  }));
+
+  if(btn){ btn.textContent = originalLabel; btn.disabled = false; }
+
+  const buffer = await workbook.xlsx.writeBuffer();
+  const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
   const a = document.createElement('a');
   const stamp = toDateInputValue(new Date());
   a.href = URL.createObjectURL(blob);
-  a.download = `Baskı Öncesi${modeLabel?' - '+modeLabel:''} ${stamp}.xls`;
+  a.download = `Baskı Öncesi${modeLabel?' - '+modeLabel:''} ${stamp}.xlsx`;
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);
