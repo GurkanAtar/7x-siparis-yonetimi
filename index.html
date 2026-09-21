@@ -3683,6 +3683,17 @@ function exportQueueToExcelWithImages(){
     img.removeAttribute('class');
     img.removeAttribute('loading');
     img.style.cssText = 'width:76px;height:113px;object-fit:cover;';
+    // Sizing the <img> tag alone doesn't grow Excel's own row/column to
+    // match — a 3cm-tall image inside a normal text-height row just
+    // overflows downward across whatever rows happen to sit underneath it,
+    // which is exactly what showed up. mso-height-source:userset is what
+    // makes Excel's own HTML parser actually honor an explicit row height
+    // (a plain height style alone is often ignored); 92pt/62pt give the
+    // 113px/76px image a few points of breathing room on each side.
+    const td = img.closest('td');
+    if(td){ td.style.cssText = (td.style.cssText||'') + ';width:62pt;vertical-align:middle;'; }
+    const tr = img.closest('tr');
+    if(tr){ tr.style.cssText = (tr.style.cssText||'') + ';height:92pt;mso-height-source:userset;'; }
   });
   // A row with no photo at all (blank cell after stripping the upload
   // button) is left empty rather than showing a broken-image icon.
