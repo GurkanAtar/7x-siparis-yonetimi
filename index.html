@@ -1888,7 +1888,7 @@ function renderOperatorBar(){
         </select>
       </label>
       <button class="ghost small" id="logoutBtn">Çıkış yap</button>
-      <span class="muted" style="font-size:10px;margin-left:auto;" title="Bu sürümün ne zaman oluşturulduğu — canlı sitenin en güncel dosyayı çalıştırıp çalıştırmadığını doğrulamak için.">Sürüm: 2026-09-28 17:07 UTC</span>
+      <span class="muted" style="font-size:10px;margin-left:auto;" title="Bu sürümün ne zaman oluşturulduğu — canlı sitenin en güncel dosyayı çalıştırıp çalıştırmadığını doğrulamak için.">Sürüm: 2026-09-28 17:12 UTC</span>
     </div>`;
   document.getElementById('themeSelect').onchange = (e)=>{
     VALID_THEMES.forEach(t=>document.body.classList.remove(t));
@@ -9092,25 +9092,10 @@ function renderPaymentTracking(){
 // stage yet has no code and doesn't contribute; nothing else in the app
 // tracks a design identity finer-grained than taban (material type), so
 // this is the closest thing to a per-design ranking the data supports.
-function renderBestSellers(){
-  const resultsEl = document.getElementById('bestsellersResults');
-  if(!resultsEl) return;
-  const fromVal = document.getElementById('bsFrom').value;
-  const toVal = document.getElementById('bsTo').value;
-  const from = fromVal ? (()=>{ const [y,m,d]=fromVal.split('-').map(Number); return new Date(y,m-1,d); })() : null;
-  const to = toVal ? (()=>{ const [y,m,d]=toVal.split('-').map(Number); return new Date(y,m-1,d,23,59,59,999); })() : null;
-
-  const orders = state.orders.filter(o=>{
-    if(o.saleType==='Kayıp Kargo') return false;
-    if(channelCategoryForNumbering(o.channel) !== currentEntryMode) return false;
-    if(!from && !to) return true;
-    const d = parseDMY(o.date);
-    if(!d) return false;
-    if(from && d < from) return false;
-    if(to && d > to) return false;
-    return true;
-  });
-
+// Shared by both the current-kanal grid and the all-channels-combined grid
+// below it — same layout (2 rows × 5, 3cm × 5cm images), just a different
+// order pool feeding it.
+function bestSellersTop10Html(orders){
   const byCode = {};
   orders.forEach(o=>{
     o.items.forEach(item=>{
@@ -9130,13 +9115,10 @@ function renderBestSellers(){
     });
   });
   const bestSellerCodes = Object.entries(byCode).sort((a,b)=>b[1].qty-a[1].qty);
-  if(!bestSellerCodes.length){
-    resultsEl.innerHTML = '<div class="empty">Bu döneme uyan kodlanmış kalem yok.</div>';
-    return;
-  }
+  if(!bestSellerCodes.length) return '<div class="empty">Bu döneme uyan kodlanmış kalem yok.</div>';
   const top10 = bestSellerCodes.slice(0,10);
-  const top10Html = `
-    <div style="display:grid;grid-template-columns:repeat(5, 3cm);gap:14px;margin-bottom:20px;">
+  return `
+    <div style="display:grid;grid-template-columns:repeat(5, 3cm);gap:14px;">
       ${top10.map(([code,s],i)=>`
         <div style="text-align:center;">
           <div style="width:3cm;height:5cm;border:1px solid var(--line);border-radius:6px;overflow:hidden;background:var(--paper);display:flex;align-items:center;justify-content:center;position:relative;">
@@ -9150,15 +9132,41 @@ function renderBestSellers(){
         </div>
       `).join('')}
     </div>`;
-  const chartData = bestSellerCodes.slice(0,15).map(([code,s])=>({label:code, value:s.qty}));
-  const rowsHtml = bestSellerCodes.map(([code,s])=>
-    `<tr><td>${code}</td><td>${s.qty}</td><td>${s.m2.toFixed(2)}</td></tr>`
-  ).join('');
+}
+function renderBestSellers(){
+  const resultsEl = document.getElementById('bestsellersResults');
+  if(!resultsEl) return;
+  const fromVal = document.getElementById('bsFrom').value;
+  const toVal = document.getElementById('bsTo').value;
+  const from = fromVal ? (()=>{ const [y,m,d]=fromVal.split('-').map(Number); return new Date(y,m-1,d); })() : null;
+  const to = toVal ? (()=>{ const [y,m,d]=toVal.split('-').map(Number); return new Date(y,m-1,d,23,59,59,999); })() : null;
+  const inRange = d=>{
+    if(!d) return false;
+    if(!from && !to) return true;
+    if(from && d < from) return false;
+    if(to && d > to) return false;
+    return true;
+  };
+
+  const channelOrders = state.orders.filter(o=>{
+    if(o.saleType==='Kayıp Kargo') return false;
+    if(channelCategoryForNumbering(o.channel) !== currentEntryMode) return false;
+    if(!from && !to) return true;
+    return inRange(parseDMY(o.date));
+  });
+  const allChannelOrders = state.orders.filter(o=>{
+    if(o.saleType==='Kayıp Kargo') return false;
+    if(!from && !to) return true;
+    return inRange(parseDMY(o.date));
+  });
+
+  const FAMILY_LABELS = {ig:'Instagram', trendyol:'Trendyol', hepsiburada:'Hepsiburada', sicaksatis:'Sıcak Satış', ihracat:'İhracat'};
   resultsEl.innerHTML = `
-    <h3 style="font-family:'Fraunces',serif;font-size:15px;margin:0 0 10px;">En çok satan 10 tasarım</h3>
-    ${top10Html}
-    ${svgHBarChartHtml(chartData, {color:'var(--indigo)', fmt:n=>n+' adet'})}
-    <table style="margin-top:12px"><thead><tr><th>Kod</th><th>Adet</th><th>m²</th></tr></thead><tbody>${rowsHtml}</tbody></table>
+    <h3 style="font-family:'Fraunces',serif;font-size:15px;margin:0 0 10px;">En çok satan 10 tasarım — ${FAMILY_LABELS[currentEntryMode]||currentEntryMode}</h3>
+    ${bestSellersTop10Html(channelOrders)}
+
+    <h3 style="font-family:'Fraunces',serif;font-size:15px;margin:24px 0 10px;">En çok satan 10 tasarım — Tüm Kanallar (Birleşik)</h3>
+    ${bestSellersTop10Html(allChannelOrders)}
   `;
 }
 (function initBestSellersDefaults(){
