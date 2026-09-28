@@ -1692,7 +1692,7 @@ function renderOperatorBar(){
         </select>
       </label>
       <button class="ghost small" id="logoutBtn">Çıkış yap</button>
-      <span class="muted" style="font-size:10px;margin-left:auto;" title="Bu sürümün ne zaman oluşturulduğu — canlı sitenin en güncel dosyayı çalıştırıp çalıştırmadığını doğrulamak için.">Sürüm: 2026-09-28 11:28 UTC</span>
+      <span class="muted" style="font-size:10px;margin-left:auto;" title="Bu sürümün ne zaman oluşturulduğu — canlı sitenin en güncel dosyayı çalıştırıp çalıştırmadığını doğrulamak için.">Sürüm: 2026-09-28 11:43 UTC</span>
     </div>`;
   document.getElementById('themeSelect').onchange = (e)=>{
     VALID_THEMES.forEach(t=>document.body.classList.remove(t));
@@ -7402,20 +7402,34 @@ function renderSort(){
         // multi-piece set), so this stays consistent everywhere it's used.
         const stickerCount = bundleStickerCount(bundle);
         const copyCount = stickerCount > 1 ? stickerCount : 1;
-        const isPrinted = bundle[0].status === 'sorted';
-        for(let copyIdx=1; copyIdx<=copyCount; copyIdx++){
-          const tag = document.createElement('span');
-          tag.className = 'tag';
-          const thisPos = numberWithPosition(num, order, bundle[0], copyIdx);
-          const pos = carried ? `<span style="color:var(--rust);font-weight:600" title="Önceki günden devretmiş">${thisPos}</span>` : thisPos;
-          const actionHtml = isPrinted
-            ? `<span style="color:var(--forest);font-weight:600">✓ Etiket basıldı</span>
-               <button class="ghost small reprint-sticker" data-oid="${order.id}" data-ids="${ids}" data-copy-idx="${copyIdx}">Tekrar etiket bastır</button>`
-            : `<button class="ghost small mark-sorted" data-oid="${order.id}" data-ids="${ids}" data-copy-idx="${copyIdx}" data-copy-total="${copyCount}">Etiket bastır</button>`;
-          tag.innerHTML = `${thumb} <span class="ts">${pos}</span> ${bundle[0].code} — ${order.customerName} — ${sizes}${setNote}${extraNote} ${ageBadge(order, bundle[0])}
-            ${actionHtml}`;
-          g.appendChild(tag);
-        }
+        // Each independent physical unit (bundleUnitGroups — one piece of a
+        // multi-piece set on its own, or the whole bundle at once for a
+        // collapsible pair) gets its own row here, with its OWN status/action
+        // and its own data-ids referring to just that unit — never the whole
+        // set — so marking or reprinting one piece never touches its
+        // set-mates. globalCopyIdx keeps the position numbering (701-1/6,
+        // 701-2/6, ...) running continuously across the whole set exactly as
+        // before; localCopyIdx (reset per unit) is what the click handlers
+        // use to index into that unit's own expandBundleForStickers() slice.
+        let globalCopyIdx = 0;
+        bundleUnitGroups(bundle).forEach(({items, qty})=>{
+          const unitIds = items.map(i=>i.id).join(',');
+          const isPrinted = items[0].status === 'sorted';
+          for(let localCopyIdx=1; localCopyIdx<=qty; localCopyIdx++){
+            globalCopyIdx++;
+            const tag = document.createElement('span');
+            tag.className = 'tag';
+            const thisPos = numberWithPosition(num, order, bundle[0], globalCopyIdx);
+            const pos = carried ? `<span style="color:var(--rust);font-weight:600" title="Önceki günden devretmiş">${thisPos}</span>` : thisPos;
+            const actionHtml = isPrinted
+              ? `<span style="color:var(--forest);font-weight:600">✓ Etiket basıldı</span>
+                 <button class="ghost small reprint-sticker" data-oid="${order.id}" data-ids="${unitIds}" data-copy-idx="${localCopyIdx}">Tekrar etiket bastır</button>`
+              : `<button class="ghost small mark-sorted" data-oid="${order.id}" data-ids="${unitIds}" data-copy-idx="${localCopyIdx}" data-copy-total="${qty}">Etiket bastır</button>`;
+            tag.innerHTML = `${thumb} <span class="ts">${pos}</span> ${bundle[0].code} — ${order.customerName} — ${sizes}${setNote}${extraNote} ${ageBadge(order, bundle[0])}
+              ${actionHtml}`;
+            g.appendChild(tag);
+          }
+        });
     });
     wrap.appendChild(g);
   });
@@ -7472,29 +7486,36 @@ function renderSort(){
     b.onclick = (e)=>{
       e.stopPropagation();
       const taban = b.dataset.taban;
-      // Bulk-print only covers copies still awaiting their first sticker —
-      // an already-printed copy sitting in this same taban group is left
-      // alone, since reprinting it wasn't asked for and shouldn't happen as
-      // a side effect of printing the rest of the group.
-      const toPrint = (groups[taban]||[]).filter(({bundle})=>bundle[0].status==='coded');
+      // Bulk-print only covers pieces still awaiting their first sticker —
+      // an already-printed piece is left alone, even one sitting right next
+      // to a still-unprinted sibling in the same set: each PIECE's own
+      // status decides now, never the group as a whole (bundleUnitGroups —
+      // a collapsible pair still moves as one unit, everything else piece
+      // by piece).
+      const toPrintUnits = [];
+      (groups[taban]||[]).forEach(({order,bundle})=>{
+        bundleUnitGroups(bundle).forEach(({items,qty})=>{
+          if(items[0].status!=='coded') return;
+          toPrintUnits.push({order, items, qty});
+        });
+      });
       const pairs = [];
-      toPrint.forEach(({order,bundle})=>{
-        pairs.push(...expandBundleForStickers(order, bundle));
+      toPrintUnits.forEach(({order,items})=>{
+        pairs.push(...expandBundleForStickers(order, items));
       });
       if(!pairs.length){ showMessage('Bu grupta henüz basılmamış etiket yok.'); return; }
       printStickers(pairs, itemNumbers);
-      // Printing here is a bulk action covering every still-unprinted item in
-      // this taban group at once — each one gets peeled off via
-      // splitOffOneCopy exactly like the per-row button does, so a bundle
+      // Printing here is a bulk action covering every still-unprinted piece
+      // in this taban group at once — each one gets peeled off via
+      // splitOffOneCopy exactly like the per-row button does, so a piece
       // with several physical copies correctly ends up with each copy
-      // individually marked rather than the whole bundle collapsing to
-      // "printed" in one step. Calling splitOffOneCopy repeatedly on the SAME
-      // bundle reference is safe and correct — it mutates those same item
+      // individually marked rather than collapsing to "printed" in one
+      // step. Calling splitOffOneCopy repeatedly on the SAME items
+      // reference is safe and correct — it mutates those same item
       // objects' qty in place each time, naturally peeling off one copy per
       // call until the last one just flips status directly.
-      toPrint.forEach(({order,bundle})=>{
-        const copies = bundleStickerCount(bundle);
-        for(let i=0;i<copies;i++) splitOffOneCopy(order, bundle, 'sorted', 'sortedAt');
+      toPrintUnits.forEach(({order,items,qty})=>{
+        for(let i=0;i<qty;i++) splitOffOneCopy(order, items, 'sorted', 'sortedAt');
       });
       logActivity(`"${taban}" grubu için basılmamış etiketler basıldı olarak işaretlendi.`);
       saveState(); render();
@@ -7505,16 +7526,17 @@ function renderSort(){
     const toPrintAll = [];
     Object.values(groups).forEach(list=>{
       list.forEach(({order,bundle})=>{
-        if(bundle[0].status!=='coded') return;
-        toPrintAll.push({order,bundle});
-        pairs.push(...expandBundleForStickers(order, bundle));
+        bundleUnitGroups(bundle).forEach(({items,qty})=>{
+          if(items[0].status!=='coded') return;
+          toPrintAll.push({order, items, qty});
+          pairs.push(...expandBundleForStickers(order, items));
+        });
       });
     });
     if(!pairs.length){ showMessage('Basılmamış etiket yok.'); return; }
     printStickers(pairs, itemNumbers);
-    toPrintAll.forEach(({order,bundle})=>{
-      const copies = bundleStickerCount(bundle);
-      for(let i=0;i<copies;i++) splitOffOneCopy(order, bundle, 'sorted', 'sortedAt');
+    toPrintAll.forEach(({order,items,qty})=>{
+      for(let i=0;i<qty;i++) splitOffOneCopy(order, items, 'sorted', 'sortedAt');
     });
     logActivity(`Basılmamış tüm etiketler basıldı olarak işaretlendi.`);
     saveState(); render();
@@ -7558,6 +7580,22 @@ function isCollapsiblePair(bundle){
 // agree with each other.
 function bundleStickerCount(bundle){
   return isCollapsiblePair(bundle) ? (bundle[0].qty || 1) : bundle.reduce((s,i)=>s+(i.qty||1), 0);
+}
+// Breaks a bundle into the independent physical units that actually move
+// through Ayırma & etiketler / Üretim on their own. A collapsible pair (the
+// two specific bathroom-mat presets) moves as the whole bundle, once per
+// copy ordered — it's sold and labeled as one product. Every other
+// multi-piece set (3-piece, 5-piece, whatever) moves piece by piece: each
+// physical unit of each distinct item is fully independent of its
+// set-mates, so one piece can be marked sorted/produced while another one
+// in the very same set isn't, and either can be flipped back on its own.
+// Returns [{items, qty}] — `items` is what to pass to splitOffOneCopy /
+// expandBundleForStickers for that one piece, `qty` how many independent
+// physical units it represents.
+function bundleUnitGroups(bundle){
+  return isCollapsiblePair(bundle)
+    ? [{ items: bundle, qty: bundle[0].qty || 1 }]
+    : bundle.map(item => ({ items: [item], qty: item.qty || 1 }));
 }
 function expandBundleForStickers(order, bundle){
   // copyIndex/copyTotal let each physical copy get its own distinct sticker
@@ -7757,41 +7795,45 @@ function renderProduction(){
         const sizes = bundle.map(i=>i.size).join(', ');
         const withImg = bundle.find(i=>i.images && i.images.length);
         const thumb = withImg ? `<img src="${withImg.images[0]}" class="thumb" style="width:24px;height:24px">` : '';
-        const ids = bundle.map(i=>i.id).join(',');
-        const rowKey = order.id + '::' + ids;
         const num = itemNumbers[order.id+'::'+(bundle[0].setLabel||bundle[0].id)] || '—';
         const carried = isGroupCarriedOver(bundle);
         const hours = hoursWaiting(bundle[0].sortedAt);
         const waitNote = hours<=0 ? '' : hours===1
           ? ` <span class="pill pill-pending" style="margin-left:4px">1 saattir üretimde</span>`
           : ` <span class="pill pill-pending" style="margin-left:4px">${hours} saattir üretimde</span>`;
-        // Same copy-expansion as Ayırma & etiketler — a bundle representing
-        // more than one physical piece (a 2-piece pair at qty > 1, or any other
-        // multi-piece qty) gets its own row per copy here too, each with its
-        // own distinct number, instead of one row silently covering several
-        // physical carpets at once (which is exactly what made "3 kalem" show
-        // only 2 rows here before this fix).
-        const stickerCount = bundleStickerCount(bundle);
-        const copyCount = stickerCount > 1 ? stickerCount : 1;
-        const isProduced = bundle[0].status === 'produced';
-        const isBeingEdited = productionEditingKeys.has(rowKey);
-        for(let copyIdx=1; copyIdx<=copyCount; copyIdx++){
-          const tag = document.createElement('span');
-          tag.className = 'tag';
-          const thisPos = numberWithPosition(num, order, bundle[0], copyIdx);
-          const pos = carried ? `<span style="color:var(--rust);font-weight:600" title="Önceki günden devretmiş">${thisPos}</span>` : thisPos;
-          let actionHtml;
-          if(!isProduced){
-            actionHtml = `<button class="ghost small mark-produced" data-oid="${order.id}" data-ids="${ids}">Üretildi olarak işaretle</button>`;
-          } else if(isBeingEdited){
-            actionHtml = `<button class="ghost small remark-produced" data-oid="${order.id}" data-ids="${ids}">Üretildi olarak işaretle</button>`;
-          } else {
-            actionHtml = `<span style="color:var(--forest);font-weight:600">✓ Üretildi</span> <button class="ghost small edit-produced" data-oid="${order.id}" data-ids="${ids}">Düzenle</button>`;
+        // Each independent physical unit (bundleUnitGroups — one piece of a
+        // multi-piece set on its own, or the whole bundle at once for a
+        // collapsible pair) gets its own row, its own produced/not-produced
+        // status and its own data-ids referring to just that unit — never
+        // the whole set — so marking, editing or re-confirming one piece
+        // never touches its set-mates. globalCopyIdx keeps the position
+        // numbering (701-1/6, 701-2/6, ...) running continuously across the
+        // whole set exactly as before.
+        let globalCopyIdx = 0;
+        bundleUnitGroups(bundle).forEach(({items, qty})=>{
+          const unitIds = items.map(i=>i.id).join(',');
+          const rowKey = order.id + '::' + unitIds;
+          const isProduced = items[0].status === 'produced';
+          const isBeingEdited = productionEditingKeys.has(rowKey);
+          for(let localCopyIdx=1; localCopyIdx<=qty; localCopyIdx++){
+            globalCopyIdx++;
+            const tag = document.createElement('span');
+            tag.className = 'tag';
+            const thisPos = numberWithPosition(num, order, bundle[0], globalCopyIdx);
+            const pos = carried ? `<span style="color:var(--rust);font-weight:600" title="Önceki günden devretmiş">${thisPos}</span>` : thisPos;
+            let actionHtml;
+            if(!isProduced){
+              actionHtml = `<button class="ghost small mark-produced" data-oid="${order.id}" data-ids="${unitIds}">Üretildi olarak işaretle</button>`;
+            } else if(isBeingEdited){
+              actionHtml = `<button class="ghost small remark-produced" data-oid="${order.id}" data-ids="${unitIds}">Üretildi olarak işaretle</button>`;
+            } else {
+              actionHtml = `<span style="color:var(--forest);font-weight:600">✓ Üretildi</span> <button class="ghost small edit-produced" data-oid="${order.id}" data-ids="${unitIds}">Düzenle</button>`;
+            }
+            tag.innerHTML = `${thumb} <span class="ts">${pos}</span> ${bundle[0].code} — ${order.customerName} — ${sizes}${setNote}${waitNote} ${ageBadge(order, bundle[0])}
+              ${actionHtml}`;
+            g.appendChild(tag);
           }
-          tag.innerHTML = `${thumb} <span class="ts">${pos}</span> ${bundle[0].code} — ${order.customerName} — ${sizes}${setNote}${waitNote} ${ageBadge(order, bundle[0])}
-            ${actionHtml}`;
-          g.appendChild(tag);
-        }
+        });
       });
     wrap.appendChild(g);
   });
@@ -7853,25 +7895,30 @@ function renderProduction(){
   // at a time through the existing Düzenle → Tekrar üretildi olarak
   // işaretle flow, untouched by this.
   document.getElementById('markAllProducedBtn').onclick = ()=>{
+    // Per PIECE, not per whole set (bundleUnitGroups — a collapsible pair
+    // still moves as one unit, everything else piece by piece) — a set
+    // where one piece is already produced and another isn't must only pick
+    // up the still-unproduced piece here, never re-touch the one that's
+    // already done.
     const toMark = [];
     Object.values(groups).forEach(list=>{
       list.forEach(({order,bundle})=>{
-        if(bundle[0].status!=='sorted') return; // already produced, or not ready yet
-        toMark.push({order,bundle});
+        bundleUnitGroups(bundle).forEach(({items,qty})=>{
+          if(items[0].status!=='sorted') return; // already produced, or not ready yet
+          toMark.push({order, items, qty, label: bundle.length>1 ? `${displaySetLabel(bundle[0].setLabel)} (${bundle.length} parça)` : bundle[0].size, code: bundle[0].code});
+        });
       });
     });
     if(!toMark.length){ showMessage('Üretildi olarak işaretlenecek sipariş yok.'); return; }
-    const totalPieces = toMark.reduce((s,{bundle})=>s+bundleStickerCount(bundle), 0);
+    const totalPieces = toMark.reduce((s,{qty})=>s+qty, 0);
     if(!confirm(`${totalPieces} ürün üretildi olarak işaretlenecek. Emin misiniz?`)) return;
     const now = new Date();
     const placedAtMs = o=>{ const d = orderPlacedAt(o); return d ? d.getTime() : null; };
-    toMark.forEach(({order,bundle})=>{
+    toMark.forEach(({order,items,qty,label,code})=>{
       const placed = placedAtMs(order);
       const lag = placed ? Math.floor((now.getTime() - placed) / (60*60*1000)) : null;
-      const label = bundle.length>1 ? `${displaySetLabel(bundle[0].setLabel)} (${bundle.length} parça)` : bundle[0].size;
-      const copies = bundleStickerCount(bundle);
-      for(let i=0;i<copies;i++) splitOffOneCopy(order, bundle, 'produced', 'producedAt');
-      logActivity(`Üretildi olarak işaretlendi: ${bundle[0].code} — ${order.customerName} (${label})${lag>0?` — sipariş tarihinden ${lag} saat sonra`:''}`);
+      for(let i=0;i<qty;i++) splitOffOneCopy(order, items, 'produced', 'producedAt');
+      logActivity(`Üretildi olarak işaretlendi: ${code} — ${order.customerName} (${label})${lag>0?` — sipariş tarihinden ${lag} saat sonra`:''}`);
     });
     productionEditRevealed = true;
     saveState(); render();
