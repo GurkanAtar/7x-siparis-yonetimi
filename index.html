@@ -242,6 +242,7 @@
     <div class="tab" data-tab="setrecord">Halı Set ve Ölçü Kayıt</div>
     <div class="tab" data-tab="log">İşlem kayıtları</div>
     <div class="tab" data-tab="reports">Raporlar</div>
+    <div class="tab" data-tab="uretimtoplam">Toplam Üretim</div>
     <div class="tab" data-tab="auth">Hesabım &amp; Yetkiler</div>
   </div>
 
@@ -723,6 +724,11 @@
       <div id="markaRegistryList"></div>
     </div>
     <div class="card">
+      <h2>Bayi Finans Ayarları</h2>
+      <p class="muted" style="margin-top:-6px">Her bayi için işe başlamadan önce tek bir finans modeli seçilir — ikisi birlikte çalışamaz. <b>Depozito/Bakiye</b>: bayiden alınan depozito burada bakiye olarak tutulur, her üretilen ürün m² × fiyat/m² kadar otomatik düşer. <b>Komisyonlu (kargo bizde)</b>: üretim ve kargo maliyeti bizden karşılanır, bayiye dönemsel olarak komisyon ödenir — sadece Instagram bayilerinde seçilebilir; Trendyol ve Hepsiburada bayileri her zaman Depozito/Bakiye kullanır.</p>
+      <div id="dealerFinanceList"></div>
+    </div>
+    <div class="card">
       <h2>Kanalları birleştir</h2>
       <p class="muted" style="margin-top:-6px">Yanlışlıkla iki ayrı kanal olarak kaydedilmiş aynı bayiyi tek kanal altında birleştirir — birleştirilen kanala ait tüm geçmiş siparişler otomatik olarak seçilen kanala taşınır, birleştirilen kanal kaldırılır. "Tür" filtresinde seçili olan ailedeki (örn. Instagram kurumsal + Instagram bayi birlikte) tüm kanallar arasında birleştirme yapılabilir — böylece yanlış türde kaydedilmiş bir kanal da düzeltilebilir.</p>
       <p class="muted" style="margin-top:-4px;font-size:12px;">Dropdown'da her kanalın türü de gösterilir (örn. "Instagram kurumsal") — birleştirmeden önce doğru iki kanalı seçtiğinizden emin olun.</p>
@@ -779,6 +785,21 @@
       <button id="runReport">Raporu çalıştır</button>
       <p class="muted" style="margin-top:8px">m², ölçü metninden genişlik × uzunluk olarak hesaplanır (örn. 200x300 → 6 m²) — bu dikdörtgen bir parça varsayar, bu yüzden Oval/Yuvarlak ürünler yaklaşık değerdir. Satışlar sipariş başına bir kez toplanır (kalem başına değil, çünkü fiyat sipariş bazında kaydedilir), bu yüzden bugüne kadar her şeyi dahil etmek için "Bitiş" alanını boş bırakın.</p>
       <div id="reportResults" style="margin-top:14px"></div>
+    </div>
+  </div>
+
+  <div id="uretimtoplam" class="panel">
+    <div class="card">
+      <h2>Toplam Üretim <button class="ghost small print-btn" data-print="uretimtoplam" style="margin-left:8px;font-weight:normal;font-family:'Inter',sans-serif;font-size:12px;">Listeyi yazdır</button> <button class="ghost small excel-btn" data-excel="uretimtoplam" style="font-weight:normal;font-family:'Inter',sans-serif;font-size:12px;">Excel'e aktar</button></h2>
+      <p class="muted" style="margin-top:-6px">Seçilen tarih aralığında, gün gün üretilen m² — tabana göre kırılım ve altta dönem toplamı. Varsayılan olarak bu ayın başından bugüne kadar gösterilir; tarihleri değiştirerek başka bir ay veya aralığı görebilirsiniz.</p>
+      <div class="row row3">
+        <div><label>Başlangıç</label><input type="date" id="utFrom"></div>
+        <div><label>Bitiş</label><input type="date" id="utTo"></div>
+        <div style="display:flex;align-items:flex-end;">
+          <button type="button" class="ghost small" id="utThisMonth">Bu ay</button>
+        </div>
+      </div>
+      <div id="uretimToplamWrap" style="margin-top:14px"></div>
     </div>
   </div>
 
@@ -1692,7 +1713,7 @@ function renderOperatorBar(){
         </select>
       </label>
       <button class="ghost small" id="logoutBtn">Çıkış yap</button>
-      <span class="muted" style="font-size:10px;margin-left:auto;" title="Bu sürümün ne zaman oluşturulduğu — canlı sitenin en güncel dosyayı çalıştırıp çalıştırmadığını doğrulamak için.">Sürüm: 2026-09-28 12:07 UTC</span>
+      <span class="muted" style="font-size:10px;margin-left:auto;" title="Bu sürümün ne zaman oluşturulduğu — canlı sitenin en güncel dosyayı çalıştırıp çalıştırmadığını doğrulamak için.">Sürüm: 2026-09-28 13:46 UTC</span>
     </div>`;
   document.getElementById('themeSelect').onchange = (e)=>{
     VALID_THEMES.forEach(t=>document.body.classList.remove(t));
@@ -2713,6 +2734,10 @@ function resolvePrintSource(key){
     if(from||to) parts.push(`Tarih aralığı: ${from||'—'} – ${to||'—'}`);
     if(channel) parts.push(`Kanal: ${channel}`);
     subtitle = parts.join(' · ');
+  } else if(key==='uretimtoplam'){
+    sourceEl = document.getElementById('uretimToplamTable');
+    title = 'Toplam Üretim';
+    subtitle = dateRangeText('utFrom','utTo');
   }
   return { sourceEl, title, subtitle };
 }
@@ -3802,6 +3827,106 @@ document.getElementById('runReport').onclick = renderReport;
 ['repFrom','repTo','repChannel'].forEach(id=>{
   document.getElementById(id).addEventListener('change', renderReport);
 });
+
+// Toplam Üretim — day-by-day production totals (m²) broken down by taban,
+// for whatever date range utFrom/utTo currently hold (defaulted to the
+// start of the current month through today, set once at load below). Sums
+// the real area of every PIECE actually marked Üretildi
+// (item.status==='produced'), bucketed by the Istanbul calendar day its own
+// producedAt falls on and by its own taban — never by order, since after
+// the Ayırma/Üretim independence fix a single multi-piece order can easily
+// have pieces finishing production on different days. m² is summed per
+// physical piece directly (sizeToM2 × qty, same as every other m² figure in
+// the app) — never collapsed for the bathroom-mat-pair convention, since
+// that convention is about how many PRODUCTS a pair counts as, not how much
+// carpet area it actually is.
+const URETIM_TABANLAR = ['Dot Taban', 'Dokuma', 'Deri Taban'];
+function renderUretimToplam(){
+  const fromEl = document.getElementById('utFrom');
+  const toEl = document.getElementById('utTo');
+  if(!fromEl || !toEl) return; // defensive — this panel may not be in the DOM yet during early init
+  const fromVal = fromEl.value;
+  const toVal = toEl.value;
+  const wrap = document.getElementById('uretimToplamWrap');
+  if(!fromVal || !toVal){
+    wrap.innerHTML = '<div class="empty">Lütfen başlangıç ve bitiş tarihi seçin.</div>';
+    return;
+  }
+  const from = (()=>{ const [y,m,d]=fromVal.split('-').map(Number); return new Date(y,m-1,d); })();
+  const to = (()=>{ const [y,m,d]=toVal.split('-').map(Number); return new Date(y,m-1,d,23,59,59,999); })();
+
+  // (Istanbul-calendar dayKey "DD.MM.YYYY" + taban) -> m² produced
+  const byDay = {};
+  state.orders.forEach(o=>{
+    const produced = o.items.filter(i=>i.status==='produced' && i.producedAt);
+    produced.forEach(item=>{
+      const dayKey = new Date(item.producedAt).toLocaleDateString('tr-TR', {timeZone:'Europe/Istanbul'});
+      const [dd,mm,yyyy] = dayKey.split('.').map(Number);
+      const dayDate = new Date(yyyy, mm-1, dd);
+      if(dayDate < from || dayDate > to) return;
+      const taban = item.taban || 'Diğer';
+      const m2 = sizeToM2(item.size) * (item.qty||1);
+      byDay[dayKey] = byDay[dayKey] || {};
+      byDay[dayKey][taban] = (byDay[dayKey][taban]||0) + m2;
+    });
+  });
+
+  // Every day in the range gets its own row, zero-production days included,
+  // so the table always shows the whole month's real shape rather than just
+  // the days something happened to be finished.
+  const days = [];
+  for(let d = new Date(from); d <= to; d = new Date(d.getFullYear(), d.getMonth(), d.getDate()+1)){
+    days.push(d.toLocaleDateString('tr-TR', {timeZone:'Europe/Istanbul'}));
+  }
+
+  const grand = {};
+  URETIM_TABANLAR.forEach(t=>grand[t]=0);
+  let grandOther = 0, grandTotal = 0;
+  const otherTabanlar = new Set();
+  days.forEach(dayKey=>{
+    Object.keys(byDay[dayKey]||{}).forEach(t=>{ if(!URETIM_TABANLAR.includes(t)) otherTabanlar.add(t); });
+  });
+  const extraCols = [...otherTabanlar].sort();
+
+  const fmt = n => n ? n.toFixed(2) : '';
+  const bodyRows = days.map(dayKey=>{
+    const row = byDay[dayKey] || {};
+    const knownCells = URETIM_TABANLAR.map(t=>row[t]||0);
+    const extraCells = extraCols.map(t=>row[t]||0);
+    const rowTotal = [...knownCells, ...extraCells].reduce((s,n)=>s+n, 0);
+    URETIM_TABANLAR.forEach((t,i)=>{ grand[t]+=knownCells[i]; });
+    extraCells.forEach(n=>{ grandOther += n; });
+    grandTotal += rowTotal;
+    const cells = [...knownCells, ...extraCells].map(n=>`<td>${fmt(n)}</td>`).join('');
+    return `<tr><td>${dayKey}</td>${cells}<td style="font-weight:600">${fmt(rowTotal)}</td></tr>`;
+  }).join('');
+
+  const totalCells = [...URETIM_TABANLAR.map(t=>grand[t]), ...(extraCols.length?[grandOther]:[])]
+    .map(n=>`<td>${n.toFixed(2)}</td>`).join('');
+  const footerRow = `<tr style="font-weight:700;border-top:2px solid var(--line);"><td>TOPLAM</td>${totalCells}<td>${grandTotal.toFixed(2)}</td></tr>`;
+
+  const headCols = [...URETIM_TABANLAR, ...extraCols].map(t=>`<th>${t} (m²)</th>`).join('');
+  wrap.innerHTML = `
+    <table id="uretimToplamTable">
+      <thead><tr><th>Tarih</th>${headCols}<th>Toplam (m²)</th></tr></thead>
+      <tbody>${bodyRows}${footerRow}</tbody>
+    </table>`;
+}
+document.getElementById('utFrom').addEventListener('change', renderUretimToplam);
+document.getElementById('utTo').addEventListener('change', renderUretimToplam);
+document.getElementById('utThisMonth').addEventListener('click', ()=>{
+  const now = new Date();
+  document.getElementById('utFrom').value = toDateInputValue(new Date(now.getFullYear(), now.getMonth(), 1));
+  document.getElementById('utTo').value = toDateInputValue(now);
+  renderUretimToplam();
+});
+// Defaults to the current month, 1st through today, the moment the app
+// loads — no click needed to see this month's numbers the first time.
+(function initUretimToplamDefaults(){
+  const now = new Date();
+  document.getElementById('utFrom').value = toDateInputValue(new Date(now.getFullYear(), now.getMonth(), 1));
+  document.getElementById('utTo').value = toDateInputValue(now);
+})();
 
 function addItemLine(vals){
   vals = vals || {};
@@ -7325,9 +7450,48 @@ function displaySetLabel(label){
 // copy or the original) representing just that one copy, with the new
 // status. If only one copy remains, no split is needed — the existing items
 // are just updated directly.
+// Dealer (bayi) finans modeli — only Instagram/Trendyol/Hepsiburada bayi
+// channels carry a finance model at all (kurumsal channels, Sıcak Satış and
+// İhracat are handled by their own separate flows). Trendyol/Hepsiburada
+// bayi are always locked to 'depozito' (their dealers keep their own shop,
+// so there is never a commission relationship there); Instagram bayi picks
+// either model when registered.
+function dealerFinanceApplicable(type){
+  return type==='Instagram bayi' || type==='Trendyol bayi' || type==='Hepsiburada bayi';
+}
+function findDealerChannel(channelName){
+  if(!channelName) return null;
+  const c = state.channels.find(c=>channelNamesMatch(c.name, channelName));
+  return (c && dealerFinanceApplicable(c.type)) ? c : null;
+}
+// Depozito/Bakiye model only: every time a physical copy is actually marked
+// üretildi, its m² × the dealer's fiyat/m² is deducted from their running
+// deposit balance and logged to the dealer's own ledger. This is the
+// closest point this app has to "shipped" (there is no separate shipping
+// stage), and it fires exactly once per physical copy because it is called
+// from inside splitOffOneCopy, which is itself always called exactly once
+// per physical copy (see mark-produced / markAllProducedBtn). Komisyon-model
+// dealers are NOT touched here — commission is a period settlement (see
+// renderDealerFinance), not a per-copy deduction.
+function accrueDealerDepositOnProduction(order, bundle){
+  const chan = findDealerChannel(order.channel);
+  if(!chan || chan.financeModel!=='depozito') return;
+  const price = typeof chan.pricePerM2==='number' ? chan.pricePerM2 : 0;
+  if(!price) return;
+  const m2 = bundle.reduce((s,i)=>s+sizeToM2(i.size),0);
+  if(!m2) return;
+  const amount = m2 * price;
+  chan.depositBalance = (chan.depositBalance||0) - amount;
+  chan.financeLedger = chan.financeLedger || [];
+  chan.financeLedger.push({
+    date: new Date().toISOString(), type: 'production_deduction', amount,
+    note: `${order.customerName||''} — ${bundle.map(i=>i.size).join(', ')} (${m2.toFixed(2)} m²)`.trim(),
+  });
+}
 function splitOffOneCopy(order, bundle, newStatus, timestampField){
   const remainingQty = bundle[0].qty || 1;
   const now = new Date().toISOString();
+  if(newStatus === 'produced') accrueDealerDepositOnProduction(order, bundle);
   if(remainingQty <= 1){
     bundle.forEach(i=>{ i.status = newStatus; i[timestampField] = now; });
     return;
@@ -8232,6 +8396,133 @@ function renderChannels(){
   if(mergeToEl) mergeToEl.innerHTML = mergeOptHtml;
   renderMarkaRegistry();
   renderChannelMerges();
+  renderDealerFinance();
+}
+
+// Every Instagram/Trendyol/Hepsiburada bayi, always shown here regardless of
+// the type filter above — same reasoning as Marka Kaydı below: a dealer's
+// finance setup shouldn't just vanish from view once it's no longer the
+// selected type in the add-channel dropdown.
+function renderDealerFinance(){
+  const el = document.getElementById('dealerFinanceList');
+  if(!el) return;
+  const bayiler = state.channels.filter(c=>dealerFinanceApplicable(c.type));
+  if(!bayiler.length){ el.innerHTML = '<p class="muted">Henüz Depozito/Komisyon takibi yapılan bir bayi yok.</p>'; return; }
+  const fmt = n => (n||0).toLocaleString('tr-TR', {minimumFractionDigits:2, maximumFractionDigits:2});
+  el.innerHTML = bayiler.map(c=>{
+    const idx = state.channels.indexOf(c);
+    const locked = c.type!=='Instagram bayi'; // Trendyol/Hepsiburada bayi always Depozito
+    if(!c.financeModel) c.financeModel = 'depozito';
+    const isDepozito = c.financeModel === 'depozito';
+    const modelSelectHtml = locked
+      ? `<span class="muted">Depozito/Bakiye <span title="Trendyol ve Hepsiburada bayileri her zaman Depozito/Bakiye kullanır">(sabit)</span></span>`
+      : `<select class="dealer-finance-model" data-idx="${idx}">
+           <option value="depozito" ${isDepozito?'selected':''}>Depozito/Bakiye</option>
+           <option value="komisyon" ${!isDepozito?'selected':''}>Komisyonlu (kargo bizde)</option>
+         </select>`;
+    let bodyHtml;
+    if(isDepozito){
+      const balance = c.depositBalance || 0;
+      const balanceColor = balance < 0 ? 'var(--rust)' : 'var(--forest)';
+      bodyHtml = `
+        <div class="row" style="grid-template-columns:1fr 1fr 1fr auto;display:grid;gap:8px;align-items:flex-end;margin-top:8px;">
+          <div><label>Fiyat/m² (TL)</label><input class="dealer-price-m2" data-idx="${idx}" value="${c.pricePerM2!=null?c.pricePerM2:''}" placeholder="örn. 350"></div>
+          <div><label>Bakiye</label><input disabled value="${fmt(balance)} TL" style="background:var(--paper);color:${balanceColor};font-weight:600"></div>
+          <div><label>Bakiye ekle (top-up, TL)</label><input class="dealer-topup-amount" data-idx="${idx}" placeholder="örn. 10000"></div>
+          <button class="ghost small dealer-topup-btn" data-idx="${idx}">Ekle</button>
+        </div>`;
+    } else {
+      const orders = state.orders.filter(o=>channelNamesMatch(o.channel, c.name) && o.saleType!=='Kayıp Kargo');
+      const totalSales = orders.reduce((s,o)=>s+priceToNumber(o.price), 0);
+      const pct = typeof c.commissionPct==='number' ? c.commissionPct : 0;
+      const accrued = totalSales * pct / 100;
+      const paid = (c.financeLedger||[]).filter(l=>l.type==='commission_payment').reduce((s,l)=>s+l.amount, 0);
+      const remaining = accrued - paid;
+      const remainingColor = remaining > 0 ? 'var(--rust)' : 'var(--forest)';
+      bodyHtml = `
+        <div class="row" style="grid-template-columns:1fr 1fr 1fr 1fr auto;display:grid;gap:8px;align-items:flex-end;margin-top:8px;">
+          <div><label>Komisyon %</label><input class="dealer-commission-pct" data-idx="${idx}" value="${c.commissionPct!=null?c.commissionPct:''}" placeholder="örn. 15"></div>
+          <div><label>Toplam satış (tüm zamanlar)</label><input disabled value="${fmt(totalSales)} TL" style="background:var(--paper);color:var(--ink-soft)"></div>
+          <div><label>Tahakkuk eden komisyon</label><input disabled value="${fmt(accrued)} TL" style="background:var(--paper);color:var(--ink-soft)"></div>
+          <div><label>Kalan borç (bize)</label><input disabled value="${fmt(remaining)} TL" style="background:var(--paper);color:${remainingColor};font-weight:600"></div>
+        </div>
+        <div class="row" style="grid-template-columns:1fr auto;display:grid;gap:8px;align-items:flex-end;margin-top:8px;">
+          <div><label>Komisyon ödemesi kaydet (TL — dönem sonu veya ara ödeme)</label><input class="dealer-commission-pay-amount" data-idx="${idx}" placeholder="örn. 5000"></div>
+          <button class="ghost small dealer-commission-pay-btn" data-idx="${idx}">Ödeme kaydet</button>
+        </div>`;
+    }
+    const ledger = (c.financeLedger||[]).slice(-5).reverse();
+    const ledgerHtml = ledger.length
+      ? `<div class="muted" style="font-size:12px;margin-top:6px;">Son hareketler: ${ledger.map(l=>{
+          const d = new Date(l.date).toLocaleDateString('tr-TR');
+          const label = l.type==='production_deduction' ? 'Üretim düşümü' : l.type==='topup' ? 'Bakiye eklendi' : 'Komisyon ödemesi';
+          return `${d} — ${label}: ${fmt(l.amount)} TL`;
+        }).join(' · ')}</div>`
+      : '';
+    return `<div style="border:1px solid var(--line);border-radius:10px;padding:12px;margin-bottom:10px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;">
+        <strong>${c.name}</strong> <span class="muted" style="font-size:12px;">${c.type}</span>
+      </div>
+      <div style="margin-top:6px;">${modelSelectHtml}</div>
+      ${bodyHtml}
+      ${ledgerHtml}
+    </div>`;
+  }).join('');
+
+  el.querySelectorAll('.dealer-finance-model').forEach(sel=>{
+    sel.onchange = ()=>{
+      const c = state.channels[parseInt(sel.dataset.idx)];
+      const old = c.financeModel;
+      c.financeModel = sel.value;
+      logActivity(`Bayi finans modeli değiştirildi: "${c.name}" — ${old==='depozito'?'Depozito/Bakiye':'Komisyonlu'} → ${sel.value==='depozito'?'Depozito/Bakiye':'Komisyonlu'}`);
+      saveState(); render();
+    };
+  });
+  el.querySelectorAll('.dealer-price-m2').forEach(inp=>{
+    inp.onchange = ()=>{
+      const c = state.channels[parseInt(inp.dataset.idx)];
+      const val = parseFloat(inp.value.replace(',','.'));
+      c.pricePerM2 = isNaN(val) ? undefined : val;
+      logActivity(`Bayi fiyat/m² güncellendi: "${c.name}" → ${isNaN(val)?'(boş)':val+' TL'}`);
+      saveState(); render();
+    };
+  });
+  el.querySelectorAll('.dealer-commission-pct').forEach(inp=>{
+    inp.onchange = ()=>{
+      const c = state.channels[parseInt(inp.dataset.idx)];
+      const val = parseFloat(inp.value.replace(',','.'));
+      c.commissionPct = isNaN(val) ? undefined : val;
+      logActivity(`Bayi komisyon % güncellendi: "${c.name}" → ${isNaN(val)?'(boş)':val+'%'}`);
+      saveState(); render();
+    };
+  });
+  el.querySelectorAll('.dealer-topup-btn').forEach(btn=>{
+    btn.onclick = ()=>{
+      const idx = parseInt(btn.dataset.idx);
+      const c = state.channels[idx];
+      const input = el.querySelector(`.dealer-topup-amount[data-idx="${idx}"]`);
+      const amount = parseFloat((input.value||'').replace(',','.'));
+      if(!amount){ input.style.borderColor = 'var(--rust)'; return; }
+      c.depositBalance = (c.depositBalance||0) + amount;
+      c.financeLedger = c.financeLedger || [];
+      c.financeLedger.push({date:new Date().toISOString(), type:'topup', amount, note:'Depozito eklendi'});
+      logActivity(`Bayi depozitosu eklendi: "${c.name}" — ${amount.toLocaleString('tr-TR')} TL (yeni bakiye: ${c.depositBalance.toLocaleString('tr-TR')} TL)`);
+      saveState(); render();
+    };
+  });
+  el.querySelectorAll('.dealer-commission-pay-btn').forEach(btn=>{
+    btn.onclick = ()=>{
+      const idx = parseInt(btn.dataset.idx);
+      const c = state.channels[idx];
+      const input = el.querySelector(`.dealer-commission-pay-amount[data-idx="${idx}"]`);
+      const amount = parseFloat((input.value||'').replace(',','.'));
+      if(!amount){ input.style.borderColor = 'var(--rust)'; return; }
+      c.financeLedger = c.financeLedger || [];
+      c.financeLedger.push({date:new Date().toISOString(), type:'commission_payment', amount, note:'Komisyon ödemesi'});
+      logActivity(`Bayiye komisyon ödemesi kaydedildi: "${c.name}" — ${amount.toLocaleString('tr-TR')} TL`);
+      saveState(); render();
+    };
+  });
 }
 
 // Every Instagram bayi, always shown here regardless of the type filter
@@ -8293,6 +8584,10 @@ document.getElementById('addChannel').onclick = ()=>{
   if(city) name = `${name} — ${city}`;
   const chan = { name, type };
   if(type==='Instagram bayi' && marka) chan.marka = marka;
+  // Every bayi channel starts on Depozito/Bakiye by default — Trendyol/
+  // Hepsiburada bayi stay locked to it forever, Instagram bayi can switch to
+  // Komisyonlu afterward from the Bayi Finans Ayarları card.
+  if(dealerFinanceApplicable(type)) chan.financeModel = 'depozito';
   state.channels.push(chan);
   logActivity(`Kanal eklendi: "${name}" (${type})${chan.marka ? ` — Marka: "${chan.marka}"` : ''}`);
   document.getElementById('newChanName').value='';
@@ -8394,7 +8689,7 @@ function renderLog(){
 }
 
 function render(){
-  renderOrders(); renderExportOrders(); renderQueue(); renderSort(); renderProduction(); renderOverview(); renderChannels(); renderUploadLog(); renderTrendyolUploadLog(); renderLog(); renderSetTemplates(); renderCommonSizes(); renderUsers(); renderOperatorBar(); renderReport(); renderCatalogInfo();
+  renderOrders(); renderExportOrders(); renderQueue(); renderSort(); renderProduction(); renderOverview(); renderChannels(); renderUploadLog(); renderTrendyolUploadLog(); renderLog(); renderSetTemplates(); renderCommonSizes(); renderUsers(); renderOperatorBar(); renderReport(); renderCatalogInfo(); renderUretimToplam();
   wireImageLightbox();
 }
 
