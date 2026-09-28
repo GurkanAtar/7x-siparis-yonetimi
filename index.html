@@ -1741,7 +1741,7 @@ function renderOperatorBar(){
         </select>
       </label>
       <button class="ghost small" id="logoutBtn">Çıkış yap</button>
-      <span class="muted" style="font-size:10px;margin-left:auto;" title="Bu sürümün ne zaman oluşturulduğu — canlı sitenin en güncel dosyayı çalıştırıp çalıştırmadığını doğrulamak için.">Sürüm: 2026-09-28 14:10 UTC</span>
+      <span class="muted" style="font-size:10px;margin-left:auto;" title="Bu sürümün ne zaman oluşturulduğu — canlı sitenin en güncel dosyayı çalıştırıp çalıştırmadığını doğrulamak için.">Sürüm: 2026-09-28 14:22 UTC</span>
     </div>`;
   document.getElementById('themeSelect').onchange = (e)=>{
     VALID_THEMES.forEach(t=>document.body.classList.remove(t));
@@ -3535,6 +3535,97 @@ document.getElementById('mPhone').addEventListener('blur', ()=>{
   if(result.corrected) inp.value = result.value;
 });
 
+// Lightweight, dependency-free inline-SVG bar charts for Raporlar — no
+// charting library needed, and they inherit the app's own CSS variables via
+// inline style="fill:var(--x)" (same pattern already used everywhere else
+// for JS-generated HTML), so they follow the light/dark palette automatically.
+function svgHBarChartHtml(data, opts={}){
+  if(!data.length) return '<p class="muted">Veri yok.</p>';
+  const width = opts.width || 680;
+  const barHeight = opts.barHeight || 24;
+  const gap = 10;
+  const leftPad = opts.leftPad || 150;
+  const rightPad = 90;
+  const topPad = 8;
+  const max = Math.max(1, ...data.map(d=>d.value));
+  const height = topPad*2 + data.length*(barHeight+gap) - gap;
+  const fmt = opts.fmt || (n=>Math.round(n).toLocaleString('tr-TR'));
+  const color = opts.color || 'var(--indigo)';
+  const bars = data.map((d,i)=>{
+    const y = topPad + i*(barHeight+gap);
+    const barW = Math.max(2, (width-leftPad-rightPad) * (d.value/max));
+    return `<text x="${leftPad-10}" y="${y+barHeight/2+4}" text-anchor="end" font-size="12" style="fill:var(--ink-soft)">${d.label}</text>
+      <rect x="${leftPad}" y="${y}" width="${barW}" height="${barHeight}" rx="4" style="fill:${color}"></rect>
+      <text x="${leftPad+barW+8}" y="${y+barHeight/2+4}" font-size="12" style="fill:var(--ink)">${fmt(d.value)}</text>`;
+  }).join('');
+  return `<svg viewBox="0 0 ${width} ${height}" style="width:100%;height:auto;max-width:${width}px;display:block;">${bars}</svg>`;
+}
+function svgVBarChartHtml(data, opts={}){
+  if(!data.length) return '<p class="muted">Veri yok.</p>';
+  const width = opts.width || 680;
+  const height = opts.height || 220;
+  const leftPad = 10, rightPad = 10, topPad = 18, bottomPad = 34;
+  const plotW = width - leftPad - rightPad;
+  const plotH = height - topPad - bottomPad;
+  const max = Math.max(1, ...data.map(d=>d.value));
+  const slot = plotW / data.length;
+  const barW = Math.max(6, slot * 0.55);
+  const fmt = opts.fmt || (n=>Math.round(n).toLocaleString('tr-TR'));
+  const color = opts.color || 'var(--indigo)';
+  const bars = data.map((d,i)=>{
+    const x = leftPad + i*slot + (slot-barW)/2;
+    const barH = plotH * (d.value/max);
+    const y = topPad + (plotH - barH);
+    return `<rect x="${x}" y="${y}" width="${barW}" height="${Math.max(1,barH)}" rx="3" style="fill:${color}"></rect>
+      <text x="${x+barW/2}" y="${height-bottomPad+16}" text-anchor="middle" font-size="11" style="fill:var(--ink-soft)">${d.label}</text>
+      <text x="${x+barW/2}" y="${y-6}" text-anchor="middle" font-size="10" style="fill:var(--ink)">${fmt(d.value)}</text>`;
+  }).join('');
+  const baseline = `<line x1="${leftPad}" y1="${topPad+plotH}" x2="${width-rightPad}" y2="${topPad+plotH}" style="stroke:var(--line)"></line>`;
+  return `<svg viewBox="0 0 ${width} ${height}" style="width:100%;height:auto;max-width:${width}px;display:block;">${baseline}${bars}</svg>`;
+}
+function svgPieChartHtml(data, opts={}){
+  const total = data.reduce((s,d)=>s+d.value,0);
+  if(!data.length || total<=0) return '<p class="muted">Veri yok.</p>';
+  const size = opts.size || 200;
+  const cx = size/2, cy = size/2, r = size/2 - 2;
+  const fmt = opts.fmt || (n=>Math.round(n).toLocaleString('tr-TR'));
+  // Stable, distinct hues via the golden angle — works for any number of
+  // channels/categories without a fixed palette running out of colors.
+  const colorFor = (i)=> `hsl(${Math.round((i*137.508)%360)} 58% 48%)`;
+  function polarToCartesian(angleDeg){
+    const rad = angleDeg * Math.PI/180;
+    return { x: cx + r*Math.cos(rad), y: cy + r*Math.sin(rad) };
+  }
+  let angle = -90;
+  const slices = data.map((d,i)=>{
+    const pct = d.value/total;
+    const sweep = pct*360;
+    const startAngle = angle;
+    const endAngle = angle + sweep;
+    angle = endAngle;
+    const color = colorFor(i);
+    let path;
+    if(sweep >= 359.999){
+      path = `<circle cx="${cx}" cy="${cy}" r="${r}" style="fill:${color}"></circle>`;
+    } else {
+      const large = sweep > 180 ? 1 : 0;
+      const startPt = polarToCartesian(startAngle);
+      const endPt = polarToCartesian(endAngle);
+      path = `<path d="M ${cx} ${cy} L ${startPt.x.toFixed(2)} ${startPt.y.toFixed(2)} A ${r} ${r} 0 ${large} 1 ${endPt.x.toFixed(2)} ${endPt.y.toFixed(2)} Z" style="fill:${color}"></path>`;
+    }
+    return { path, color, label: d.label, value: d.value, pct };
+  });
+  const svg = `<svg viewBox="0 0 ${size} ${size}" style="width:${size}px;height:${size}px;flex-shrink:0;">${slices.map(s=>s.path).join('')}</svg>`;
+  const legend = `<div style="display:flex;flex-direction:column;gap:6px;font-size:12px;min-width:160px;">${slices.map(s=>
+    `<div style="display:flex;align-items:center;gap:8px;">
+      <span style="width:12px;height:12px;border-radius:3px;background:${s.color};display:inline-block;flex-shrink:0;"></span>
+      <span style="flex:1;">${s.label}</span>
+      <span style="font-weight:700;">${(s.pct*100).toFixed(1)}%</span>
+      <span style="color:var(--ink-soft);min-width:70px;text-align:right;">${fmt(s.value)}</span>
+    </div>`
+  ).join('')}</div>`;
+  return `<div style="display:flex;gap:20px;align-items:center;flex-wrap:wrap;">${svg}${legend}</div>`;
+}
 function renderReport(){
   const fromVal = document.getElementById('repFrom').value; // YYYY-MM-DD
   const toVal = document.getElementById('repTo').value;
@@ -3783,6 +3874,45 @@ function renderReport(){
     countNewThisMonthRep(repSicakAll, o=>o.customerName) +
     countNewThisMonthRep(repIhracatAll, o=>o.customerName);
 
+  // Grafikler — kanala göre toplam tutar, tabana göre sipariş edilen m², ve
+  // aya göre satış trendi. Hepsi matchingOrders'tan (yukarıdaki filtrelerle
+  // aynı aralık/kanal) türetilir, hiçbir ekstra hesap tekrarlanmaz.
+  const byChanTutarChart = {};
+  matchingOrders.forEach(o=>{ byChanTutarChart[o.channel] = (byChanTutarChart[o.channel]||0) + priceToNumber(o.price); });
+  const chanChartData = Object.entries(byChanTutarChart).map(([label,value])=>({label,value})).sort((a,b)=>b.value-a.value);
+
+  const tabanChartData = Object.entries(byTaban).map(([label,s])=>({label,value:s.m2Ordered})).sort((a,b)=>b.value-a.value);
+
+  const byMonthChart = {};
+  matchingOrders.forEach(o=>{
+    const d = parseDMY(o.date);
+    if(!d) return;
+    const key = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
+    byMonthChart[key] = (byMonthChart[key]||0) + priceToNumber(o.price);
+  });
+  const trendChartData = Object.keys(byMonthChart).sort().map(k=>{
+    const [y,m] = k.split('-');
+    return { label: `${m}/${y.slice(2)}`, value: byMonthChart[k] };
+  });
+
+  const chartsHtml = `
+    <h3 style="font-family:'Fraunces',serif;font-size:15px;margin:20px 0 8px;">Grafikler</h3>
+    <p class="muted" style="margin:0 0 6px;font-size:12px;">Kanala göre satış payı (%)</p>
+    ${svgPieChartHtml(chanChartData, {fmt:n=>formatTL(n)+' TL'})}
+    <div class="row row2" style="gap:20px;align-items:flex-start;margin-top:20px;">
+      <div>
+        <p class="muted" style="margin:0 0 6px;font-size:12px;">Kanala göre Toplam Tutar (TL)</p>
+        ${svgHBarChartHtml(chanChartData, {color:'var(--indigo)', fmt:n=>formatTL(n)})}
+      </div>
+      <div>
+        <p class="muted" style="margin:0 0 6px;font-size:12px;">Tabana göre Sipariş edilen m²</p>
+        ${svgHBarChartHtml(tabanChartData, {color:'var(--teal)', fmt:n=>n.toFixed(2)})}
+      </div>
+    </div>
+    <p class="muted" style="margin:16px 0 6px;font-size:12px;">Aylara göre Toplam Tutar trendi (TL)</p>
+    ${svgVBarChartHtml(trendChartData, {color:'var(--forest)', fmt:n=>formatTL(n)})}
+  `;
+
   el.innerHTML = `
     <div class="stat-grid">
       <div class="stat"><div class="n">${matchingOrders.length}</div><div class="l">Siparişler</div></div>
@@ -3794,6 +3924,8 @@ function renderReport(){
       <div class="stat" style="background:var(--teal);border-color:var(--teal);"><div class="n" style="color:#fff;">${repNewCustomersCount}</div><div class="l" style="color:#fff;opacity:.85;">Yeni müşteriler (bu ay)</div></div>
     </div>
     <p class="muted" style="margin-top:8px">Üretilen Ürün Tutarı, sadece TÜM kalemleri üretilmiş siparişlerin tutarını sayar — kısmen üretilmiş bir siparişin tutarı, tutar sipariş bazında kayıtlı olduğundan (kalem bazında değil) bölüştürülemez ve dahil edilmez.</p>
+
+    ${chartsHtml}
 
     ${lostCargoSectionHtml}
 
