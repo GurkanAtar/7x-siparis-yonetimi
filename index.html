@@ -258,10 +258,11 @@
     </div>
     <div class="entry-subtabs" id="stageSelector" style="margin-top:6px;">
       <div class="entry-subtab active" data-stage="entry">Sipariş girişi</div>
-      <div class="entry-subtab" data-stage="cancelreturn">İade/İptal</div>
       <div class="entry-subtab" data-stage="queue">Baskı öncesi</div>
       <div class="entry-subtab" data-stage="sort" id="stageBtn-sort">Ayırma &amp; etiketler</div>
       <div class="entry-subtab" data-stage="production">Üretim</div>
+      <div class="entry-subtab" data-stage="cancelreturn">İade/İptal</div>
+      <div class="entry-subtab" data-stage="paymenttracking">Ödeme Takibi</div>
     </div>
 
     <div id="musteriDbPanel" class="card" style="display:none;">
@@ -592,6 +593,81 @@
     </div>
   </div>
 
+  <div id="paymenttracking" class="stage-panel">
+    <div class="card" id="ptNotApplicableCard" style="display:none;">
+      <h2>Ödeme Takibi</h2>
+      <p class="muted" style="margin-top:-6px">Bu kanal için ödeme takibi burada değil. Instagram/Trendyol/Hepsiburada bayileri Finans sekmesindeki Bayi Finans Takibi'nden, Kurumsal hesapları İade/İptal'den takip edilir.</p>
+    </div>
+
+    <div class="card" id="ptSicakSatisCard" style="display:none;">
+      <h2>Sıcak Satış — Ödeme Takibi</h2>
+      <p class="muted" style="margin-top:-6px">Sipariş girildikten/yüklendikten sonra finans departmanı hangi ödeme yöntemlerinin kullanıldığını burada işaretler. <b>Kredi</b> (vadeli): ya sonraki siparişe ertelenir (önceki sipariş tam ödenmeden yeni sipariş girilirse burada sadece uyarı gösterilir, engellenmez), ya da belirli gün sayısı içinde vadeli olarak kapanır.</p>
+      <div class="row row2">
+        <div><label>Sipariş seç</label><select id="ptSsOrderSelect"></select></div>
+        <div><label>Toplam Tutar</label><input id="ptSsTotal" disabled style="background:var(--paper);color:var(--ink-soft)"></div>
+      </div>
+      <div id="ptSsWarning" style="display:none;margin-top:10px;padding:10px;border-radius:8px;background:var(--rust-bg);border:1px solid var(--rust);color:var(--rust);font-size:13px;"></div>
+      <div class="row" style="grid-template-columns:1fr 1fr 1fr;display:grid;gap:10px;margin-top:12px;">
+        <div><label>Banka Havalesi (TL)</label><input id="ptSsBanka" placeholder="0"></div>
+        <div><label>Nakit (TL)</label><input id="ptSsNakit" placeholder="0"></div>
+        <div><label>Kredi Kartı (TL)</label><input id="ptSsKart" placeholder="0"></div>
+      </div>
+      <div class="row" style="grid-template-columns:1fr 1fr 1fr;display:grid;gap:10px;margin-top:6px;">
+        <div><label>Banka Hesabı</label><select id="ptSsBankaHesap"></select></div>
+        <div><label>Nakit Hesabı</label><select id="ptSsNakitHesap"></select></div>
+        <div><label>Kredi Kartı Hesabı</label><select id="ptSsKartHesap"></select></div>
+      </div>
+      <div class="row" style="grid-template-columns:1fr 1fr 1fr;display:grid;gap:10px;margin-top:10px;">
+        <div><label>Kredi Kartı Komisyonu %</label><input id="ptSsKartKomisyon" placeholder="örn. 2.5"></div>
+        <div><label>Kredi/Vadeli (TL)</label><input id="ptSsKredi" placeholder="0"></div>
+        <div><label>Kredi Türü</label>
+          <select id="ptSsKrediType">
+            <option value="">—</option>
+            <option value="ertelenmis">Sonraki siparişe ertelenmiş</option>
+            <option value="vade">Belirli gün vadeli</option>
+          </select>
+        </div>
+      </div>
+      <div class="row" style="grid-template-columns:1fr 1fr 1fr;display:grid;gap:10px;margin-top:10px;">
+        <div id="ptSsGunWrap" style="display:none;"><label>Vade (gün)</label><input id="ptSsGun" placeholder="örn. 30"></div>
+        <div><label>Kredi tahsil edilince Hesap</label><select id="ptSsKrediHesap"></select></div>
+        <div><label>Not (opsiyonel)</label><input id="ptSsNote" placeholder=""></div>
+      </div>
+      <div id="ptSsSumRow" style="margin-top:10px;font-size:13px;"></div>
+      <button type="button" id="ptSsSave" style="margin-top:10px;width:auto;">Ödeme bilgisini kaydet</button>
+      <h3 style="font-family:'Fraunces',serif;font-size:15px;margin:20px 0 8px;">Ödenmemiş ertelenmiş krediler</h3>
+      <div id="ptSsOutstandingList"></div>
+    </div>
+
+    <div class="card" id="ptIhracatCard" style="display:none;">
+      <h2>İhracat — Ödeme Takibi</h2>
+      <p class="muted" style="margin-top:-6px">Peşinat ve teslimat tarihi elle girilir; teslimat sonrası gelen ödemeler alttaki listeye tek tek eklenir. Kalan bakiye buradan otomatik hesaplanır.</p>
+      <div class="row row2">
+        <div><label>Sipariş seç</label><select id="ptExOrderSelect"></select></div>
+        <div><label>Toplam Tutar (TL)</label><input id="ptExTotal" disabled style="background:var(--paper);color:var(--ink-soft)"></div>
+      </div>
+      <div class="row row3" style="margin-top:10px;">
+        <div><label>Peşinat (TL)</label><input id="ptExPrepaid" placeholder="0"></div>
+        <div><label>Peşinat Hesabı</label><select id="ptExPrepaidHesap"></select></div>
+        <div><label>Teslimat tarihi</label><input type="date" id="ptExDeliveryDate"></div>
+      </div>
+      <div class="row row3" style="margin-top:10px;">
+        <div style="display:flex;align-items:flex-end;"><button type="button" id="ptExSave" style="width:100%;">Kaydet</button></div>
+      </div>
+      <div id="ptExBalance" style="margin-top:10px;font-size:13px;"></div>
+      <h3 style="font-family:'Fraunces',serif;font-size:15px;margin:16px 0 8px;">Teslimat sonrası tahsilat ekle</h3>
+      <div class="row row3">
+        <div><label>Tutar (TL)</label><input id="ptExPayAmount" placeholder="örn. 5000"></div>
+        <div><label>Hesap</label><select id="ptExPayHesap"></select></div>
+        <div><label>Not (opsiyonel)</label><input id="ptExPayNote" placeholder=""></div>
+      </div>
+      <div class="row row3">
+        <div style="display:flex;align-items:flex-end;"><button type="button" id="ptExPayAdd" style="width:100%;">Tahsilatı ekle</button></div>
+      </div>
+      <div id="ptExLedger" style="margin-top:14px"></div>
+    </div>
+  </div>
+
   <div id="queue" class="stage-panel">
     <div class="card">
       <h2>Baskı departmanı — kod sırası <button class="ghost small print-btn" data-print="queue" style="margin-left:8px;font-weight:normal;font-family:'Inter',sans-serif;font-size:12px;">Listeyi yazdır</button> <button class="ghost small excel-btn" data-excel="queue" style="font-weight:normal;font-family:'Inter',sans-serif;font-size:12px;">Excel'e aktar</button></h2>
@@ -830,6 +906,24 @@
       <h2>Bayi Finans Takibi</h2>
       <p class="muted" style="margin-top:-6px">Her bayi için işe başlamadan önce tek bir finans modeli seçilir — ikisi birlikte çalışamaz. <b>Depozito/Bakiye</b>: bayiden alınan depozito burada bakiye olarak tutulur, her üretilen ürün m² × fiyat/m² kadar otomatik düşer. <b>Komisyonlu (kargo bizde)</b>: üretim ve kargo maliyeti bizden karşılanır, bayiye dönemsel olarak komisyon ödenir — sadece Instagram bayilerinde seçilebilir; Trendyol ve Hepsiburada bayileri her zaman Depozito/Bakiye kullanır.</p>
       <div id="dealerFinanceList"></div>
+    </div>
+    <div class="card">
+      <h2>Tahsilatlar</h2>
+      <p class="muted" style="margin-top:-6px">Her tahsilatın gerçekte hangi hesaba/kanala girdiğini kaydeder — nakit akışı mutabakatı içindir. Aşağıdaki hesap listesi Bayi Finans, Sıcak Satış ve İhracat ödeme kayıtlarındaki "Hesap" seçeneklerini besler.</p>
+      <div class="row row2">
+        <div><label>Yeni hesap adı</label><input id="newPaymentAccount" placeholder="örn. Şirket Banka Hesabı"></div>
+        <div style="display:flex;align-items:flex-end;"><button type="button" id="addPaymentAccount">Hesap ekle</button></div>
+      </div>
+      <div id="paymentAccountList" style="margin-top:12px"></div>
+
+      <h3 style="font-family:'Fraunces',serif;font-size:15px;margin:22px 0 8px;">Hesaba göre özet</h3>
+      <p class="muted" style="margin-top:-4px">Bayi Finans (bakiye/komisyon), Sıcak Satış ve İhracat'taki tüm tahsilat kayıtlarının toplamı, seçilen tarih aralığında hesaba göre kırılım.</p>
+      <div class="row row3">
+        <div><label>Başlangıç</label><input type="date" id="tahFrom"></div>
+        <div><label>Bitiş</label><input type="date" id="tahTo"></div>
+        <div style="display:flex;align-items:flex-end;"><button type="button" class="ghost small" id="tahThisMonth">Bu ay</button></div>
+      </div>
+      <div id="tahSummary" style="margin-top:14px"></div>
     </div>
   </div>
 
@@ -1676,7 +1770,7 @@ function showPinModal(labelText){
     };
   });
 }
-let state = { orders: [], uploadBatches: [], activityLog: [], setTemplates: [], commonSizes: ['160x220','180x270','200x300'], productCatalog: {}, channelMerges: [], channels: [
+let state = { orders: [], uploadBatches: [], activityLog: [], setTemplates: [], commonSizes: ['160x220','180x270','200x300'], productCatalog: {}, channelMerges: [], paymentAccounts: ['Şirket Banka Hesabı', 'Kargo Şirketi Tahsilatı', 'Kredi Kartı Linki'], channels: [
   {name:'qatalina', type:'Instagram kurumsal'},
   {name:'7xhome', type:'Instagram kurumsal'},
   {name:'Carpetra Home', type:'Instagram kurumsal'},
@@ -1743,7 +1837,7 @@ function renderOperatorBar(){
         </select>
       </label>
       <button class="ghost small" id="logoutBtn">Çıkış yap</button>
-      <span class="muted" style="font-size:10px;margin-left:auto;" title="Bu sürümün ne zaman oluşturulduğu — canlı sitenin en güncel dosyayı çalıştırıp çalıştırmadığını doğrulamak için.">Sürüm: 2026-09-28 14:43 UTC</span>
+      <span class="muted" style="font-size:10px;margin-left:auto;" title="Bu sürümün ne zaman oluşturulduğu — canlı sitenin en güncel dosyayı çalıştırıp çalıştırmadığını doğrulamak için.">Sürüm: 2026-09-28 15:11 UTC</span>
     </div>`;
   document.getElementById('themeSelect').onchange = (e)=>{
     VALID_THEMES.forEach(t=>document.body.classList.remove(t));
@@ -1933,6 +2027,7 @@ async function loadState(){
       state.channelMerges = loaded.channelMerges || [];
       state.commonSizes = (loaded.commonSizes && loaded.commonSizes.length) ? loaded.commonSizes : state.commonSizes;
       state.productCatalog = loaded.productCatalog || {};
+      state.paymentAccounts = (loaded.paymentAccounts && loaded.paymentAccounts.length) ? loaded.paymentAccounts : state.paymentAccounts;
       // Which channel and which of the four operational stages (Sipariş
       // girişi / Baskı öncesi / Ayırma & etiketler / Üretim) was last open —
       // restored below so re-entering the app picks up exactly where you
@@ -2186,6 +2281,7 @@ function saveState(){
         productCatalog: state.productCatalog,
         channels: state.channels,
         channelMerges: state.channelMerges,
+        paymentAccounts: state.paymentAccounts,
         currentEntryMode: state.currentEntryMode,
         currentStageMode: state.currentStageMode,
       };
@@ -2460,6 +2556,7 @@ const entryModesWithForm = {ig:true, ihracat:true, sicaksatis:true, trendyol:tru
 function renderCurrentStage(){
   if(currentStageMode==='entry') renderOrders();
   else if(currentStageMode==='cancelreturn') renderKurumsalCancelReturn();
+  else if(currentStageMode==='paymenttracking') renderPaymentTracking();
   else if(currentStageMode==='queue') renderQueue();
   else if(currentStageMode==='sort') renderSort();
   else if(currentStageMode==='production') renderProduction();
@@ -8657,6 +8754,17 @@ function renderChannels(){
 // the type filter above — same reasoning as Marka Kaydı below: a dealer's
 // finance setup shouldn't just vanish from view once it's no longer the
 // selected type in the add-channel dropdown.
+// Shared "Hesap" <select> used everywhere a payment is actually recorded
+// (Bayi Finans top-up/komisyon, Sıcak Satış ödeme yöntemleri, İhracat
+// peşinat/tahsilat) — one registry (state.paymentAccounts, managed in
+// Finans → Tahsilatlar) feeds every one of these, so the Tahsilatlar
+// reconciliation report can total them all together honestly.
+function paymentAccountOptionsHtml(selected){
+  const accounts = state.paymentAccounts && state.paymentAccounts.length ? state.paymentAccounts : [];
+  return `<option value="">— hesap seçin —</option>` + accounts.map(a=>
+    `<option value="${a}" ${a===selected?'selected':''}>${a}</option>`
+  ).join('');
+}
 function renderDealerFinance(){
   const el = document.getElementById('dealerFinanceList');
   if(!el) return;
@@ -8679,10 +8787,11 @@ function renderDealerFinance(){
       const balance = c.depositBalance || 0;
       const balanceColor = balance < 0 ? 'var(--rust)' : 'var(--forest)';
       bodyHtml = `
-        <div class="row" style="grid-template-columns:1fr 1fr 1fr auto;display:grid;gap:8px;align-items:flex-end;margin-top:8px;">
+        <div class="row" style="grid-template-columns:1fr 1fr 1fr 1fr auto;display:grid;gap:8px;align-items:flex-end;margin-top:8px;">
           <div><label>Fiyat/m² (TL)</label><input class="dealer-price-m2" data-idx="${idx}" value="${c.pricePerM2!=null?c.pricePerM2:''}" placeholder="örn. 350"></div>
           <div><label>Bakiye</label><input disabled value="${fmt(balance)} TL" style="background:var(--paper);color:${balanceColor};font-weight:600"></div>
           <div><label>Bakiye ekle (top-up, TL)</label><input class="dealer-topup-amount" data-idx="${idx}" placeholder="örn. 10000"></div>
+          <div><label>Hesap</label><select class="dealer-topup-account" data-idx="${idx}">${paymentAccountOptionsHtml()}</select></div>
           <button class="ghost small dealer-topup-btn" data-idx="${idx}">Ekle</button>
         </div>`;
     } else {
@@ -8700,8 +8809,9 @@ function renderDealerFinance(){
           <div><label>Tahakkuk eden komisyon</label><input disabled value="${fmt(accrued)} TL" style="background:var(--paper);color:var(--ink-soft)"></div>
           <div><label>Kalan borç (bize)</label><input disabled value="${fmt(remaining)} TL" style="background:var(--paper);color:${remainingColor};font-weight:600"></div>
         </div>
-        <div class="row" style="grid-template-columns:1fr auto;display:grid;gap:8px;align-items:flex-end;margin-top:8px;">
+        <div class="row" style="grid-template-columns:1fr 1fr auto;display:grid;gap:8px;align-items:flex-end;margin-top:8px;">
           <div><label>Komisyon ödemesi kaydet (TL — dönem sonu veya ara ödeme)</label><input class="dealer-commission-pay-amount" data-idx="${idx}" placeholder="örn. 5000"></div>
+          <div><label>Hesap</label><select class="dealer-commission-pay-account" data-idx="${idx}">${paymentAccountOptionsHtml()}</select></div>
           <button class="ghost small dealer-commission-pay-btn" data-idx="${idx}">Ödeme kaydet</button>
         </div>`;
     }
@@ -8710,7 +8820,7 @@ function renderDealerFinance(){
       ? `<div class="muted" style="font-size:12px;margin-top:6px;">Son hareketler: ${ledger.map(l=>{
           const d = new Date(l.date).toLocaleDateString('tr-TR');
           const label = l.type==='production_deduction' ? 'Üretim düşümü' : l.type==='topup' ? 'Bakiye eklendi' : 'Komisyon ödemesi';
-          return `${d} — ${label}: ${fmt(l.amount)} TL`;
+          return `${d} — ${label}: ${fmt(l.amount)} TL${l.account?` (${l.account})`:''}`;
         }).join(' · ')}</div>`
       : '';
     return `<div style="border:1px solid var(--line);border-radius:10px;padding:12px;margin-bottom:10px;">
@@ -8757,10 +8867,11 @@ function renderDealerFinance(){
       const input = el.querySelector(`.dealer-topup-amount[data-idx="${idx}"]`);
       const amount = parseFloat((input.value||'').replace(',','.'));
       if(!amount){ input.style.borderColor = 'var(--rust)'; return; }
+      const account = el.querySelector(`.dealer-topup-account[data-idx="${idx}"]`).value;
       c.depositBalance = (c.depositBalance||0) + amount;
       c.financeLedger = c.financeLedger || [];
-      c.financeLedger.push({date:new Date().toISOString(), type:'topup', amount, note:'Depozito eklendi'});
-      logActivity(`Bayi depozitosu eklendi: "${c.name}" — ${amount.toLocaleString('tr-TR')} TL (yeni bakiye: ${c.depositBalance.toLocaleString('tr-TR')} TL)`);
+      c.financeLedger.push({date:new Date().toISOString(), type:'topup', amount, account, note:'Depozito eklendi'});
+      logActivity(`Bayi depozitosu eklendi: "${c.name}" — ${amount.toLocaleString('tr-TR')} TL${account?` (${account})`:''} (yeni bakiye: ${c.depositBalance.toLocaleString('tr-TR')} TL)`);
       saveState(); render();
     };
   });
@@ -8771,9 +8882,10 @@ function renderDealerFinance(){
       const input = el.querySelector(`.dealer-commission-pay-amount[data-idx="${idx}"]`);
       const amount = parseFloat((input.value||'').replace(',','.'));
       if(!amount){ input.style.borderColor = 'var(--rust)'; return; }
+      const account = el.querySelector(`.dealer-commission-pay-account[data-idx="${idx}"]`).value;
       c.financeLedger = c.financeLedger || [];
-      c.financeLedger.push({date:new Date().toISOString(), type:'commission_payment', amount, note:'Komisyon ödemesi'});
-      logActivity(`Bayiye komisyon ödemesi kaydedildi: "${c.name}" — ${amount.toLocaleString('tr-TR')} TL`);
+      c.financeLedger.push({date:new Date().toISOString(), type:'commission_payment', amount, account, note:'Komisyon ödemesi'});
+      logActivity(`Bayiye komisyon ödemesi kaydedildi: "${c.name}" — ${amount.toLocaleString('tr-TR')} TL${account?` (${account})`:''}`);
       saveState(); render();
     };
   });
@@ -8904,6 +9016,212 @@ document.getElementById('crThisMonth').addEventListener('click', ()=>{
   document.getElementById('crTo').value = toDateInputValue(now);
 })();
 
+// Ödeme Takibi — dispatches by whichever channel tab is active. Only Sıcak
+// Satış and İhracat have anything to show here; the other three channels'
+// payment tracking lives elsewhere (Bayi Finans Takibi / İade-İptal).
+function renderPaymentTracking(){
+  const notApplicable = document.getElementById('ptNotApplicableCard');
+  const ssCard = document.getElementById('ptSicakSatisCard');
+  const exCard = document.getElementById('ptIhracatCard');
+  if(!notApplicable || !ssCard || !exCard) return;
+  notApplicable.style.display = 'none'; ssCard.style.display = 'none'; exCard.style.display = 'none';
+  if(currentEntryMode==='sicaksatis'){ ssCard.style.display=''; renderSsPaymentTracking(); }
+  else if(currentEntryMode==='ihracat'){ exCard.style.display=''; renderExPaymentTracking(); }
+  else { notApplicable.style.display=''; }
+}
+
+function renderSsPaymentTracking(){
+  const selectEl = document.getElementById('ptSsOrderSelect');
+  const orders = state.orders.filter(o=>o.channel==='Sıcak Satış' && o.saleType!=='Kayıp Kargo')
+    .slice().sort((a,b)=>{ const da=parseDMY(a.date), db=parseDMY(b.date); return (db?db.getTime():0) - (da?da.getTime():0); });
+  const prevValue = selectEl.value;
+  selectEl.innerHTML = orders.map(o=>{
+    const done = o.ssPayment && o.ssPayment.finalizedAt;
+    return `<option value="${o.id}">${done?'✓ ':''}${o.date||'-'} — ${o.customerName} — ${formatTL(priceToNumber(o.price))} TL</option>`;
+  }).join('');
+  if(orders.some(o=>o.id===prevValue)) selectEl.value = prevValue;
+  const order = state.orders.find(o=>o.id===selectEl.value) || orders[0];
+
+  const outstandingListEl = document.getElementById('ptSsOutstandingList');
+  const allOutstanding = state.orders.filter(o=>o.channel==='Sıcak Satış' && o.ssPayment && o.ssPayment.krediType==='ertelenmis' && !o.ssPayment.krediOdendi && (o.ssPayment.kredi||0)>0);
+  outstandingListEl.innerHTML = !allOutstanding.length ? '<p class="muted">Ödenmemiş ertelenmiş kredi yok.</p>' :
+    `<table><thead><tr><th>Tarih</th><th>Müşteri</th><th>Kredi Tutarı</th><th></th></tr></thead><tbody>
+      ${allOutstanding.map(o=>`<tr><td>${o.date||'-'}</td><td>${o.customerName}</td><td>${formatTL(o.ssPayment.kredi)} TL</td>
+        <td><button class="ghost small pt-ss-mark-paid" data-id="${o.id}">Ödendi olarak işaretle</button></td></tr>`).join('')}
+    </tbody></table>`;
+  outstandingListEl.querySelectorAll('.pt-ss-mark-paid').forEach(b=>{
+    b.onclick = ()=>{
+      const o = state.orders.find(x=>x.id===b.dataset.id);
+      if(!o || !o.ssPayment) return;
+      o.ssPayment.krediOdendi = true;
+      logActivity(`Sıcak Satış ertelenmiş kredi ödendi olarak işaretlendi: ${o.customerName} — ${formatTL(o.ssPayment.kredi)} TL`);
+      saveState(); render();
+    };
+  });
+
+  ['ptSsBankaHesap','ptSsNakitHesap','ptSsKartHesap','ptSsKrediHesap'].forEach(id=>{
+    document.getElementById(id).innerHTML = paymentAccountOptionsHtml();
+  });
+
+  if(!order){
+    document.getElementById('ptSsTotal').value = '';
+    document.getElementById('ptSsWarning').style.display = 'none';
+    ['ptSsBanka','ptSsNakit','ptSsKart','ptSsKartKomisyon','ptSsKredi','ptSsGun','ptSsNote'].forEach(id=>document.getElementById(id).value='');
+    document.getElementById('ptSsKrediType').value='';
+    ['ptSsBankaHesap','ptSsNakitHesap','ptSsKartHesap','ptSsKrediHesap'].forEach(id=>document.getElementById(id).value='');
+    document.getElementById('ptSsSumRow').innerHTML = '';
+    document.getElementById('ptSsSave').onclick = null;
+    return;
+  }
+  if(selectEl.value !== order.id) selectEl.value = order.id;
+  const total = priceToNumber(order.price);
+  document.getElementById('ptSsTotal').value = formatTL(total) + ' TL';
+  const p = order.ssPayment || {};
+  document.getElementById('ptSsBanka').value = p.banka || '';
+  document.getElementById('ptSsNakit').value = p.nakit || '';
+  document.getElementById('ptSsKart').value = p.kart || '';
+  document.getElementById('ptSsKartKomisyon').value = p.kartKomisyonPct!=null ? p.kartKomisyonPct : '';
+  document.getElementById('ptSsKredi').value = p.kredi || '';
+  document.getElementById('ptSsKrediType').value = p.krediType || '';
+  document.getElementById('ptSsGun').value = p.krediGun || '';
+  document.getElementById('ptSsNote').value = p.note || '';
+  document.getElementById('ptSsGunWrap').style.display = p.krediType==='vade' ? '' : 'none';
+  document.getElementById('ptSsBankaHesap').value = p.bankaHesap || '';
+  document.getElementById('ptSsNakitHesap').value = p.nakitHesap || '';
+  document.getElementById('ptSsKartHesap').value = p.kartHesap || '';
+  document.getElementById('ptSsKrediHesap').value = p.krediHesap || '';
+
+  // Warning only — never blocks — for an EARLIER order from the same
+  // customer still carrying an unpaid "ertelenmiş" kredi.
+  const earlierOutstanding = state.orders.filter(o2=>o2.id!==order.id && o2.channel===order.channel && o2.ssPayment && o2.ssPayment.krediType==='ertelenmis' && !o2.ssPayment.krediOdendi && (o2.ssPayment.kredi||0)>0);
+  const warnEl = document.getElementById('ptSsWarning');
+  if(earlierOutstanding.length){
+    const totalOwed = earlierOutstanding.reduce((s,o2)=>s+(o2.ssPayment.kredi||0), 0);
+    warnEl.style.display = '';
+    warnEl.textContent = `Uyarı: "${order.customerName}" için ${earlierOutstanding.length} önceki siparişten toplam ${formatTL(totalOwed)} TL ödenmemiş ertelenmiş kredi var.`;
+  } else {
+    warnEl.style.display = 'none';
+  }
+
+  function updateSumRow(){
+    const banka = priceToNumber(document.getElementById('ptSsBanka').value);
+    const nakit = priceToNumber(document.getElementById('ptSsNakit').value);
+    const kart = priceToNumber(document.getElementById('ptSsKart').value);
+    const kredi = priceToNumber(document.getElementById('ptSsKredi').value);
+    const sum = banka+nakit+kart+kredi;
+    const diff = total - sum;
+    const ok = Math.abs(diff) < 0.01;
+    document.getElementById('ptSsSumRow').innerHTML = `Girilen toplam: <b style="color:${ok?'var(--forest)':'var(--rust)'}">${formatTL(sum)} TL</b> / Sipariş tutarı: ${formatTL(total)} TL ${ok ? '✓' : `<span style="color:var(--rust)">(fark: ${formatTL(diff)} TL)</span>`}`;
+  }
+  updateSumRow();
+  ['ptSsBanka','ptSsNakit','ptSsKart','ptSsKredi'].forEach(id=>{ document.getElementById(id).oninput = updateSumRow; });
+  document.getElementById('ptSsKrediType').onchange = ()=>{
+    document.getElementById('ptSsGunWrap').style.display = document.getElementById('ptSsKrediType').value==='vade' ? '' : 'none';
+  };
+
+  document.getElementById('ptSsSave').onclick = ()=>{
+    const banka = priceToNumber(document.getElementById('ptSsBanka').value);
+    const nakit = priceToNumber(document.getElementById('ptSsNakit').value);
+    const kart = priceToNumber(document.getElementById('ptSsKart').value);
+    const kartKomisyonPctRaw = parseFloat((document.getElementById('ptSsKartKomisyon').value||'').replace(',','.'));
+    const kredi = priceToNumber(document.getElementById('ptSsKredi').value);
+    const krediType = document.getElementById('ptSsKrediType').value;
+    const krediGun = parseInt(document.getElementById('ptSsGun').value) || null;
+    const note = document.getElementById('ptSsNote').value.trim();
+    const bankaHesap = document.getElementById('ptSsBankaHesap').value || undefined;
+    const nakitHesap = document.getElementById('ptSsNakitHesap').value || undefined;
+    const kartHesap = document.getElementById('ptSsKartHesap').value || undefined;
+    const krediHesap = document.getElementById('ptSsKrediHesap').value || undefined;
+    order.ssPayment = {
+      banka, nakit, kart,
+      kartKomisyonPct: isNaN(kartKomisyonPctRaw) ? undefined : kartKomisyonPctRaw,
+      kredi, krediType: krediType || undefined,
+      krediGun: krediType==='vade' ? krediGun : undefined,
+      krediOdendi: (order.ssPayment && order.ssPayment.krediOdendi) || false,
+      note, finalizedAt: new Date().toISOString(),
+      bankaHesap, nakitHesap, kartHesap, krediHesap,
+    };
+    const krediNote = krediType==='ertelenmis' ? ' [ertelenmiş]' : krediType==='vade' ? ` [${krediGun||'?'} gün vadeli]` : '';
+    const hesapNote = [bankaHesap&&`Banka→${bankaHesap}`, nakitHesap&&`Nakit→${nakitHesap}`, kartHesap&&`Kart→${kartHesap}`, krediHesap&&`Kredi→${krediHesap}`].filter(Boolean).join(', ');
+    logActivity(`Sıcak Satış ödeme bilgisi kaydedildi: ${order.customerName} — ${order.date||'-'} (Banka ${formatTL(banka)}, Nakit ${formatTL(nakit)}, Kart ${formatTL(kart)}, Kredi ${formatTL(kredi)}${krediNote} TL)${hesapNote?` [${hesapNote}]`:''}`);
+    saveState(); render();
+  };
+}
+
+function renderExPaymentTracking(){
+  const selectEl = document.getElementById('ptExOrderSelect');
+  const orders = state.orders.filter(o=>o.channel==='İhracat' && o.saleType!=='Kayıp Kargo')
+    .slice().sort((a,b)=>{ const da=parseDMY(a.date), db=parseDMY(b.date); return (db?db.getTime():0) - (da?da.getTime():0); });
+  const prevValue = selectEl.value;
+  selectEl.innerHTML = orders.map(o=>{
+    const done = o.exFinance && o.exFinance.deliveryDate;
+    return `<option value="${o.id}">${done?'✓ ':''}${o.date||'-'} — ${o.customerName} — ${formatTL(priceToNumber(o.price))} TL</option>`;
+  }).join('');
+  if(orders.some(o=>o.id===prevValue)) selectEl.value = prevValue;
+  const order = state.orders.find(o=>o.id===selectEl.value) || orders[0];
+  ['ptExPrepaidHesap','ptExPayHesap'].forEach(id=>{
+    document.getElementById(id).innerHTML = paymentAccountOptionsHtml();
+  });
+
+  if(!order){
+    document.getElementById('ptExTotal').value = '';
+    document.getElementById('ptExPrepaid').value = '';
+    document.getElementById('ptExDeliveryDate').value = '';
+    document.getElementById('ptExPrepaidHesap').value = '';
+    document.getElementById('ptExBalance').innerHTML = '<p class="muted">Henüz İhracat siparişi yok.</p>';
+    document.getElementById('ptExLedger').innerHTML = '';
+    document.getElementById('ptExSave').onclick = null;
+    document.getElementById('ptExPayAdd').onclick = null;
+    return;
+  }
+  if(selectEl.value !== order.id) selectEl.value = order.id;
+  const total = priceToNumber(order.price);
+  document.getElementById('ptExTotal').value = formatTL(total) + ' TL';
+  const f = order.exFinance || {};
+  document.getElementById('ptExPrepaid').value = f.prepaid || '';
+  document.getElementById('ptExDeliveryDate').value = f.deliveryDate || '';
+  document.getElementById('ptExPrepaidHesap').value = f.prepaidHesap || '';
+
+  const ledger = f.paymentLedger || [];
+  const ledgerTotal = ledger.reduce((s,l)=>s+l.amount, 0);
+  const balance = total - (f.prepaid||0) - ledgerTotal;
+  document.getElementById('ptExBalance').innerHTML = `Peşinat: <b>${formatTL(f.prepaid||0)} TL</b> · Teslimat sonrası tahsil edilen: <b>${formatTL(ledgerTotal)} TL</b> · Kalan Bakiye: <b style="color:${balance>0.01?'var(--rust)':'var(--forest)'}">${formatTL(balance)} TL</b>`;
+
+  document.getElementById('ptExSave').onclick = ()=>{
+    const prepaid = priceToNumber(document.getElementById('ptExPrepaid').value);
+    const deliveryDate = document.getElementById('ptExDeliveryDate').value;
+    const prepaidHesap = document.getElementById('ptExPrepaidHesap').value || undefined;
+    order.exFinance = order.exFinance || {};
+    order.exFinance.prepaid = prepaid;
+    order.exFinance.deliveryDate = deliveryDate;
+    order.exFinance.prepaidHesap = prepaidHesap;
+    logActivity(`İhracat ödeme bilgisi kaydedildi: ${order.customerName} — Peşinat ${formatTL(prepaid)} TL${prepaidHesap?` [${prepaidHesap}]`:''}${deliveryDate?`, Teslimat tarihi ${deliveryDate}`:''}`);
+    saveState(); render();
+  };
+  document.getElementById('ptExPayAdd').onclick = ()=>{
+    const amountInput = document.getElementById('ptExPayAmount');
+    const amount = priceToNumber(amountInput.value);
+    if(!amount){ amountInput.style.borderColor = 'var(--rust)'; return; }
+    const noteInput = document.getElementById('ptExPayNote');
+    const hesapEl = document.getElementById('ptExPayHesap');
+    const account = hesapEl.value || undefined;
+    order.exFinance = order.exFinance || {};
+    order.exFinance.paymentLedger = order.exFinance.paymentLedger || [];
+    order.exFinance.paymentLedger.push({ date: new Date().toISOString(), amount, note: noteInput.value.trim(), account });
+    logActivity(`İhracat teslimat sonrası tahsilat eklendi: ${order.customerName} — ${formatTL(amount)} TL${account?` [${account}]`:''}${noteInput.value.trim()?` (${noteInput.value.trim()})`:''}`);
+    amountInput.value=''; noteInput.value=''; amountInput.style.borderColor=''; hesapEl.value='';
+    saveState(); render();
+  };
+
+  const ledgerEl = document.getElementById('ptExLedger');
+  ledgerEl.innerHTML = !ledger.length ? '<p class="muted">Henüz teslimat sonrası tahsilat girilmedi.</p>' :
+    `<table><thead><tr><th>Tarih</th><th>Tutar</th><th>Hesap</th><th>Not</th></tr></thead><tbody>
+      ${ledger.slice().reverse().map(l=>`<tr><td>${new Date(l.date).toLocaleDateString('tr-TR')}</td><td>${formatTL(l.amount)} TL</td><td>${l.account||'-'}</td><td>${l.note||'-'}</td></tr>`).join('')}
+    </tbody></table>`;
+}
+document.getElementById('ptSsOrderSelect').addEventListener('change', renderSsPaymentTracking);
+document.getElementById('ptExOrderSelect').addEventListener('change', renderExPaymentTracking);
+
 // Every Instagram bayi, always shown here regardless of the type filter
 // above (that filter only affects the add/merge lists) — so a dealer added
 // weeks ago with no marka ever registered still shows up with an empty
@@ -8936,6 +9254,135 @@ function renderMarkaRegistry(){
     };
   });
 }
+
+// Tahsilatlar — payment-destination registry. Purely for cash-flow
+// reconciliation (which real-world account a payment landed in), not a
+// revenue-concealment ledger — every account here is visible to anyone with
+// Finans access, same as the rest of the tab.
+function renderPaymentAccounts(){
+  const el = document.getElementById('paymentAccountList');
+  if(!el) return;
+  const accounts = state.paymentAccounts || [];
+  el.innerHTML = !accounts.length ? '<p class="muted">Henüz hesap eklenmedi.</p>' :
+    accounts.map((a,idx)=>`
+    <div class="row" style="grid-template-columns:1fr auto;display:grid;gap:8px;align-items:center;margin-bottom:8px;">
+      <span>${a}</span>
+      <button class="ghost small payment-account-delete" data-idx="${idx}">Sil</button>
+    </div>`).join('');
+  el.querySelectorAll('.payment-account-delete').forEach(b=>{
+    b.onclick = ()=>{
+      const idx = parseInt(b.dataset.idx);
+      const name = state.paymentAccounts[idx];
+      if(!confirm(`"${name}" hesabını silmek istediğinize emin misiniz? Bu hesap geçmiş kayıtlarda görünmeye devam eder.`)) return;
+      state.paymentAccounts.splice(idx,1);
+      logActivity(`Tahsilat hesabı silindi: "${name}"`);
+      saveState(); render();
+    };
+  });
+}
+document.getElementById('addPaymentAccount').addEventListener('click', ()=>{
+  const input = document.getElementById('newPaymentAccount');
+  const name = input.value.trim();
+  if(!name) return;
+  state.paymentAccounts = state.paymentAccounts || [];
+  if(state.paymentAccounts.includes(name)){ input.style.borderColor='var(--rust)'; return; }
+  state.paymentAccounts.push(name);
+  input.value=''; input.style.borderColor='';
+  logActivity(`Tahsilat hesabı eklendi: "${name}"`);
+  saveState(); render();
+});
+
+function renderTahsilatlarSummary(){
+  const summaryEl = document.getElementById('tahSummary');
+  if(!summaryEl) return;
+  const fromVal = document.getElementById('tahFrom').value;
+  const toVal = document.getElementById('tahTo').value;
+  const from = fromVal ? new Date(fromVal) : null;
+  const to = toVal ? new Date(toVal) : null;
+  if(to) to.setHours(23,59,59,999);
+  function inRange(d){
+    if(!d) return false;
+    if(from && d < from) return false;
+    if(to && d > to) return false;
+    return true;
+  }
+  // totals[account][sourceLabel] = amount
+  const totals = {};
+  function add(account, sourceLabel, amount){
+    if(!amount) return;
+    const acc = account || '(hesap belirtilmedi)';
+    totals[acc] = totals[acc] || {};
+    totals[acc][sourceLabel] = (totals[acc][sourceLabel]||0) + amount;
+  }
+  // Bayi Finans ledger entries (topup + commission payments)
+  (state.channels||[]).forEach(c=>{
+    (c.financeLedger||[]).forEach(l=>{
+      if(l.type!=='topup' && l.type!=='commission_payment') return;
+      const d = new Date(l.date);
+      if(!inRange(d)) return;
+      const label = l.type==='topup' ? 'Bayi Finans — Bakiye ekleme' : 'Bayi Finans — Komisyon ödemesi';
+      add(l.account, label, l.amount);
+    });
+  });
+  // Sıcak Satış payments
+  (state.orders||[]).filter(o=>o.channel==='Sıcak Satış' && o.ssPayment).forEach(o=>{
+    const p = o.ssPayment;
+    const d = p.finalizedAt ? new Date(p.finalizedAt) : parseDMY(o.date);
+    if(!inRange(d)) return;
+    if(p.banka) add(p.bankaHesap, 'Sıcak Satış — Banka', p.banka);
+    if(p.nakit) add(p.nakitHesap, 'Sıcak Satış — Nakit', p.nakit);
+    if(p.kart) add(p.kartHesap, 'Sıcak Satış — Kredi Kartı', p.kart);
+    if(p.krediOdendi && p.kredi) add(p.krediHesap, 'Sıcak Satış — Kredi (tahsil edilmiş)', p.kredi);
+  });
+  // İhracat prepaid + ledger
+  (state.orders||[]).filter(o=>o.channel==='İhracat' && o.exFinance).forEach(o=>{
+    const f = o.exFinance;
+    if(f.prepaid){
+      const d = parseDMY(o.date);
+      if(inRange(d)) add(f.prepaidHesap, 'İhracat — Peşinat', f.prepaid);
+    }
+    (f.paymentLedger||[]).forEach(l=>{
+      const d = new Date(l.date);
+      if(!inRange(d)) return;
+      add(l.account, 'İhracat — Teslimat sonrası tahsilat', l.amount);
+    });
+  });
+
+  const accounts = Object.keys(totals);
+  if(!accounts.length){
+    summaryEl.innerHTML = '<p class="muted">Seçilen tarih aralığında tahsilat kaydı yok.</p>';
+    return;
+  }
+  const grandTotal = accounts.reduce((s,a)=>s + Object.values(totals[a]).reduce((s2,v)=>s2+v,0), 0);
+  summaryEl.innerHTML = accounts.map(acc=>{
+    const bySource = totals[acc];
+    const accTotal = Object.values(bySource).reduce((s,v)=>s+v,0);
+    return `
+    <div style="border:1px solid var(--line);border-radius:10px;padding:12px 14px;margin-bottom:10px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;font-weight:600;">
+        <span>${acc}</span><span>${formatTL(accTotal)} TL</span>
+      </div>
+      <table style="margin-top:8px;"><tbody>
+        ${Object.keys(bySource).map(src=>`<tr><td class="muted" style="padding:2px 0;">${src}</td><td style="text-align:right;padding:2px 0;">${formatTL(bySource[src])} TL</td></tr>`).join('')}
+      </tbody></table>
+    </div>`;
+  }).join('') + `<div style="text-align:right;font-weight:700;margin-top:6px;">Toplam: ${formatTL(grandTotal)} TL</div>`;
+}
+(function initTahsilatlarDefaults(){
+  const now = new Date();
+  const monthStartVal = toDateInputValue(new Date(now.getFullYear(), now.getMonth(), 1));
+  const todayVal = toDateInputValue(now);
+  const fromEl = document.getElementById('tahFrom');
+  const toEl = document.getElementById('tahTo');
+  if(fromEl && !fromEl.value) fromEl.value = monthStartVal;
+  if(toEl && !toEl.value) toEl.value = todayVal;
+  document.getElementById('tahThisMonth').addEventListener('click', ()=>{
+    fromEl.value = monthStartVal; toEl.value = todayVal;
+    renderTahsilatlarSummary();
+  });
+  fromEl.addEventListener('change', renderTahsilatlarSummary);
+  toEl.addEventListener('change', renderTahsilatlarSummary);
+})();
 
 document.getElementById('newChanType').addEventListener('change', ()=>{
   const type = document.getElementById('newChanType').value;
@@ -9068,7 +9515,7 @@ function renderLog(){
 }
 
 function render(){
-  renderOrders(); renderExportOrders(); renderQueue(); renderSort(); renderProduction(); renderOverview(); renderChannels(); renderUploadLog(); renderTrendyolUploadLog(); renderLog(); renderSetTemplates(); renderCommonSizes(); renderUsers(); renderOperatorBar(); renderReport(); renderCatalogInfo(); renderUretimToplam(); renderKurumsalCancelReturn();
+  renderOrders(); renderExportOrders(); renderQueue(); renderSort(); renderProduction(); renderOverview(); renderChannels(); renderUploadLog(); renderTrendyolUploadLog(); renderLog(); renderSetTemplates(); renderCommonSizes(); renderUsers(); renderOperatorBar(); renderReport(); renderCatalogInfo(); renderUretimToplam(); renderKurumsalCancelReturn(); renderPaymentTracking(); renderPaymentAccounts(); renderTahsilatlarSummary();
   wireImageLightbox();
 }
 
