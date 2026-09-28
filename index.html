@@ -258,6 +258,7 @@
     </div>
     <div class="entry-subtabs" id="stageSelector" style="margin-top:6px;">
       <div class="entry-subtab active" data-stage="entry">Sipariş girişi</div>
+      <div class="entry-subtab" data-stage="cancelreturn">İade/İptal</div>
       <div class="entry-subtab" data-stage="queue">Baskı öncesi</div>
       <div class="entry-subtab" data-stage="sort" id="stageBtn-sort">Ayırma &amp; etiketler</div>
       <div class="entry-subtab" data-stage="production">Üretim</div>
@@ -567,6 +568,27 @@
     </div>
   </div>
 
+  <div id="cancelreturn" class="stage-panel">
+    <div class="card">
+      <h2>İade / İptal</h2>
+      <p class="muted" style="margin-top:-6px">Yalnızca Kurumsal siparişler için — bayi satışları depozito/komisyon üzerinden takip edildiği için buradan etkilenmez, bayi her durumda ödemekle yükümlüdür (bkz. Finans sekmesi). <b>İptal</b>: sipariş hiç kargoya verilmedi. <b>İade</b>: kargoya verildi ama geri döndü. Barkod ile okutma ileride eklenecek — şimdilik listeden sipariş seçerek işaretlenir.</p>
+      <div class="row row3">
+        <div><label>Sipariş seç</label><select id="crOrderSelect"></select></div>
+        <div><label>Not (opsiyonel)</label><input id="crNote" placeholder="örn. müşteri vazgeçti"></div>
+        <div style="display:flex;align-items:flex-end;gap:8px;">
+          <button type="button" class="ghost small" id="crMarkIptal">İptal olarak işaretle</button>
+          <button type="button" class="ghost small" id="crMarkIade">İade olarak işaretle</button>
+        </div>
+      </div>
+      <div class="row row3" style="margin-top:14px;">
+        <div><label>Başlangıç</label><input type="date" id="crFrom"></div>
+        <div><label>Bitiş</label><input type="date" id="crTo"></div>
+      </div>
+      <div id="crSummary" style="margin-top:14px"></div>
+      <div id="crList" style="margin-top:14px"></div>
+    </div>
+  </div>
+
   <div id="queue" class="stage-panel">
     <div class="card">
       <h2>Baskı departmanı — kod sırası <button class="ghost small print-btn" data-print="queue" style="margin-left:8px;font-weight:normal;font-family:'Inter',sans-serif;font-size:12px;">Listeyi yazdır</button> <button class="ghost small excel-btn" data-excel="queue" style="font-weight:normal;font-family:'Inter',sans-serif;font-size:12px;">Excel'e aktar</button></h2>
@@ -804,30 +826,6 @@
       <h2>Bayi Finans Takibi</h2>
       <p class="muted" style="margin-top:-6px">Her bayi için işe başlamadan önce tek bir finans modeli seçilir — ikisi birlikte çalışamaz. <b>Depozito/Bakiye</b>: bayiden alınan depozito burada bakiye olarak tutulur, her üretilen ürün m² × fiyat/m² kadar otomatik düşer. <b>Komisyonlu (kargo bizde)</b>: üretim ve kargo maliyeti bizden karşılanır, bayiye dönemsel olarak komisyon ödenir — sadece Instagram bayilerinde seçilebilir; Trendyol ve Hepsiburada bayileri her zaman Depozito/Bakiye kullanır.</p>
       <div id="dealerFinanceList"></div>
-    </div>
-    <div class="card">
-      <h2>Kurumsal İptal / İade</h2>
-      <p class="muted" style="margin-top:-6px">Yalnızca Kurumsal siparişler için (Instagram/Trendyol/Hepsiburada Kurumsal) — bayi satışları depozito/komisyon üzerinden takip edildiği için buradan etkilenmez, bayi her durumda ödemekle yükümlüdür. <b>İptal</b>: sipariş hiç kargoya verilmedi. <b>İade</b>: kargoya verildi ama geri döndü. Barkod ile okutma ileride eklenecek — şimdilik listeden sipariş seçerek işaretlenir.</p>
-      <div class="row row3">
-        <div><label>Sipariş seç</label><select id="crOrderSelect"></select></div>
-        <div><label>Not (opsiyonel)</label><input id="crNote" placeholder="örn. müşteri vazgeçti"></div>
-        <div style="display:flex;align-items:flex-end;gap:8px;">
-          <button type="button" class="ghost small" id="crMarkIptal">İptal olarak işaretle</button>
-          <button type="button" class="ghost small" id="crMarkIade">İade olarak işaretle</button>
-        </div>
-      </div>
-      <div class="row row3" style="margin-top:14px;">
-        <div><label>Başlangıç</label><input type="date" id="crFrom"></div>
-        <div><label>Bitiş</label><input type="date" id="crTo"></div>
-        <div><label>Kanal ailesi</label><select id="crFamily">
-          <option value="">Tüm Kurumsal kanallar</option>
-          <option value="Instagram">Instagram Kurumsal</option>
-          <option value="Trendyol">Trendyol Kurumsal</option>
-          <option value="Hepsiburada">Hepsiburada Kurumsal</option>
-        </select></div>
-      </div>
-      <div id="crSummary" style="margin-top:14px"></div>
-      <div id="crList" style="margin-top:14px"></div>
     </div>
   </div>
 
@@ -1741,7 +1739,7 @@ function renderOperatorBar(){
         </select>
       </label>
       <button class="ghost small" id="logoutBtn">Çıkış yap</button>
-      <span class="muted" style="font-size:10px;margin-left:auto;" title="Bu sürümün ne zaman oluşturulduğu — canlı sitenin en güncel dosyayı çalıştırıp çalıştırmadığını doğrulamak için.">Sürüm: 2026-09-28 14:22 UTC</span>
+      <span class="muted" style="font-size:10px;margin-left:auto;" title="Bu sürümün ne zaman oluşturulduğu — canlı sitenin en güncel dosyayı çalıştırıp çalıştırmadığını doğrulamak için.">Sürüm: 2026-09-28 14:28 UTC</span>
     </div>`;
   document.getElementById('themeSelect').onchange = (e)=>{
     VALID_THEMES.forEach(t=>document.body.classList.remove(t));
@@ -2457,6 +2455,7 @@ const entryModesWithForm = {ig:true, ihracat:true, sicaksatis:true, trendyol:tru
 // stale Instagram one.
 function renderCurrentStage(){
   if(currentStageMode==='entry') renderOrders();
+  else if(currentStageMode==='cancelreturn') renderKurumsalCancelReturn();
   else if(currentStageMode==='queue') renderQueue();
   else if(currentStageMode==='sort') renderSort();
   else if(currentStageMode==='production') renderProduction();
@@ -3881,6 +3880,29 @@ function renderReport(){
   matchingOrders.forEach(o=>{ byChanTutarChart[o.channel] = (byChanTutarChart[o.channel]||0) + priceToNumber(o.price); });
   const chanChartData = Object.entries(byChanTutarChart).map(([label,value])=>({label,value})).sort((a,b)=>b.value-a.value);
 
+  // Kanala göre satış payı pastası: tek tek hesap/bayi adı değil, sadece 5
+  // ana kanal ailesi (Instagram/Trendyol/Hepsiburada/Sıcak Satış/İhracat) —
+  // detaya inmeden genel resim.
+  const FAMILY_LABELS = {ig:'Instagram', trendyol:'Trendyol', hepsiburada:'Hepsiburada', sicaksatis:'Sıcak Satış', ihracat:'İhracat'};
+  const byFamilyChart = {};
+  matchingOrders.forEach(o=>{
+    const fam = channelCategoryForNumbering(o.channel);
+    byFamilyChart[fam] = (byFamilyChart[fam]||0) + priceToNumber(o.price);
+  });
+  const familyChartData = Object.entries(byFamilyChart).map(([fam,value])=>({label:FAMILY_LABELS[fam]||fam, value})).sort((a,b)=>b.value-a.value);
+
+  // Kurumsal vs Bayi payı — Sıcak Satış ve İhracat tamamen bayi tabanlı
+  // olduğu için (Kurumsal karşılığı yok) doğrudan Bayi tarafına sayılır.
+  let kurumsalTutar = 0, bayiTutar = 0;
+  matchingOrders.forEach(o=>{
+    const v = priceToNumber(o.price);
+    if(isKurumsalOrder(o)) kurumsalTutar += v; else bayiTutar += v;
+  });
+  const kurumsalBayiChartData = [
+    { label:'Kurumsal', value:kurumsalTutar },
+    { label:'Bayi', value:bayiTutar },
+  ];
+
   const tabanChartData = Object.entries(byTaban).map(([label,s])=>({label,value:s.m2Ordered})).sort((a,b)=>b.value-a.value);
 
   const byMonthChart = {};
@@ -3897,8 +3919,16 @@ function renderReport(){
 
   const chartsHtml = `
     <h3 style="font-family:'Fraunces',serif;font-size:15px;margin:20px 0 8px;">Grafikler</h3>
-    <p class="muted" style="margin:0 0 6px;font-size:12px;">Kanala göre satış payı (%)</p>
-    ${svgPieChartHtml(chanChartData, {fmt:n=>formatTL(n)+' TL'})}
+    <div class="row row2" style="gap:20px;align-items:flex-start;">
+      <div>
+        <p class="muted" style="margin:0 0 6px;font-size:12px;">Kanala göre satış payı (%)</p>
+        ${svgPieChartHtml(familyChartData, {fmt:n=>formatTL(n)+' TL'})}
+      </div>
+      <div>
+        <p class="muted" style="margin:0 0 6px;font-size:12px;">Kurumsal / Bayi payı (%)</p>
+        ${svgPieChartHtml(kurumsalBayiChartData, {fmt:n=>formatTL(n)+' TL'})}
+      </div>
+    </div>
     <div class="row row2" style="gap:20px;align-items:flex-start;margin-top:20px;">
       <div>
         <p class="muted" style="margin:0 0 6px;font-size:12px;">Kanala göre Toplam Tutar (TL)</p>
@@ -8707,8 +8737,12 @@ function kurumsalFamily(order){
 function renderKurumsalCancelReturn(){
   const selectEl = document.getElementById('crOrderSelect');
   if(!selectEl) return;
+  // Scoped to whichever channel tab is currently selected at the top of
+  // Sipariş Merkezi, same as every other stage (Baskı öncesi, Ayırma &
+  // etiketler, Üretim) — Sıcak Satış/İhracat are entirely dealer-based with
+  // no Kurumsal side at all, so this naturally shows nothing there.
   const openOrders = state.orders
-    .filter(o=>isKurumsalOrder(o) && !o.cancelReturnStatus && o.saleType!=='Kayıp Kargo')
+    .filter(o=>isKurumsalOrder(o) && !o.cancelReturnStatus && o.saleType!=='Kayıp Kargo' && channelCategoryForNumbering(o.channel)===currentEntryMode)
     .slice()
     .sort((a,b)=>{ const da=parseDMY(a.date), db=parseDMY(b.date); return (db?db.getTime():0) - (da?da.getTime():0); });
   const prevValue = selectEl.value;
@@ -8732,16 +8766,15 @@ function renderKurumsalCancelReturn(){
   document.getElementById('crMarkIptal').onclick = ()=>markAs('iptal');
   document.getElementById('crMarkIade').onclick = ()=>markAs('iade');
 
-  // Summary + list, both scoped to the selected date range (by sipariş
-  // tarihi, same convention Raporlar uses) and kanal ailesi filter.
+  // Summary + list, scoped to the selected date range (by sipariş tarihi,
+  // same convention Raporlar uses) and the currently active channel tab.
   const fromVal = document.getElementById('crFrom').value;
   const toVal = document.getElementById('crTo').value;
-  const family = document.getElementById('crFamily').value;
   const from = fromVal ? (()=>{ const [y,m,d]=fromVal.split('-').map(Number); return new Date(y,m-1,d); })() : null;
   const to = toVal ? (()=>{ const [y,m,d]=toVal.split('-').map(Number); return new Date(y,m-1,d,23,59,59,999); })() : null;
   const matching = state.orders.filter(o=>{
     if(!isKurumsalOrder(o) || o.saleType==='Kayıp Kargo') return false;
-    if(family && kurumsalFamily(o)!==family) return false;
+    if(channelCategoryForNumbering(o.channel)!==currentEntryMode) return false;
     const d = parseDMY(o.date);
     if(from && (!d || d < from)) return false;
     if(to && (!d || d > to)) return false;
@@ -8792,7 +8825,6 @@ function renderKurumsalCancelReturn(){
 }
 document.getElementById('crFrom').addEventListener('change', renderKurumsalCancelReturn);
 document.getElementById('crTo').addEventListener('change', renderKurumsalCancelReturn);
-document.getElementById('crFamily').addEventListener('change', renderKurumsalCancelReturn);
 
 // Every Instagram bayi, always shown here regardless of the type filter
 // above (that filter only affects the add/merge lists) — so a dealer added
