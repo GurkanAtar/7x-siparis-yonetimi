@@ -1850,7 +1850,8 @@ function showPinModal(labelText){
     };
   });
 }
-let state = { orders: [], uploadBatches: [], activityLog: [], setTemplates: [], commonSizes: ['160x220','180x270','200x300'], productCatalog: {}, channelMerges: [], paymentAccounts: ['Şirket Banka Hesabı', 'Kargo Şirketi Tahsilatı', 'Kredi Kartı Linki'], bankStatementLines: [], payoutRules: { trendyol: { delayDays: 28, paydays: [1,4], commissionPct: null }, hepsiburada: { delayDays: null, paydays: [], commissionPct: null }, ig: { delayDays: null, paydays: [], commissionPct: null } }, channels: [
+const PAYMENT_ACCOUNTS_V2 = ['Nakit', 'Kredi Kartı', 'Banka Havalesi — Şahıs Hesabına', 'Banka Havalesi — 7X GROUP Hesabına', 'Banka Havalesi — Carpetra Hesabına'];
+let state = { orders: [], uploadBatches: [], activityLog: [], setTemplates: [], commonSizes: ['160x220','180x270','200x300'], productCatalog: {}, channelMerges: [], paymentAccounts: PAYMENT_ACCOUNTS_V2.slice(), paymentAccountsV2Migrated: true, bankStatementLines: [], payoutRules: { trendyol: { delayDays: 28, paydays: [1,4], commissionPct: null }, hepsiburada: { delayDays: null, paydays: [], commissionPct: null }, ig: { delayDays: null, paydays: [], commissionPct: null } }, channels: [
   {name:'qatalina', type:'Instagram kurumsal'},
   {name:'7xhome', type:'Instagram kurumsal'},
   {name:'Carpetra Home', type:'Instagram kurumsal'},
@@ -1917,7 +1918,7 @@ function renderOperatorBar(){
         </select>
       </label>
       <button class="ghost small" id="logoutBtn">Çıkış yap</button>
-      <span class="muted" style="font-size:10px;margin-left:auto;" title="Bu sürümün ne zaman oluşturulduğu — canlı sitenin en güncel dosyayı çalıştırıp çalıştırmadığını doğrulamak için.">Sürüm: 2026-09-28 18:11 UTC</span>
+      <span class="muted" style="font-size:10px;margin-left:auto;" title="Bu sürümün ne zaman oluşturulduğu — canlı sitenin en güncel dosyayı çalıştırıp çalıştırmadığını doğrulamak için.">Sürüm: 2026-09-28 18:22 UTC</span>
     </div>`;
   document.getElementById('themeSelect').onchange = (e)=>{
     VALID_THEMES.forEach(t=>document.body.classList.remove(t));
@@ -2108,6 +2109,15 @@ async function loadState(){
       state.commonSizes = (loaded.commonSizes && loaded.commonSizes.length) ? loaded.commonSizes : state.commonSizes;
       state.productCatalog = loaded.productCatalog || {};
       state.paymentAccounts = (loaded.paymentAccounts && loaded.paymentAccounts.length) ? loaded.paymentAccounts : state.paymentAccounts;
+      // One-time reset to the fixed 5-account list (Nakit / Kredi Kartı / 3
+      // banka havalesi hedefi) — replaces whatever was there before (including
+      // manually added accounts), but only the very first time this loads
+      // after the change; afterwards paymentAccountsV2Migrated sticks and any
+      // accounts added later (or even deleted from this fixed set) are respected.
+      if(!loaded.paymentAccountsV2Migrated){
+        state.paymentAccounts = PAYMENT_ACCOUNTS_V2.slice();
+      }
+      state.paymentAccountsV2Migrated = true;
       state.bankStatementLines = loaded.bankStatementLines || [];
       state.payoutRules = loaded.payoutRules && Object.keys(loaded.payoutRules).length ? loaded.payoutRules : state.payoutRules;
       // Which channel and which of the four operational stages (Sipariş
@@ -2367,6 +2377,7 @@ function saveState(){
         channels: state.channels,
         channelMerges: state.channelMerges,
         paymentAccounts: state.paymentAccounts,
+        paymentAccountsV2Migrated: state.paymentAccountsV2Migrated,
         bankStatementLines: state.bankStatementLines,
         payoutRules: state.payoutRules,
         currentEntryMode: state.currentEntryMode,
@@ -8884,7 +8895,24 @@ function renderFinBayilerTrendyol(){
   const list = state.channels.filter(c=>c.type==='Trendyol bayi');
   if(!list.length) return '<p class="muted">Henüz Trendyol bayisi yok — Satış Kanalı ve Marka Kayıt sekmesinden ekleyin.</p>';
   const fmt = n => (n||0).toLocaleString('tr-TR', {minimumFractionDigits:2, maximumFractionDigits:2});
-  return list.map(c=>{
+
+  // Grand totals across every Trendyol bayi, shown once at the top so you
+  // don't have to add up each dealer's card by hand.
+  let grandSold=0, grandDeposited=0, grandBalance=0;
+  list.forEach(c=>{
+    grandSold += state.orders.filter(o=>channelNamesMatch(o.channel,c.name) && o.saleType!=='Kayıp Kargo').reduce((s,o)=>s+priceToNumber(o.price), 0);
+    grandDeposited += (c.financeLedger||[]).filter(l=>l.type==='topup').reduce((s,l)=>s+l.amount, 0);
+    grandBalance += c.depositBalance || 0;
+  });
+  const totalsHtml = `
+    <div class="stat-grid" style="margin-bottom:16px;">
+      <div class="stat"><div class="n">${list.length}</div><div class="l">Trendyol bayisi</div></div>
+      <div class="stat"><div class="n">${fmt(grandSold)}</div><div class="l">Toplam satılan tutar (TL)</div></div>
+      <div class="stat"><div class="n">${fmt(grandDeposited)}</div><div class="l">Toplam yatırılan depozito (TL)</div></div>
+      <div class="stat"><div class="n">${fmt(grandBalance)}</div><div class="l">Toplam güncel bakiye (TL)</div></div>
+    </div>`;
+
+  return totalsHtml + list.map(c=>{
     const idx = state.channels.indexOf(c);
     const balance = c.depositBalance || 0;
     const threshold = typeof c.lowBalanceThreshold==='number' ? c.lowBalanceThreshold : null;
@@ -8892,14 +8920,23 @@ function renderFinBayilerTrendyol(){
     const balanceColor = balance < 0 ? 'var(--rust)' : (isLow ? 'var(--rust)' : 'var(--forest)');
     const totalSold = state.orders.filter(o=>channelNamesMatch(o.channel,c.name) && o.saleType!=='Kayıp Kargo').reduce((s,o)=>s+priceToNumber(o.price), 0);
     const totalDeposited = (c.financeLedger||[]).filter(l=>l.type==='topup').reduce((s,l)=>s+l.amount, 0);
-    const ledger = (c.financeLedger||[]).slice(-6).reverse();
-    const ledgerHtml = ledger.length
-      ? `<div class="muted" style="font-size:12px;margin-top:8px;">Son hareketler: ${ledger.map(l=>{
-          const d = new Date(l.date).toLocaleDateString('tr-TR');
-          const label = l.type==='production_deduction' ? 'Üretim düşümü' : l.type==='topup' ? 'Depozito eklendi' : l.type;
-          return `${d} — ${label}: ${fmt(l.amount)} TL${l.account?` (${l.account})`:''}`;
-        }).join(' · ')}</div>`
-      : '';
+    // Full transaction table, oldest first, with a running balance — deposit
+    // top-ups add, production-stage deductions (the actual "sale" event that
+    // touches the deposit) subtract. Running balance is replayed from zero,
+    // so it lines up with today's real bakiye as long as the ledger is complete.
+    const ledgerSorted = (c.financeLedger||[]).slice().sort((a,b)=>new Date(a.date)-new Date(b.date));
+    let running = 0;
+    const ledgerRows = ledgerSorted.map(l=>{
+      running += l.type==='topup' ? l.amount : -l.amount;
+      const d = new Date(l.date).toLocaleDateString('tr-TR');
+      const label = l.type==='production_deduction' ? 'Satış (üretim düşümü)' : l.type==='topup' ? 'Depozito ödemesi' : l.type;
+      const amountSign = l.type==='topup' ? '+' : '−';
+      const amountColor = l.type==='topup' ? 'var(--forest)' : 'var(--rust)';
+      return `<tr><td>${d}</td><td>${label}</td><td>${l.note||'-'}${l.account?` (${l.account})`:''}</td><td style="color:${amountColor}">${amountSign}${fmt(l.amount)} TL</td><td>${fmt(running)} TL</td></tr>`;
+    }).reverse().join('');
+    const ledgerHtml = ledgerSorted.length
+      ? `<table style="margin-top:10px;"><thead><tr><th>Tarih</th><th>Hareket</th><th>Açıklama</th><th>Tutar</th><th>Bakiye</th></tr></thead><tbody>${ledgerRows}</tbody></table>`
+      : '<p class="muted" style="margin-top:10px;">Henüz hareket yok.</p>';
     return `
     <div style="border:1px solid ${isLow?'var(--rust)':'var(--line)'};border-radius:10px;padding:14px;margin-bottom:12px;${isLow?'background:var(--rust-bg);':''}">
       <div style="display:flex;justify-content:space-between;align-items:center;">
