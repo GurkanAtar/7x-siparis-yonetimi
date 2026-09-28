@@ -121,6 +121,12 @@
   #ihracatOrdersListCard.mode-sil .del-order-item{display:inline-block;}
   #igOrdersListCard.mode-duzenle .edit-order,
   #ihracatOrdersListCard.mode-duzenle .edit-order{display:inline-block;}
+  /* Ayırma & etiketler: per-order "Tekrar etiket bastır" (reprint) buttons
+     stay hidden until that taban group's own "Tekrar yazdır" toggle is
+     clicked — each group works independently of the others. */
+  .toggle-reprint-btn.active{color:#fff;background:var(--indigo);border-color:var(--indigo);}
+  .taban-group .reprint-sticker{display:none;}
+  .taban-group.show-reprint .reprint-sticker{display:inline-block;}
   .card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:18px 20px;margin-bottom:16px;}
   .card h2{font-family:'Fraunces',serif;font-size:16px;font-weight:600;margin:0 0 12px;}
   label{display:block;font-size:12px;color:var(--ink-soft);margin:0 0 4px;}
@@ -1680,7 +1686,7 @@ function renderOperatorBar(){
         </select>
       </label>
       <button class="ghost small" id="logoutBtn">Çıkış yap</button>
-      <span class="muted" style="font-size:10px;margin-left:auto;" title="Bu sürümün ne zaman oluşturulduğu — canlı sitenin en güncel dosyayı çalıştırıp çalıştırmadığını doğrulamak için.">Sürüm: 2026-09-28 10:39 UTC</span>
+      <span class="muted" style="font-size:10px;margin-left:auto;" title="Bu sürümün ne zaman oluşturulduğu — canlı sitenin en güncel dosyayı çalıştırıp çalıştırmadığını doğrulamak için.">Sürüm: 2026-09-28 11:04 UTC</span>
     </div>`;
   document.getElementById('themeSelect').onchange = (e)=>{
     VALID_THEMES.forEach(t=>document.body.classList.remove(t));
@@ -2411,6 +2417,11 @@ function renderCurrentStage(){
 // touches requireDeleteAuth/startEditOrder or any permission logic — it
 // only controls whether the buttons are visible at all.
 let orderActionMode = null; // null | 'sil' | 'duzenle'
+// Ayırma & etiketler: which taban groups currently have their "Tekrar etiket
+// bastır" (reprint) buttons revealed — per group, independently of each
+// other, off by default. Keyed by taban name; reset on channel switch below
+// since a taban name from one channel's groups has no bearing on another's.
+let revealedReprintTabans = new Set();
 function applyOrderActionMode(){
   document.querySelectorAll('.mode-toggle-btn').forEach(b=>{
     b.classList.toggle('active', orderActionMode === b.dataset.mode);
@@ -2446,6 +2457,10 @@ document.querySelectorAll('.entry-subtab[data-sub]').forEach(t=>{
     // mode over from whichever channel was active before.
     orderActionMode = null;
     applyOrderActionMode();
+    // Same for Ayırma & etiketler's per-group reprint-button reveal — a
+    // taban name revealed under one channel shouldn't stay revealed once
+    // you're looking at a different channel's groups.
+    revealedReprintTabans = new Set();
     document.getElementById('sharedItemsCard').style.display = entryModesWithForm[currentEntryMode] ? '' : 'none';
     document.getElementById('igOrdersListCard').style.display = currentEntryMode==='ihracat' ? 'none' : '';
     document.getElementById('ihracatOrdersListCard').style.display = currentEntryMode==='ihracat' ? '' : 'none';
@@ -7341,13 +7356,14 @@ function renderSort(){
   document.getElementById('sortEmpty').style.display = count? 'none':'block';
   Object.keys(groups).forEach(taban=>{
     const g = document.createElement('div');
-    g.className = 'taban-group';
+    const reprintRevealed = revealedReprintTabans.has(taban);
+    g.className = 'taban-group' + (reprintRevealed ? ' show-reprint' : '');
     // "kalem" here means physical pieces needing their own sticker — a piece
     // with qty:5 is 5 physical carpets, not 1, so the count must add up qty,
     // not just the number of distinct size/piece entries. Counts everything
     // shown in this taban group, printed or not.
     const physicalCount = groups[taban].reduce((s,x)=>s+bundleStickerCount(x.bundle), 0);
-    g.innerHTML = `<h3>${taban} — ${physicalCount} kalem <button class="ghost small print-taban-stickers" data-taban="${taban}" style="margin-left:10px;font-weight:normal;font-family:'Inter',sans-serif;font-size:12px;">Bu grubun etiketlerini yazdır</button></h3>`;
+    g.innerHTML = `<h3>${taban} — ${physicalCount} kalem <button class="ghost small print-taban-stickers" data-taban="${taban}" style="margin-left:10px;font-weight:normal;font-family:'Inter',sans-serif;font-size:12px;">Bu grubun etiketlerini yazdır</button> <button class="ghost small toggle-reprint-btn${reprintRevealed ? ' active' : ''}" data-taban="${taban}" style="font-weight:normal;font-family:'Inter',sans-serif;font-size:12px;">Tekrar yazdır</button></h3>`;
     groups[taban].sort((a,b)=>(isGroupCarriedOver(b.bundle)?1:0)-(isGroupCarriedOver(a.bundle)?1:0));
     groups[taban].forEach(({order,bundle})=>{
         const isSet = bundle.length>1;
@@ -7411,6 +7427,18 @@ function renderSort(){
       splitOffOneCopy(order, bundle, 'sorted', 'sortedAt');
       logActivity(`Etiket basıldı olarak işaretlendi: ${bundle[0].code} — ${order.customerName} (${label})`);
       saveState(); render();
+    };
+  });
+  // Shows/hides this one taban group's "Tekrar etiket bastır" buttons,
+  // independently of every other group — clicking Dot Taban's toggle never
+  // reveals Deri Taban's reprint buttons. Re-renders so the button's own
+  // active state and the group's class both stay in sync with the toggle.
+  wrap.querySelectorAll('.toggle-reprint-btn').forEach(b=>{
+    b.onclick = ()=>{
+      const taban = b.dataset.taban;
+      if(revealedReprintTabans.has(taban)) revealedReprintTabans.delete(taban);
+      else revealedReprintTabans.add(taban);
+      renderSort();
     };
   });
   // Reprints an already-printed sticker without touching its status — for a
