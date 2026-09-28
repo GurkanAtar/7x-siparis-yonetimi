@@ -1649,10 +1649,12 @@ let queueEditingKey = null;
 // Onayla for that one row specifically. Cleared whenever the item actually
 // resolves (either path), so it never lingers for an item that's done.
 let lostCargoRevealedKeys = new Set();
-// Same idea as queueEditingKey, but for Üretim's "Düzenle" → "Tekrar üretildi
-// olarak işaretle" flow on an already-produced item (e.g. a QC failure means
-// it needs remaking and re-confirming).
-let productionEditingKey = null;
+// Same idea as queueEditingKey, but for Üretim's "Düzenle" → "Üretildi olarak
+// işaretle" (re-confirm) flow on an already-produced item (e.g. a QC failure
+// means it needs remaking and re-confirming). A Set, not a single key — more
+// than one row can be put into edit mode at once (clicking Düzenle on row B
+// must not silently kick row A back out of edit mode).
+let productionEditingKeys = new Set();
 // Same idea again, for İhracat Üretimi's own code correction — İhracat items
 // skip Baskı öncesi's "Onaylandı + Düzenle" state entirely (coding sends them
 // straight to 'sorted', bypassing Ayırma), so a code typo caught after
@@ -1690,7 +1692,7 @@ function renderOperatorBar(){
         </select>
       </label>
       <button class="ghost small" id="logoutBtn">Çıkış yap</button>
-      <span class="muted" style="font-size:10px;margin-left:auto;" title="Bu sürümün ne zaman oluşturulduğu — canlı sitenin en güncel dosyayı çalıştırıp çalıştırmadığını doğrulamak için.">Sürüm: 2026-09-28 11:16 UTC</span>
+      <span class="muted" style="font-size:10px;margin-left:auto;" title="Bu sürümün ne zaman oluşturulduğu — canlı sitenin en güncel dosyayı çalıştırıp çalıştırmadığını doğrulamak için.">Sürüm: 2026-09-28 11:28 UTC</span>
     </div>`;
   document.getElementById('themeSelect').onchange = (e)=>{
     VALID_THEMES.forEach(t=>document.body.classList.remove(t));
@@ -7772,7 +7774,7 @@ function renderProduction(){
         const stickerCount = bundleStickerCount(bundle);
         const copyCount = stickerCount > 1 ? stickerCount : 1;
         const isProduced = bundle[0].status === 'produced';
-        const isBeingEdited = productionEditingKey === rowKey;
+        const isBeingEdited = productionEditingKeys.has(rowKey);
         for(let copyIdx=1; copyIdx<=copyCount; copyIdx++){
           const tag = document.createElement('span');
           tag.className = 'tag';
@@ -7782,7 +7784,7 @@ function renderProduction(){
           if(!isProduced){
             actionHtml = `<button class="ghost small mark-produced" data-oid="${order.id}" data-ids="${ids}">Üretildi olarak işaretle</button>`;
           } else if(isBeingEdited){
-            actionHtml = `<button class="ghost small remark-produced" data-oid="${order.id}" data-ids="${ids}">Tekrar üretildi olarak işaretle</button>`;
+            actionHtml = `<button class="ghost small remark-produced" data-oid="${order.id}" data-ids="${ids}">Üretildi olarak işaretle</button>`;
           } else {
             actionHtml = `<span style="color:var(--forest);font-weight:600">✓ Üretildi</span> <button class="ghost small edit-produced" data-oid="${order.id}" data-ids="${ids}">Düzenle</button>`;
           }
@@ -7813,19 +7815,22 @@ function renderProduction(){
     };
   });
   // "Düzenle" — switches an already-produced row into its re-confirm state
-  // (showing "Tekrar üretildi olarak işaretle" instead of the ✓ label), for
-  // when a piece needs to be remade (e.g. failed quality control) and the
-  // re-make needs its own confirmation once it's actually done.
+  // (showing "Üretildi olarak işaretle" instead of the ✓ label), for when a
+  // piece needs to be remade (e.g. failed quality control) and the re-make
+  // needs its own confirmation once it's actually done. Adds to the Set
+  // rather than replacing a single key, so clicking Düzenle on another row
+  // afterward leaves this one still in edit mode — every row put into edit
+  // mode stays there independently until it's individually re-confirmed.
   wrap.querySelectorAll('.edit-produced').forEach(b=>{
     b.onclick = ()=>{
-      productionEditingKey = b.dataset.oid + '::' + b.dataset.ids;
+      productionEditingKeys.add(b.dataset.oid + '::' + b.dataset.ids);
       renderProduction();
     };
   });
-  // "Tekrar üretildi olarak işaretle" — re-confirms production on a piece
-  // that was already marked produced once (status stays 'produced'; only the
-  // producedAt timestamp and activity log move forward), for a remake after
-  // a quality issue.
+  // "Üretildi olarak işaretle" (re-confirm variant) — re-confirms production
+  // on a piece that was already marked produced once (status stays
+  // 'produced'; only the producedAt timestamp and activity log move
+  // forward), for a remake after a quality issue.
   wrap.querySelectorAll('.remark-produced').forEach(b=>{
     b.onclick = ()=>{
       const order = state.orders.find(o=>o.id===b.dataset.oid);
@@ -7835,7 +7840,7 @@ function renderProduction(){
       bundle.forEach(i=>{ i.producedAt = now; });
       const label = bundle.length>1 ? `${displaySetLabel(bundle[0].setLabel)} (${bundle.length} parça)` : bundle[0].size;
       logActivity(`Tekrar üretildi olarak işaretlendi (yeniden üretim/kalite düzeltmesi): ${bundle[0].code} — ${order.customerName} (${label})`);
-      productionEditingKey = null;
+      productionEditingKeys.delete(b.dataset.oid + '::' + b.dataset.ids);
       saveState(); render();
     };
   });
