@@ -1692,7 +1692,7 @@ function renderOperatorBar(){
         </select>
       </label>
       <button class="ghost small" id="logoutBtn">Çıkış yap</button>
-      <span class="muted" style="font-size:10px;margin-left:auto;" title="Bu sürümün ne zaman oluşturulduğu — canlı sitenin en güncel dosyayı çalıştırıp çalıştırmadığını doğrulamak için.">Sürüm: 2026-09-28 11:51 UTC</span>
+      <span class="muted" style="font-size:10px;margin-left:auto;" title="Bu sürümün ne zaman oluşturulduğu — canlı sitenin en güncel dosyayı çalıştırıp çalıştırmadığını doğrulamak için.">Sürüm: 2026-09-28 12:07 UTC</span>
     </div>`;
   document.getElementById('themeSelect').onchange = (e)=>{
     VALID_THEMES.forEach(t=>document.body.classList.remove(t));
@@ -6428,7 +6428,7 @@ function renderOrders(){
         <td>${sizeCell}</td><td>${tabanCell}</td><td>${fringeCell}</td><td>${shapeCell}</td>
         <td>${groupCarpetCount}</td>
         <td>${groupM2.toFixed(2)}</td><td>${pricePerM2Cell}</td>
-        <td>${groupTotalCell}</td>${hidePrepaidCols ? '' : `<td>${o.prepaidAmount ? formatTL(priceToNumber(o.prepaidAmount))+' TL' : '-'}</td><td>${amountToCollect(o)===null ? '<span style="color:var(--rust);font-weight:600">Tutar girilmemiş</span>' : amountToCollect(o)===0 ? '<span class="muted">Hiçbir şey — tamamı ödendi</span>' : `<span style="font-weight:600">${formatTL(amountToCollect(o))} TL</span>`}</td>`}
+        <td>${groupTotalCell}</td>${hidePrepaidCols ? '' : `<td>${o.prepaidAmount ? formatTL(priceToNumber(o.prepaidAmount))+' TL' : '-'}</td><td>${amountToCollect(o)===null ? '<span style="color:var(--rust);font-weight:600">Tutar girilmemiş</span>' : amountToCollect(o)===0 ? '0' : `<span style="font-weight:600">${formatTL(amountToCollect(o))} TL</span>`}</td>`}
         <td>${orderAgeBadge(o)}</td>
         <td>${editBtn} <button class="ghost small del-order-item" data-id="${o.id}" data-ids="${ids}">Sil</button></td>`;
       tbody.appendChild(tr);
@@ -6507,7 +6507,7 @@ function renderOrders(){
     const collectCell = collectAmt===null
       ? '<span style="color:var(--rust);font-weight:600" title="Toplam Tutar girilmemiş — tahsil edilecek tutar bilinmiyor">Tutar girilmemiş</span>'
       : collectAmt===0
-      ? '<span class="muted">Hiçbir şey — tamamı ödendi</span>'
+      ? '0'
       : `<span style="font-weight:600">${formatTL(collectAmt)} TL</span>`;
     const rowspan = groups.length;
     // Toplam Tutar is one lump sum for the whole order (not per item), so the
@@ -7055,7 +7055,7 @@ function renderQueue(){
     const collectCell = collectAmt===null
       ? '<span style="color:var(--rust);font-weight:600">Tutar girilmemiş</span>'
       : collectAmt===0
-      ? '<span class="muted">Hiçbir şey — tamamı ödendi</span>'
+      ? '0'
       : `<span style="font-weight:600">${formatTL(collectAmt)} TL</span>`;
     const rowspan = groups.length;
 
