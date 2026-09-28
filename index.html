@@ -127,6 +127,10 @@
   .toggle-reprint-btn.active{color:#fff;background:var(--indigo);border-color:var(--indigo);}
   .taban-group .reprint-sticker{display:none;}
   .taban-group.show-reprint .reprint-sticker{display:inline-block;}
+  /* Üretim: per-row Düzenle (correction) button stays hidden until "Tüm
+     siparişleri üretildi olarak işaretle" has been clicked at least once. */
+  #productionGroups .edit-produced{display:none;}
+  #productionGroups.show-edit .edit-produced{display:inline-block;}
   .card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:18px 20px;margin-bottom:16px;}
   .card h2{font-family:'Fraunces',serif;font-size:16px;font-weight:600;margin:0 0 12px;}
   label{display:block;font-size:12px;color:var(--ink-soft);margin:0 0 4px;}
@@ -625,7 +629,7 @@
   <div id="production" class="stage-panel">
     <div id="prodSub-main" class="entry-sub-panel active">
     <div class="card">
-      <h2>Üretim <button class="ghost small print-btn" data-print="production" style="margin-left:8px;font-weight:normal;font-family:'Inter',sans-serif;font-size:12px;">Listeyi yazdır</button> <button class="ghost small excel-btn" data-excel="production" style="font-weight:normal;font-family:'Inter',sans-serif;font-size:12px;">Excel'e aktar</button></h2>
+      <h2>Üretim <button class="ghost small print-btn" data-print="production" style="margin-left:8px;font-weight:normal;font-family:'Inter',sans-serif;font-size:12px;">Listeyi yazdır</button> <button class="ghost small excel-btn" data-excel="production" style="font-weight:normal;font-family:'Inter',sans-serif;font-size:12px;">Excel'e aktar</button> <button class="ghost small" id="markAllProducedBtn" style="font-weight:normal;font-family:'Inter',sans-serif;font-size:12px;">Tüm siparişleri üretildi olarak işaretle</button></h2>
       <p class="muted" style="margin-top:-6px">Etiket basıldı, üretim başladı. Her ürünü gerçekten bittiğinde üretildi olarak işaretleyin. En uzun bekleyen en üstte, kaç gündür burada beklediğini gösteren bir rozetle birlikte — bir süredir bekleyen ve hâlâ işaretlenmemiş her şey, planlandığı gibi gitmediğinin işaretidir (gecikme, müşteri tarafından durdurulmuş, kalite kontrolden geçememiş, iptal edilmiş veya başka bir sebep) — elle kontrol etmeye değer.</p>
       <div class="row row3" style="margin-bottom:10px;">
         <div><label>Başlangıç</label><input type="date" id="prodTsFrom"></div>
@@ -1686,7 +1690,7 @@ function renderOperatorBar(){
         </select>
       </label>
       <button class="ghost small" id="logoutBtn">Çıkış yap</button>
-      <span class="muted" style="font-size:10px;margin-left:auto;" title="Bu sürümün ne zaman oluşturulduğu — canlı sitenin en güncel dosyayı çalıştırıp çalıştırmadığını doğrulamak için.">Sürüm: 2026-09-28 11:04 UTC</span>
+      <span class="muted" style="font-size:10px;margin-left:auto;" title="Bu sürümün ne zaman oluşturulduğu — canlı sitenin en güncel dosyayı çalıştırıp çalıştırmadığını doğrulamak için.">Sürüm: 2026-09-28 11:16 UTC</span>
     </div>`;
   document.getElementById('themeSelect').onchange = (e)=>{
     VALID_THEMES.forEach(t=>document.body.classList.remove(t));
@@ -2422,6 +2426,11 @@ let orderActionMode = null; // null | 'sil' | 'duzenle'
 // other, off by default. Keyed by taban name; reset on channel switch below
 // since a taban name from one channel's groups has no bearing on another's.
 let revealedReprintTabans = new Set();
+// Üretim: whether the per-row "Düzenle" correction button is revealed on
+// already-produced rows — hidden by default (even for rows produced before
+// this toggle existed), and only shown once "Tüm siparişleri üretildi olarak
+// işaretle" has actually been clicked. Resets on channel switch below.
+let productionEditRevealed = false;
 function applyOrderActionMode(){
   document.querySelectorAll('.mode-toggle-btn').forEach(b=>{
     b.classList.toggle('active', orderActionMode === b.dataset.mode);
@@ -2461,6 +2470,9 @@ document.querySelectorAll('.entry-subtab[data-sub]').forEach(t=>{
     // taban name revealed under one channel shouldn't stay revealed once
     // you're looking at a different channel's groups.
     revealedReprintTabans = new Set();
+    // Same for Üretim's Düzenle reveal — never carries over to a different
+    // channel's production list.
+    productionEditRevealed = false;
     document.getElementById('sharedItemsCard').style.display = entryModesWithForm[currentEntryMode] ? '' : 'none';
     document.getElementById('igOrdersListCard').style.display = currentEntryMode==='ihracat' ? 'none' : '';
     document.getElementById('ihracatOrdersListCard').style.display = currentEntryMode==='ihracat' ? '' : 'none';
@@ -7700,6 +7712,7 @@ function ageBadge(order, item){
 function renderProduction(){
   const wrap = document.getElementById('productionGroups');
   wrap.innerHTML='';
+  wrap.classList.toggle('show-edit', productionEditRevealed);
   renderFileFilterListGeneric('prodFileFilterList', 'prodFileFilterToggle', 'prodFileFilterSearch', selectedProdFileFilterIds, currentEntryMode, renderProduction);
   const groups = {};
   let count=0;
@@ -7826,6 +7839,38 @@ function renderProduction(){
       saveState(); render();
     };
   });
+  // Bulk-marks every not-yet-produced item currently shown in this view
+  // (whichever channel/date-range/dosya filter is active right now) as
+  // produced in one go — same effect as clicking "Üretildi olarak işaretle"
+  // on each row individually. Also reveals the per-row Düzenle correction
+  // button from here on (it stays hidden until this has been clicked at
+  // least once), so any mistake in the bulk pass can still be fixed one row
+  // at a time through the existing Düzenle → Tekrar üretildi olarak
+  // işaretle flow, untouched by this.
+  document.getElementById('markAllProducedBtn').onclick = ()=>{
+    const toMark = [];
+    Object.values(groups).forEach(list=>{
+      list.forEach(({order,bundle})=>{
+        if(bundle[0].status!=='sorted') return; // already produced, or not ready yet
+        toMark.push({order,bundle});
+      });
+    });
+    if(!toMark.length){ showMessage('Üretildi olarak işaretlenecek sipariş yok.'); return; }
+    const totalPieces = toMark.reduce((s,{bundle})=>s+bundleStickerCount(bundle), 0);
+    if(!confirm(`${totalPieces} ürün üretildi olarak işaretlenecek. Emin misiniz?`)) return;
+    const now = new Date();
+    const placedAtMs = o=>{ const d = orderPlacedAt(o); return d ? d.getTime() : null; };
+    toMark.forEach(({order,bundle})=>{
+      const placed = placedAtMs(order);
+      const lag = placed ? Math.floor((now.getTime() - placed) / (60*60*1000)) : null;
+      const label = bundle.length>1 ? `${displaySetLabel(bundle[0].setLabel)} (${bundle.length} parça)` : bundle[0].size;
+      const copies = bundleStickerCount(bundle);
+      for(let i=0;i<copies;i++) splitOffOneCopy(order, bundle, 'produced', 'producedAt');
+      logActivity(`Üretildi olarak işaretlendi: ${bundle[0].code} — ${order.customerName} (${label})${lag>0?` — sipariş tarihinden ${lag} saat sonra`:''}`);
+    });
+    productionEditRevealed = true;
+    saveState(); render();
+  };
   renderExportProduction();
 }
 
