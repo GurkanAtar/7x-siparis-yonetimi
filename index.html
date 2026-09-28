@@ -844,6 +844,36 @@
 
   <div id="finans" class="panel">
     <div class="card">
+      <h2>Finans</h2>
+      <p class="muted" style="margin-top:-6px">Kurumsal hesaplar ve bayiler ayrı sekmelerde. Bu yapı henüz kuruluyor — aşağıdaki her sekmede şimdilik sadece kanal/bayi listesi var; finans detayları (bakiye, ödeme takibi, mutabakat) sırayla buraya taşınacak.</p>
+      <div class="entry-subtabs" id="finTopTabs">
+        <div class="entry-subtab active" data-fin-top="kurumsal">Kurumsal</div>
+        <div class="entry-subtab" data-fin-top="bayiler">Bayiler</div>
+      </div>
+
+      <div id="finKurumsalPanel">
+        <div class="entry-subtabs" id="finKurumsalSubTabs" style="margin-top:12px;">
+          <div class="entry-subtab active" data-fin-kur="ig">Instagram</div>
+          <div class="entry-subtab" data-fin-kur="trendyol">Trendyol</div>
+          <div class="entry-subtab" data-fin-kur="hepsiburada">Hepsiburada</div>
+        </div>
+        <div id="finKurumsalList" style="margin-top:12px"></div>
+      </div>
+
+      <div id="finBayilerPanel" style="display:none;">
+        <div class="entry-subtabs" id="finBayilerSubTabs" style="margin-top:12px;">
+          <div class="entry-subtab active" data-fin-bayi="ig">Instagram Bayiler</div>
+          <div class="entry-subtab" data-fin-bayi="trendyol">Trendyol Bayiler</div>
+          <div class="entry-subtab" data-fin-bayi="sicaksatis">Sıcak Satış Bayiler</div>
+          <div class="entry-subtab" data-fin-bayi="ihracat">İhracat Bayiler</div>
+        </div>
+        <div id="finBayilerList" style="margin-top:12px"></div>
+      </div>
+    </div>
+
+    <details style="margin-top:4px;">
+      <summary style="cursor:pointer;font-family:'Fraunces',serif;font-size:15px;padding:10px 0;color:var(--ink-soft);">Eski Finans Kayıtları (yeni yapıya taşınmayı bekliyor)</summary>
+    <div class="card">
       <h2>Bayi Finans Takibi</h2>
       <p class="muted" style="margin-top:-6px">Her bayi için işe başlamadan önce tek bir finans modeli seçilir — ikisi birlikte çalışamaz. <b>Depozito/Bakiye</b>: bayiden alınan depozito burada bakiye olarak tutulur, her üretilen ürün m² × fiyat/m² kadar otomatik düşer. <b>Komisyonlu (kargo bizde)</b>: üretim ve kargo maliyeti bizden karşılanır, bayiye dönemsel olarak komisyon ödenir — sadece Instagram bayilerinde seçilebilir; Trendyol ve Hepsiburada bayileri her zaman Depozito/Bakiye kullanır.</p>
       <div id="dealerFinanceList"></div>
@@ -974,6 +1004,7 @@
       <h3 style="font-family:'Fraunces',serif;font-size:15px;margin:20px 0 8px;">Ödeme dönemleri — beklenen vs. gerçekleşen</h3>
       <div id="brBatchList" style="margin-top:8px"></div>
     </div>
+    </details>
   </div>
 
   <div id="messageFloatToggle" style="position:fixed;bottom:22px;right:22px;z-index:400;width:52px;height:52px;border-radius:50%;background:var(--indigo);color:#fff;display:flex;align-items:center;justify-content:center;cursor:pointer;box-shadow:0 4px 14px rgba(0,0,0,.2);font-size:22px;">
@@ -1886,7 +1917,7 @@ function renderOperatorBar(){
         </select>
       </label>
       <button class="ghost small" id="logoutBtn">Çıkış yap</button>
-      <span class="muted" style="font-size:10px;margin-left:auto;" title="Bu sürümün ne zaman oluşturulduğu — canlı sitenin en güncel dosyayı çalıştırıp çalıştırmadığını doğrulamak için.">Sürüm: 2026-09-28 17:18 UTC</span>
+      <span class="muted" style="font-size:10px;margin-left:auto;" title="Bu sürümün ne zaman oluşturulduğu — canlı sitenin en güncel dosyayı çalıştırıp çalıştırmadığını doğrulamak için.">Sürüm: 2026-09-28 17:28 UTC</span>
     </div>`;
   document.getElementById('themeSelect').onchange = (e)=>{
     VALID_THEMES.forEach(t=>document.body.classList.remove(t));
@@ -8815,6 +8846,61 @@ function renderChannels(){
 // peşinat/tahsilat) — one registry (state.paymentAccounts, managed in
 // Finans → Tahsilatlar) feeds every one of these, so the Tahsilatlar
 // reconciliation report can total them all together honestly.
+// Finans — Kurumsal / Bayiler navigation. This is the new top-level structure
+// for the tab, being built out from scratch: for now each leaf tab only
+// lists the channels/dealers in that category (name + order count). The
+// existing finance tools (Bayi Finans Takibi, Ödeme Takibi, Tahsilatlar,
+// Banka Mutabakatı) still live below, collapsed under "Eski Finans Kayıtları",
+// until each piece gets moved into its matching leaf tab here.
+let finTopMode = 'kurumsal';
+let finKurMode = 'ig';
+let finBayiMode = 'ig';
+const FIN_KUR_TYPE = { ig:'Instagram kurumsal', trendyol:'Trendyol kurumsal', hepsiburada:'Hepsiburada kurumsal' };
+const FIN_BAYI_TYPE = { ig:'Instagram bayi', trendyol:'Trendyol bayi', sicaksatis:'Sıcak Satış bayi', ihracat:'İhracat bayi' };
+function finChannelRowsHtml(type){
+  const list = state.channels.filter(c=>c.type===type);
+  if(!list.length) return '<p class="muted">Bu kategoride henüz kanal/bayi yok.</p>';
+  return `<table><thead><tr><th>Ad</th><th>Sipariş sayısı</th></tr></thead><tbody>
+    ${list.map(c=>{
+      const count = state.orders.filter(o=>channelNamesMatch(o.channel,c.name)).length;
+      return `<tr><td>${c.name}</td><td>${count}</td></tr>`;
+    }).join('')}
+  </tbody></table>`;
+}
+function renderFinNav(){
+  const kurPanel = document.getElementById('finKurumsalPanel');
+  const bayiPanel = document.getElementById('finBayilerPanel');
+  if(!kurPanel || !bayiPanel) return;
+  kurPanel.style.display = finTopMode==='kurumsal' ? '' : 'none';
+  bayiPanel.style.display = finTopMode==='bayiler' ? '' : 'none';
+  document.getElementById('finKurumsalList').innerHTML = finChannelRowsHtml(FIN_KUR_TYPE[finKurMode]);
+  document.getElementById('finBayilerList').innerHTML = finChannelRowsHtml(FIN_BAYI_TYPE[finBayiMode]);
+}
+document.querySelectorAll('#finTopTabs .entry-subtab').forEach(t=>{
+  t.addEventListener('click', ()=>{
+    document.querySelectorAll('#finTopTabs .entry-subtab').forEach(x=>x.classList.remove('active'));
+    t.classList.add('active');
+    finTopMode = t.dataset.finTop;
+    renderFinNav();
+  });
+});
+document.querySelectorAll('#finKurumsalSubTabs .entry-subtab').forEach(t=>{
+  t.addEventListener('click', ()=>{
+    document.querySelectorAll('#finKurumsalSubTabs .entry-subtab').forEach(x=>x.classList.remove('active'));
+    t.classList.add('active');
+    finKurMode = t.dataset.finKur;
+    renderFinNav();
+  });
+});
+document.querySelectorAll('#finBayilerSubTabs .entry-subtab').forEach(t=>{
+  t.addEventListener('click', ()=>{
+    document.querySelectorAll('#finBayilerSubTabs .entry-subtab').forEach(x=>x.classList.remove('active'));
+    t.classList.add('active');
+    finBayiMode = t.dataset.finBayi;
+    renderFinNav();
+  });
+});
+
 function paymentAccountOptionsHtml(selected){
   const accounts = state.paymentAccounts && state.paymentAccounts.length ? state.paymentAccounts : [];
   return `<option value="">— hesap seçin —</option>` + accounts.map(a=>
@@ -9826,7 +9912,7 @@ function renderLog(){
 }
 
 function render(){
-  renderOrders(); renderExportOrders(); renderQueue(); renderSort(); renderProduction(); renderOverview(); renderChannels(); renderUploadLog(); renderTrendyolUploadLog(); renderLog(); renderSetTemplates(); renderCommonSizes(); renderUsers(); renderOperatorBar(); renderReport(); renderCatalogInfo(); renderUretimToplam(); renderKurumsalCancelReturn(); renderPaymentTracking(); renderBestSellers(); renderPaymentAccounts(); renderTahsilatlarSummary(); renderBankReconciliation();
+  renderOrders(); renderExportOrders(); renderQueue(); renderSort(); renderProduction(); renderOverview(); renderChannels(); renderUploadLog(); renderTrendyolUploadLog(); renderLog(); renderSetTemplates(); renderCommonSizes(); renderUsers(); renderOperatorBar(); renderReport(); renderCatalogInfo(); renderUretimToplam(); renderKurumsalCancelReturn(); renderPaymentTracking(); renderBestSellers(); renderFinNav(); renderPaymentAccounts(); renderTahsilatlarSummary(); renderBankReconciliation();
   wireImageLightbox();
 }
 
