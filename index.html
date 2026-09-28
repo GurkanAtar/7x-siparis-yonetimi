@@ -583,6 +583,9 @@
       <div class="row row3" style="margin-top:14px;">
         <div><label>Başlangıç</label><input type="date" id="crFrom"></div>
         <div><label>Bitiş</label><input type="date" id="crTo"></div>
+        <div style="display:flex;align-items:flex-end;">
+          <button type="button" class="ghost small" id="crThisMonth">Bu ay</button>
+        </div>
       </div>
       <div id="crSummary" style="margin-top:14px"></div>
       <div id="crList" style="margin-top:14px"></div>
@@ -694,9 +697,9 @@
       <div class="row row3">
         <div><label>Başlangıç</label><input type="date" id="ovFrom"></div>
         <div><label>Bitiş</label><input type="date" id="ovTo"></div>
-        <div style="display:flex;align-items:flex-end;gap:8px;"><button class="ghost small" id="ovClear">Tarihleri temizle</button><button class="ghost small print-btn" data-print="overview">Listeyi yazdır</button> <button class="ghost small excel-btn" data-excel="overview">Excel'e aktar</button></div>
+        <div style="display:flex;align-items:flex-end;gap:8px;"><button class="ghost small" id="ovThisMonth">Bu ay</button><button class="ghost small" id="ovClear">Tarihleri temizle</button><button class="ghost small print-btn" data-print="overview">Listeyi yazdır</button> <button class="ghost small excel-btn" data-excel="overview">Excel'e aktar</button></div>
       </div>
-      <p class="muted" style="margin:6px 0 0">Boş bırakılırsa tüm zamanların toplamı gösterilir.</p>
+      <p class="muted" style="margin:6px 0 0">Varsayılan olarak bu ay gösterilir — "Tarihleri temizle" ile tüm zamanların toplamına geçebilirsiniz.</p>
     </div>
     <div id="overviewPrintable">
     <div class="stat-grid" id="statGrid"></div>
@@ -801,6 +804,7 @@
         <div><label>Kanal</label><select id="repChannel"><option value="">Tüm kanallar</option></select></div>
       </div>
       <button id="runReport">Raporu çalıştır</button>
+      <button type="button" class="ghost small" id="repThisMonth" style="margin-left:8px;">Bu ay</button>
       <p class="muted" style="margin-top:8px">m², ölçü metninden genişlik × uzunluk olarak hesaplanır (örn. 200x300 → 6 m²) — bu dikdörtgen bir parça varsayar, bu yüzden Oval/Yuvarlak ürünler yaklaşık değerdir. Satışlar sipariş başına bir kez toplanır (kalem başına değil, çünkü fiyat sipariş bazında kaydedilir), bu yüzden bugüne kadar her şeyi dahil etmek için "Bitiş" alanını boş bırakın.</p>
       <div id="reportResults" style="margin-top:14px"></div>
     </div>
@@ -1739,7 +1743,7 @@ function renderOperatorBar(){
         </select>
       </label>
       <button class="ghost small" id="logoutBtn">Çıkış yap</button>
-      <span class="muted" style="font-size:10px;margin-left:auto;" title="Bu sürümün ne zaman oluşturulduğu — canlı sitenin en güncel dosyayı çalıştırıp çalıştırmadığını doğrulamak için.">Sürüm: 2026-09-28 14:28 UTC</span>
+      <span class="muted" style="font-size:10px;margin-left:auto;" title="Bu sürümün ne zaman oluşturulduğu — canlı sitenin en güncel dosyayı çalıştırıp çalıştırmadığını doğrulamak için.">Sürüm: 2026-09-28 14:43 UTC</span>
     </div>`;
   document.getElementById('themeSelect').onchange = (e)=>{
     VALID_THEMES.forEach(t=>document.body.classList.remove(t));
@@ -3146,16 +3150,55 @@ let selectedProdFileFilterIds = new Set();
 wireFileFilterDropdown('queue', selectedQueueFileFilterIds, ()=>renderQueue());
 wireFileFilterDropdown('sort', selectedSortFileFilterIds, ()=>renderSort());
 wireFileFilterDropdown('prod', selectedProdFileFilterIds, ()=>renderProduction());
-document.getElementById('queueTsFrom').addEventListener('change', renderQueue);
+// A manual edit to "Başlangıç" pins it (auto flag off); clearing it by hand
+// resumes auto-tracking from the next render — see setAutoFloorDate above.
+document.getElementById('queueTsFrom').addEventListener('change', ()=>{
+  queueTsFromAuto = !document.getElementById('queueTsFrom').value;
+  renderQueue();
+});
 document.getElementById('queueTsTo').addEventListener('change', renderQueue);
-document.getElementById('sortTsFrom').addEventListener('change', renderSort);
+document.getElementById('sortTsFrom').addEventListener('change', ()=>{
+  sortTsFromAuto = !document.getElementById('sortTsFrom').value;
+  renderSort();
+});
 document.getElementById('sortTsTo').addEventListener('change', renderSort);
-document.getElementById('prodTsFrom').addEventListener('change', renderProduction);
+document.getElementById('prodTsFrom').addEventListener('change', ()=>{
+  prodTsFromAuto = !document.getElementById('prodTsFrom').value;
+  renderProduction();
+});
 document.getElementById('prodTsTo').addEventListener('change', renderProduction);
 // Helper used inside renderQueue/renderSort/renderProduction to apply both
 // the Dosya and date filters to an order list — manual entries (no batchId)
 // are included under "Manuel girişler", matching how selecting no file at
 // all already means "show everything, uploads and manual entries alike".
+// Auto-advancing "Başlangıç" for the three work-queue views (Baskı öncesi,
+// Ayırma & etiketler, Üretim): rather than a fixed default someone has to
+// keep pushing forward by hand, it always tracks the oldest order that
+// still has something genuinely waiting at THIS stage (the candidate set
+// each view computes for itself, before the date filter narrows it
+// further). Once every item on that oldest order clears the stage, it drops
+// out of the candidate set on its own and the floor jumps to whatever's
+// oldest next — no manual upkeep needed.
+// Still fully overridable: a field only auto-updates while its own "auto"
+// flag is true. Picking an earlier date by hand flips that field's flag off
+// (pinning the manual choice so a look-back for a Düzenle correction on an
+// already-produced order isn't fought over on every re-render); clearing
+// the field by hand flips it back on, resuming auto-tracking from the next
+// render. Bitiş is untouched by any of this — usually left blank, through today.
+let queueTsFromAuto = true, sortTsFromAuto = true, prodTsFromAuto = true;
+function setAutoFloorDate(fieldId, candidateOrders, isAuto){
+  const el = document.getElementById(fieldId);
+  if(!el) return;
+  el.title = isAuto
+    ? 'Otomatik: bu aşamada hâlâ bekleyen en eski siparişin tarihi — tüm kalemleri tamamlanınca kendiliğinden ilerler. Elle bir tarih seçerseniz burada sabit kalır; alanı boşaltırsanız otomatiğe döner.'
+    : 'Elle seçildi — otomatik takipten çıktı. Otomatiğe dönmek için alanı boşaltın.';
+  if(!isAuto) return; // user has manually pinned an earlier date — leave it alone
+  const floorDate = candidateOrders.reduce((min,o)=>{
+    const d = parseDMY(o.date);
+    return d && (!min || d < min) ? d : min;
+  }, null);
+  el.value = floorDate ? toDateInputValue(floorDate) : '';
+}
 function applyQueueFilters(orders, selectedSet, fromId, toId){
   let result = orders;
   if(selectedSet.size){
@@ -4016,6 +4059,12 @@ function renderReport(){
 document.getElementById('runReport').onclick = renderReport;
 ['repFrom','repTo','repChannel'].forEach(id=>{
   document.getElementById(id).addEventListener('change', renderReport);
+});
+document.getElementById('repThisMonth').addEventListener('click', ()=>{
+  const now = new Date();
+  document.getElementById('repFrom').value = toDateInputValue(new Date(now.getFullYear(), now.getMonth(), 1));
+  document.getElementById('repTo').value = toDateInputValue(now);
+  renderReport();
 });
 
 // Toplam Üretim — day-by-day production totals (m²) broken down by taban,
@@ -7309,8 +7358,10 @@ function renderQueue(){
   // Merkezi — each channel gets its own fully separate Baskı öncesi now,
   // instead of one shared list grouped by channel headers.
   const relevantStatuses = currentEntryMode==='ihracat' ? ['pending','coded','sorted'] : ['pending','coded'];
+  const queueCandidateOrders = state.orders.filter(o=>o.items.some(i=>relevantStatuses.includes(i.status)) && channelCategoryForNumbering(o.channel)===currentEntryMode);
+  setAutoFloorDate('queueTsFrom', queueCandidateOrders, queueTsFromAuto);
   const ordersWithItemsHere = applyQueueFilters(
-    state.orders.filter(o=>o.items.some(i=>relevantStatuses.includes(i.status)) && channelCategoryForNumbering(o.channel)===currentEntryMode),
+    queueCandidateOrders,
     selectedQueueFileFilterIds, 'queueTsFrom', 'queueTsTo'
   );
   // Grouped by upload batch, most recently uploaded file's block at the
@@ -7702,17 +7753,13 @@ function renderSort(){
   let count=0;
   const seenSets = new Set();
   const itemNumbers = computeItemNumbers();
-  const filteredOrders = applyQueueFilters(state.orders, selectedSortFileFilterIds, 'sortTsFrom', 'sortTsTo');
+  const sortCandidateOrders = state.orders.filter(o=>
+    o.channel!=='İhracat' && channelCategoryForNumbering(o.channel)===currentEntryMode &&
+    o.items.some(i=>i.status==='coded' || i.status==='sorted')
+  );
+  setAutoFloorDate('sortTsFrom', sortCandidateOrders, sortTsFromAuto);
+  const filteredOrders = applyQueueFilters(sortCandidateOrders, selectedSortFileFilterIds, 'sortTsFrom', 'sortTsTo');
   filteredOrders.forEach(o=>{
-    // İhracat skips this stage entirely — coding sends it straight to
-    // 'sorted' with no actual sticker step in between, so it never belongs
-    // here regardless of status (it gets its own dedicated view in Üretim →
-    // İhracat Üretimi instead).
-    if(o.channel==='İhracat') return;
-    // Scoped to whichever channel is currently selected at the top of
-    // Sipariş Merkezi — each channel gets its own fully separate Ayırma &
-    // etiketler now, instead of one shared list grouped by channel headers.
-    if(channelCategoryForNumbering(o.channel) !== currentEntryMode) return;
     // A sorted (printed) copy stays visible here too now, rather than
     // disappearing the moment its sticker is printed — its own unique
     // setLabel suffix (from splitOffOneCopy) already keeps it as its own
@@ -8122,6 +8169,17 @@ function renderProduction(){
   let count=0;
   const seenSets = new Set();
   const itemNumbers = computeItemNumbers();
+  // Floor is based only on orders that still have something NOT YET
+  // produced — once every item is produced, that order stops pulling the
+  // floor back, exactly the "deciding factor is produced or not" rule. The
+  // order itself may still show below (a produced copy stays visible with
+  // its ✓/Düzenle), but only for as long as its date is inside whatever
+  // range (auto or manually pinned) ends up in effect.
+  const prodCandidateOrders = state.orders.filter(o=>
+    o.channel!=='İhracat' && channelCategoryForNumbering(o.channel)===currentEntryMode &&
+    o.items.some(i=>i.status==='sorted')
+  );
+  setAutoFloorDate('prodTsFrom', prodCandidateOrders, prodTsFromAuto);
   const filteredOrders = applyQueueFilters(state.orders, selectedProdFileFilterIds, 'prodTsFrom', 'prodTsTo');
   filteredOrders.forEach(o=>{
     if(o.channel==='İhracat') return; // İhracat gets its own partial-quantity view below
@@ -8525,6 +8583,12 @@ document.getElementById('ovClear').addEventListener('click', ()=>{
   document.getElementById('ovTo').value = '';
   renderOverview();
 });
+document.getElementById('ovThisMonth').addEventListener('click', ()=>{
+  const now = new Date();
+  document.getElementById('ovFrom').value = toDateInputValue(new Date(now.getFullYear(), now.getMonth(), 1));
+  document.getElementById('ovTo').value = toDateInputValue(now);
+  renderOverview();
+});
 document.getElementById('tsFrom').addEventListener('change', renderOrders);
 document.getElementById('tsTo').addEventListener('change', renderOrders);
 
@@ -8825,6 +8889,20 @@ function renderKurumsalCancelReturn(){
 }
 document.getElementById('crFrom').addEventListener('change', renderKurumsalCancelReturn);
 document.getElementById('crTo').addEventListener('change', renderKurumsalCancelReturn);
+document.getElementById('crThisMonth').addEventListener('click', ()=>{
+  const now = new Date();
+  document.getElementById('crFrom').value = toDateInputValue(new Date(now.getFullYear(), now.getMonth(), 1));
+  document.getElementById('crTo').value = toDateInputValue(now);
+  renderKurumsalCancelReturn();
+});
+// Defaults to the current month, same as Toplam Üretim — an empty range
+// showing figures with no visible filter applied read as broken, not as
+// "tüm zamanlar".
+(function initCancelReturnDefaults(){
+  const now = new Date();
+  document.getElementById('crFrom').value = toDateInputValue(new Date(now.getFullYear(), now.getMonth(), 1));
+  document.getElementById('crTo').value = toDateInputValue(now);
+})();
 
 // Every Instagram bayi, always shown here regardless of the type filter
 // above (that filter only affects the add/merge lists) — so a dealer added
@@ -9025,6 +9103,17 @@ document.getElementById('tsFrom').value = monthStartVal;
 document.getElementById('tsTo').value = todayVal;
 document.getElementById('exTsFrom').value = monthStartVal;
 document.getElementById('exTsTo').value = todayVal;
+// Same reasoning for the two summary/report views (Genel Bakış, Raporlar) —
+// both re-render live off whatever these hold, so an empty range that still
+// shows figures reads as broken rather than as "tüm zamanlar". Deliberately
+// NOT applied to the three work-queue filters (Baskı öncesi/Ayırma &
+// etiketler/Üretim) or the İade/İptal order picker's own default handled
+// separately — those are backlog views where hiding an earlier month's
+// still-pending orders would hide real work, not just narrow a report.
+document.getElementById('ovFrom').value = monthStartVal;
+document.getElementById('ovTo').value = todayVal;
+document.getElementById('repFrom').value = monthStartVal;
+document.getElementById('repTo').value = todayVal;
 // loadState() is no longer called here directly — it now runs from
 // enterApp(), right after a successful Supabase login (see initAuth() near
 // the top of this script), since nothing should load before we know who's
