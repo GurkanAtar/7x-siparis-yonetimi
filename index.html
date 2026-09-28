@@ -1692,7 +1692,7 @@ function renderOperatorBar(){
         </select>
       </label>
       <button class="ghost small" id="logoutBtn">Çıkış yap</button>
-      <span class="muted" style="font-size:10px;margin-left:auto;" title="Bu sürümün ne zaman oluşturulduğu — canlı sitenin en güncel dosyayı çalıştırıp çalıştırmadığını doğrulamak için.">Sürüm: 2026-09-28 11:43 UTC</span>
+      <span class="muted" style="font-size:10px;margin-left:auto;" title="Bu sürümün ne zaman oluşturulduğu — canlı sitenin en güncel dosyayı çalıştırıp çalıştırmadığını doğrulamak için.">Sürüm: 2026-09-28 11:51 UTC</span>
     </div>`;
   document.getElementById('themeSelect').onchange = (e)=>{
     VALID_THEMES.forEach(t=>document.body.classList.remove(t));
@@ -7029,15 +7029,25 @@ function renderQueue(){
 
   sortedOrders.forEach(o=>{
     const relevant = o.items.filter(i=>relevantStatuses.includes(i.status));
-    // One row per item — a set (even multi-piece) still counts as one row, same
-    // convention used everywhere else in the app.
+    // One row per item — except a genuine multi-piece set (3-piece, 5-piece,
+    // whatever) is broken back apart into one row PER PIECE here too, same
+    // as Ayırma & etiketler and Üretim: each piece gets its own code input
+    // and its own Onayla/Düzenle, fully independent of its set-mates. Only
+    // the two specific bathroom-mat presets (isCollapsiblePair) stay coded
+    // together as one row — that one is genuinely sold/labeled as a single
+    // product, everything else isn't.
     const groups = [];
     const seenKeys = new Set();
     relevant.forEach(item=>{
       const key = item.setLabel || item.id;
       if(seenKeys.has(key)) return;
       seenKeys.add(key);
-      groups.push(item.setLabel ? relevant.filter(i=>i.setLabel===item.setLabel) : [item]);
+      const bundle = item.setLabel ? relevant.filter(i=>i.setLabel===item.setLabel) : [item];
+      if(bundle.length>1 && !isCollapsiblePair(bundle)){
+        bundle.forEach(single=>groups.push([single]));
+      } else {
+        groups.push(bundle);
+      }
     });
     count += groups.reduce((s,g)=>s+g.length,0);
 
