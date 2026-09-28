@@ -1917,7 +1917,7 @@ function renderOperatorBar(){
         </select>
       </label>
       <button class="ghost small" id="logoutBtn">Çıkış yap</button>
-      <span class="muted" style="font-size:10px;margin-left:auto;" title="Bu sürümün ne zaman oluşturulduğu — canlı sitenin en güncel dosyayı çalıştırıp çalıştırmadığını doğrulamak için.">Sürüm: 2026-09-28 17:28 UTC</span>
+      <span class="muted" style="font-size:10px;margin-left:auto;" title="Bu sürümün ne zaman oluşturulduğu — canlı sitenin en güncel dosyayı çalıştırıp çalıştırmadığını doğrulamak için.">Sürüm: 2026-09-28 18:11 UTC</span>
     </div>`;
   document.getElementById('themeSelect').onchange = (e)=>{
     VALID_THEMES.forEach(t=>document.body.classList.remove(t));
@@ -7906,12 +7906,20 @@ function accrueDealerDepositOnProduction(order, bundle){
   const m2 = bundle.reduce((s,i)=>s+sizeToM2(i.size),0);
   if(!m2) return;
   const amount = m2 * price;
-  chan.depositBalance = (chan.depositBalance||0) - amount;
+  const balanceBefore = chan.depositBalance||0;
+  chan.depositBalance = balanceBefore - amount;
   chan.financeLedger = chan.financeLedger || [];
   chan.financeLedger.push({
     date: new Date().toISOString(), type: 'production_deduction', amount,
     note: `${order.customerName||''} — ${bundle.map(i=>i.size).join(', ')} (${m2.toFixed(2)} m²)`.trim(),
   });
+  // Non-blocking low-balance warning — logged the moment a production
+  // deduction pushes the dealer's deposit at/below their threshold (only
+  // fires on the crossing itself, not on every deduction after). Never
+  // stops the deduction or the sale from going through.
+  if(typeof chan.lowBalanceThreshold==='number' && balanceBefore > chan.lowBalanceThreshold && chan.depositBalance <= chan.lowBalanceThreshold){
+    logActivity(`⚠ Depozito uyarısı: "${chan.name}" bakiyesi eşiğin altına düştü — ${formatTL(chan.depositBalance)} TL (eşik: ${formatTL(chan.lowBalanceThreshold)} TL)`);
+  }
 }
 function splitOffOneCopy(order, bundle, newStatus, timestampField){
   const remainingQty = bundle[0].qty || 1;
@@ -8867,6 +8875,90 @@ function finChannelRowsHtml(type){
     }).join('')}
   </tbody></table>`;
 }
+// Trendyol Bayiler — the first leaf tab built out with real content: deposit
+// registry (fiyat/m², bakiye, uyarı eşiği, depozito ekleme) plus a rolling
+// ledger. Deduction itself still happens at production (accrueDealerDepositOn-
+// Production, hooked into Üretim) — this is the dashboard/registry view of
+// that same data, with the addition of a per-dealer low-balance threshold.
+function renderFinBayilerTrendyol(){
+  const list = state.channels.filter(c=>c.type==='Trendyol bayi');
+  if(!list.length) return '<p class="muted">Henüz Trendyol bayisi yok — Satış Kanalı ve Marka Kayıt sekmesinden ekleyin.</p>';
+  const fmt = n => (n||0).toLocaleString('tr-TR', {minimumFractionDigits:2, maximumFractionDigits:2});
+  return list.map(c=>{
+    const idx = state.channels.indexOf(c);
+    const balance = c.depositBalance || 0;
+    const threshold = typeof c.lowBalanceThreshold==='number' ? c.lowBalanceThreshold : null;
+    const isLow = threshold!=null && balance <= threshold;
+    const balanceColor = balance < 0 ? 'var(--rust)' : (isLow ? 'var(--rust)' : 'var(--forest)');
+    const totalSold = state.orders.filter(o=>channelNamesMatch(o.channel,c.name) && o.saleType!=='Kayıp Kargo').reduce((s,o)=>s+priceToNumber(o.price), 0);
+    const totalDeposited = (c.financeLedger||[]).filter(l=>l.type==='topup').reduce((s,l)=>s+l.amount, 0);
+    const ledger = (c.financeLedger||[]).slice(-6).reverse();
+    const ledgerHtml = ledger.length
+      ? `<div class="muted" style="font-size:12px;margin-top:8px;">Son hareketler: ${ledger.map(l=>{
+          const d = new Date(l.date).toLocaleDateString('tr-TR');
+          const label = l.type==='production_deduction' ? 'Üretim düşümü' : l.type==='topup' ? 'Depozito eklendi' : l.type;
+          return `${d} — ${label}: ${fmt(l.amount)} TL${l.account?` (${l.account})`:''}`;
+        }).join(' · ')}</div>`
+      : '';
+    return `
+    <div style="border:1px solid ${isLow?'var(--rust)':'var(--line)'};border-radius:10px;padding:14px;margin-bottom:12px;${isLow?'background:var(--rust-bg);':''}">
+      <div style="display:flex;justify-content:space-between;align-items:center;">
+        <strong>${c.name}</strong>
+        ${isLow ? `<span style="color:var(--rust);font-weight:700;font-size:12px;">⚠ Bakiye eşik altında</span>` : ''}
+      </div>
+      <div class="row" style="grid-template-columns:1fr 1fr 1fr;display:grid;gap:8px;align-items:flex-end;margin-top:10px;">
+        <div><label>Fiyat/m² (TL)</label><input class="fbt-price" data-idx="${idx}" value="${c.pricePerM2!=null?c.pricePerM2:''}" placeholder="örn. 350"></div>
+        <div><label>Bakiye</label><input disabled value="${fmt(balance)} TL" style="background:var(--paper);color:${balanceColor};font-weight:600"></div>
+        <div><label>Uyarı eşiği (TL)</label><input class="fbt-threshold" data-idx="${idx}" value="${threshold!=null?threshold:''}" placeholder="örn. 5000"></div>
+      </div>
+      <div class="row" style="grid-template-columns:1fr 1fr;display:grid;gap:8px;align-items:flex-end;margin-top:8px;">
+        <div><label>Toplam satılan tutar (tüm zamanlar)</label><input disabled value="${fmt(totalSold)} TL" style="background:var(--paper);color:var(--ink-soft)"></div>
+        <div><label>Toplam yatırılan depozito (tüm zamanlar)</label><input disabled value="${fmt(totalDeposited)} TL" style="background:var(--paper);color:var(--ink-soft)"></div>
+      </div>
+      <div class="row" style="grid-template-columns:1fr 1fr auto;display:grid;gap:8px;align-items:flex-end;margin-top:8px;">
+        <div><label>Depozito ekle (TL)</label><input class="fbt-topup-amount" data-idx="${idx}" placeholder="örn. 10000"></div>
+        <div><label>Hesap</label><select class="fbt-topup-account" data-idx="${idx}">${paymentAccountOptionsHtml()}</select></div>
+        <button class="ghost small fbt-topup-btn" data-idx="${idx}">Ekle</button>
+      </div>
+      ${ledgerHtml}
+    </div>`;
+  }).join('');
+}
+function wireFinBayilerTrendyol(el){
+  el.querySelectorAll('.fbt-price').forEach(inp=>{
+    inp.onchange = ()=>{
+      const c = state.channels[parseInt(inp.dataset.idx)];
+      const val = parseFloat((inp.value||'').replace(',','.'));
+      c.pricePerM2 = isNaN(val) ? undefined : val;
+      logActivity(`Trendyol bayi fiyat/m² güncellendi: "${c.name}" → ${isNaN(val)?'(boş)':val+' TL'}`);
+      saveState(); render();
+    };
+  });
+  el.querySelectorAll('.fbt-threshold').forEach(inp=>{
+    inp.onchange = ()=>{
+      const c = state.channels[parseInt(inp.dataset.idx)];
+      const val = parseFloat((inp.value||'').replace(',','.'));
+      c.lowBalanceThreshold = isNaN(val) ? undefined : val;
+      logActivity(`Trendyol bayi uyarı eşiği güncellendi: "${c.name}" → ${isNaN(val)?'(boş)':val+' TL'}`);
+      saveState(); render();
+    };
+  });
+  el.querySelectorAll('.fbt-topup-btn').forEach(btn=>{
+    btn.onclick = ()=>{
+      const idx = parseInt(btn.dataset.idx);
+      const c = state.channels[idx];
+      const input = el.querySelector(`.fbt-topup-amount[data-idx="${idx}"]`);
+      const amount = parseFloat((input.value||'').replace(',','.'));
+      if(!amount){ input.style.borderColor = 'var(--rust)'; return; }
+      const account = el.querySelector(`.fbt-topup-account[data-idx="${idx}"]`).value;
+      c.depositBalance = (c.depositBalance||0) + amount;
+      c.financeLedger = c.financeLedger || [];
+      c.financeLedger.push({date:new Date().toISOString(), type:'topup', amount, account, note:'Depozito eklendi'});
+      logActivity(`Trendyol bayi depozitosu eklendi: "${c.name}" — ${amount.toLocaleString('tr-TR')} TL${account?` (${account})`:''} (yeni bakiye: ${(c.depositBalance||0).toLocaleString('tr-TR')} TL)`);
+      saveState(); render();
+    };
+  });
+}
 function renderFinNav(){
   const kurPanel = document.getElementById('finKurumsalPanel');
   const bayiPanel = document.getElementById('finBayilerPanel');
@@ -8874,7 +8966,13 @@ function renderFinNav(){
   kurPanel.style.display = finTopMode==='kurumsal' ? '' : 'none';
   bayiPanel.style.display = finTopMode==='bayiler' ? '' : 'none';
   document.getElementById('finKurumsalList').innerHTML = finChannelRowsHtml(FIN_KUR_TYPE[finKurMode]);
-  document.getElementById('finBayilerList').innerHTML = finChannelRowsHtml(FIN_BAYI_TYPE[finBayiMode]);
+  const bayilerListEl = document.getElementById('finBayilerList');
+  if(finBayiMode==='trendyol'){
+    bayilerListEl.innerHTML = renderFinBayilerTrendyol();
+    wireFinBayilerTrendyol(bayilerListEl);
+  } else {
+    bayilerListEl.innerHTML = finChannelRowsHtml(FIN_BAYI_TYPE[finBayiMode]);
+  }
 }
 document.querySelectorAll('#finTopTabs .entry-subtab').forEach(t=>{
   t.addEventListener('click', ()=>{
