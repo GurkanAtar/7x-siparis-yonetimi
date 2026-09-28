@@ -1871,7 +1871,7 @@ function renderOperatorBar(){
         </select>
       </label>
       <button class="ghost small" id="logoutBtn">Çıkış yap</button>
-      <span class="muted" style="font-size:10px;margin-left:auto;" title="Bu sürümün ne zaman oluşturulduğu — canlı sitenin en güncel dosyayı çalıştırıp çalıştırmadığını doğrulamak için.">Sürüm: 2026-09-28 16:27 UTC</span>
+      <span class="muted" style="font-size:10px;margin-left:auto;" title="Bu sürümün ne zaman oluşturulduğu — canlı sitenin en güncel dosyayı çalıştırıp çalıştırmadığını doğrulamak için.">Sürüm: 2026-09-28 16:58 UTC</span>
     </div>`;
   document.getElementById('themeSelect').onchange = (e)=>{
     VALID_THEMES.forEach(t=>document.body.classList.remove(t));
@@ -4069,6 +4069,35 @@ function renderReport(){
   });
   const familyChartData = Object.entries(byFamilyChart).map(([fam,value])=>({label:FAMILY_LABELS[fam]||fam, value})).sort((a,b)=>b.value-a.value);
 
+  // Çok Satanlar — best-selling designs, ranked by baskı kodu (the print/
+  // design code assigned during Ayırma & etiketler). Only coded items count
+  // toward this — an item that hasn't reached that stage yet has no code and
+  // simply doesn't contribute; nothing else in the app tracks a design
+  // identity finer-grained than taban (material type), so this is the
+  // closest thing to a per-design ranking the data supports.
+  const byCode = {};
+  rows.forEach(({o,item,m2})=>{
+    const code = (item.code||'').trim();
+    if(!code) return;
+    byCode[code] = byCode[code] || { qty:0, m2:0, byChannel:{} };
+    byCode[code].qty += item.qty;
+    byCode[code].m2 += m2;
+    const fam = channelCategoryForNumbering(o.channel);
+    byCode[code].byChannel[fam] = (byCode[code].byChannel[fam]||0) + item.qty;
+  });
+  const bestSellerCodes = Object.entries(byCode).sort((a,b)=>b[1].qty-a[1].qty);
+  const bestSellersRows = bestSellerCodes.map(([code,s])=>{
+    const chanBreakdown = Object.entries(s.byChannel).sort((a,b)=>b[1]-a[1]).map(([fam,q])=>`${FAMILY_LABELS[fam]||fam}: ${q}`).join(', ');
+    return `<tr><td>${code}</td><td>${s.qty}</td><td>${s.m2.toFixed(2)}</td><td class="muted" style="font-size:12px;">${chanBreakdown}</td></tr>`;
+  }).join('');
+  const bestSellersChartData = bestSellerCodes.slice(0,15).map(([code,s])=>({label:code, value:s.qty}));
+  const bestSellersSectionHtml = bestSellerCodes.length ? `
+    <h3 style="font-family:'Fraunces',serif;font-size:15px;margin:20px 0 8px;">Çok Satanlar</h3>
+    <p class="muted" style="margin-top:-4px">Baskı koduna göre sıralanmış — sadece kodlanmış (Ayırma &amp; etiketler'e ulaşmış) kalemler sayılır. ${chanFilter ? 'Seçili kanala göre filtrelenmiş.' : 'Kanal dağılımı sütunu, seçili tarih aralığındaki tüm kanalları kapsar — belirli bir kanala göre görmek için yukarıdan kanal seçin.'}</p>
+    ${svgHBarChartHtml(bestSellersChartData, {color:'var(--indigo)', fmt:n=>n+' adet'})}
+    <table style="margin-top:12px"><thead><tr><th>Kod</th><th>Adet</th><th>m²</th><th>Kanal dağılımı</th></tr></thead><tbody>${bestSellersRows}</tbody></table>
+  ` : '';
+
   // Kurumsal vs Bayi payı — Sıcak Satış ve İhracat tamamen bayi tabanlı
   // olduğu için (Kurumsal karşılığı yok) doğrudan Bayi tarafına sayılır.
   let kurumsalTutar = 0, bayiTutar = 0;
@@ -4134,6 +4163,8 @@ function renderReport(){
     <p class="muted" style="margin-top:8px">Üretilen Ürün Tutarı, sadece TÜM kalemleri üretilmiş siparişlerin tutarını sayar — kısmen üretilmiş bir siparişin tutarı, tutar sipariş bazında kayıtlı olduğundan (kalem bazında değil) bölüştürülemez ve dahil edilmez.</p>
 
     ${chartsHtml}
+
+    ${bestSellersSectionHtml}
 
     ${lostCargoSectionHtml}
 
