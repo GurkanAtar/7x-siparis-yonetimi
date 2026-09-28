@@ -262,7 +262,6 @@
       <div class="entry-subtab" data-stage="sort" id="stageBtn-sort">Ayırma &amp; etiketler</div>
       <div class="entry-subtab" data-stage="production">Üretim</div>
       <div class="entry-subtab" data-stage="cancelreturn">İade/İptal</div>
-      <div class="entry-subtab" data-stage="paymenttracking">Ödeme Takibi</div>
       <div class="entry-subtab" data-stage="bestsellers">Çok Satanlar</div>
     </div>
 
@@ -594,81 +593,6 @@
     </div>
   </div>
 
-  <div id="paymenttracking" class="stage-panel">
-    <div class="card" id="ptNotApplicableCard" style="display:none;">
-      <h2>Ödeme Takibi</h2>
-      <p class="muted" style="margin-top:-6px">Bu kanal için ödeme takibi burada değil. Instagram/Trendyol/Hepsiburada bayileri Finans sekmesindeki Bayi Finans Takibi'nden, Kurumsal hesapları İade/İptal'den takip edilir.</p>
-    </div>
-
-    <div class="card" id="ptSicakSatisCard" style="display:none;">
-      <h2>Sıcak Satış — Ödeme Takibi</h2>
-      <p class="muted" style="margin-top:-6px">Sipariş girildikten/yüklendikten sonra finans departmanı hangi ödeme yöntemlerinin kullanıldığını burada işaretler. <b>Kredi</b> (vadeli): ya sonraki siparişe ertelenir (önceki sipariş tam ödenmeden yeni sipariş girilirse burada sadece uyarı gösterilir, engellenmez), ya da belirli gün sayısı içinde vadeli olarak kapanır.</p>
-      <div class="row row2">
-        <div><label>Sipariş seç</label><select id="ptSsOrderSelect"></select></div>
-        <div><label>Toplam Tutar</label><input id="ptSsTotal" disabled style="background:var(--paper);color:var(--ink-soft)"></div>
-      </div>
-      <div id="ptSsWarning" style="display:none;margin-top:10px;padding:10px;border-radius:8px;background:var(--rust-bg);border:1px solid var(--rust);color:var(--rust);font-size:13px;"></div>
-      <div class="row" style="grid-template-columns:1fr 1fr 1fr;display:grid;gap:10px;margin-top:12px;">
-        <div><label>Banka Havalesi (TL)</label><input id="ptSsBanka" placeholder="0"></div>
-        <div><label>Nakit (TL)</label><input id="ptSsNakit" placeholder="0"></div>
-        <div><label>Kredi Kartı (TL)</label><input id="ptSsKart" placeholder="0"></div>
-      </div>
-      <div class="row" style="grid-template-columns:1fr 1fr 1fr;display:grid;gap:10px;margin-top:6px;">
-        <div><label>Banka Hesabı</label><select id="ptSsBankaHesap"></select></div>
-        <div><label>Nakit Hesabı</label><select id="ptSsNakitHesap"></select></div>
-        <div><label>Kredi Kartı Hesabı</label><select id="ptSsKartHesap"></select></div>
-      </div>
-      <div class="row" style="grid-template-columns:1fr 1fr 1fr;display:grid;gap:10px;margin-top:10px;">
-        <div><label>Kredi Kartı Komisyonu %</label><input id="ptSsKartKomisyon" placeholder="örn. 2.5"></div>
-        <div><label>Kredi/Vadeli (TL)</label><input id="ptSsKredi" placeholder="0"></div>
-        <div><label>Kredi Türü</label>
-          <select id="ptSsKrediType">
-            <option value="">—</option>
-            <option value="ertelenmis">Sonraki siparişe ertelenmiş</option>
-            <option value="vade">Belirli gün vadeli</option>
-          </select>
-        </div>
-      </div>
-      <div class="row" style="grid-template-columns:1fr 1fr 1fr;display:grid;gap:10px;margin-top:10px;">
-        <div id="ptSsGunWrap" style="display:none;"><label>Vade (gün)</label><input id="ptSsGun" placeholder="örn. 30"></div>
-        <div><label>Kredi tahsil edilince Hesap</label><select id="ptSsKrediHesap"></select></div>
-        <div><label>Not (opsiyonel)</label><input id="ptSsNote" placeholder=""></div>
-      </div>
-      <div id="ptSsSumRow" style="margin-top:10px;font-size:13px;"></div>
-      <button type="button" id="ptSsSave" style="margin-top:10px;width:auto;">Ödeme bilgisini kaydet</button>
-      <h3 style="font-family:'Fraunces',serif;font-size:15px;margin:20px 0 8px;">Ödenmemiş ertelenmiş krediler</h3>
-      <div id="ptSsOutstandingList"></div>
-    </div>
-
-    <div class="card" id="ptIhracatCard" style="display:none;">
-      <h2>İhracat — Ödeme Takibi</h2>
-      <p class="muted" style="margin-top:-6px">Peşinat ve teslimat tarihi elle girilir; teslimat sonrası gelen ödemeler alttaki listeye tek tek eklenir. Kalan bakiye buradan otomatik hesaplanır.</p>
-      <div class="row row2">
-        <div><label>Sipariş seç</label><select id="ptExOrderSelect"></select></div>
-        <div><label>Toplam Tutar (TL)</label><input id="ptExTotal" disabled style="background:var(--paper);color:var(--ink-soft)"></div>
-      </div>
-      <div class="row row3" style="margin-top:10px;">
-        <div><label>Peşinat (TL)</label><input id="ptExPrepaid" placeholder="0"></div>
-        <div><label>Peşinat Hesabı</label><select id="ptExPrepaidHesap"></select></div>
-        <div><label>Teslimat tarihi</label><input type="date" id="ptExDeliveryDate"></div>
-      </div>
-      <div class="row row3" style="margin-top:10px;">
-        <div style="display:flex;align-items:flex-end;"><button type="button" id="ptExSave" style="width:100%;">Kaydet</button></div>
-      </div>
-      <div id="ptExBalance" style="margin-top:10px;font-size:13px;"></div>
-      <h3 style="font-family:'Fraunces',serif;font-size:15px;margin:16px 0 8px;">Teslimat sonrası tahsilat ekle</h3>
-      <div class="row row3">
-        <div><label>Tutar (TL)</label><input id="ptExPayAmount" placeholder="örn. 5000"></div>
-        <div><label>Hesap</label><select id="ptExPayHesap"></select></div>
-        <div><label>Not (opsiyonel)</label><input id="ptExPayNote" placeholder=""></div>
-      </div>
-      <div class="row row3">
-        <div style="display:flex;align-items:flex-end;"><button type="button" id="ptExPayAdd" style="width:100%;">Tahsilatı ekle</button></div>
-      </div>
-      <div id="ptExLedger" style="margin-top:14px"></div>
-    </div>
-  </div>
-
   <div id="bestsellers" class="stage-panel">
     <div class="card">
       <h2>Çok Satanlar</h2>
@@ -923,6 +847,80 @@
       <h2>Bayi Finans Takibi</h2>
       <p class="muted" style="margin-top:-6px">Her bayi için işe başlamadan önce tek bir finans modeli seçilir — ikisi birlikte çalışamaz. <b>Depozito/Bakiye</b>: bayiden alınan depozito burada bakiye olarak tutulur, her üretilen ürün m² × fiyat/m² kadar otomatik düşer. <b>Komisyonlu (kargo bizde)</b>: üretim ve kargo maliyeti bizden karşılanır, bayiye dönemsel olarak komisyon ödenir — sadece Instagram bayilerinde seçilebilir; Trendyol ve Hepsiburada bayileri her zaman Depozito/Bakiye kullanır.</p>
       <div id="dealerFinanceList"></div>
+    </div>
+    <div class="card">
+      <h2>Ödeme Takibi</h2>
+      <p class="muted" style="margin-top:-6px">Sıcak Satış ve İhracat siparişlerinin ödeme bilgisi burada girilir. Instagram/Trendyol/Hepsiburada bayileri Bayi Finans Takibi'nden, Kurumsal hesapları İade/İptal'den takip edilir.</p>
+      <div class="entry-subtabs" id="ptFinChannelTabs" style="margin-bottom:14px;">
+        <div class="entry-subtab active" data-pt-channel="sicaksatis">Sıcak Satış</div>
+        <div class="entry-subtab" data-pt-channel="ihracat">İhracat</div>
+      </div>
+
+      <div id="ptSicakSatisCard" style="display:none;">
+        <p class="muted" style="margin-top:-6px">Sipariş girildikten/yüklendikten sonra finans departmanı hangi ödeme yöntemlerinin kullanıldığını burada işaretler. <b>Kredi</b> (vadeli): ya sonraki siparişe ertelenir (önceki sipariş tam ödenmeden yeni sipariş girilirse burada sadece uyarı gösterilir, engellenmez), ya da belirli gün sayısı içinde vadeli olarak kapanır.</p>
+        <div class="row row2">
+          <div><label>Sipariş seç</label><select id="ptSsOrderSelect"></select></div>
+          <div><label>Toplam Tutar</label><input id="ptSsTotal" disabled style="background:var(--paper);color:var(--ink-soft)"></div>
+        </div>
+        <div id="ptSsWarning" style="display:none;margin-top:10px;padding:10px;border-radius:8px;background:var(--rust-bg);border:1px solid var(--rust);color:var(--rust);font-size:13px;"></div>
+        <div class="row" style="grid-template-columns:1fr 1fr 1fr;display:grid;gap:10px;margin-top:12px;">
+          <div><label>Banka Havalesi (TL)</label><input id="ptSsBanka" placeholder="0"></div>
+          <div><label>Nakit (TL)</label><input id="ptSsNakit" placeholder="0"></div>
+          <div><label>Kredi Kartı (TL)</label><input id="ptSsKart" placeholder="0"></div>
+        </div>
+        <div class="row" style="grid-template-columns:1fr 1fr 1fr;display:grid;gap:10px;margin-top:6px;">
+          <div><label>Banka Hesabı</label><select id="ptSsBankaHesap"></select></div>
+          <div><label>Nakit Hesabı</label><select id="ptSsNakitHesap"></select></div>
+          <div><label>Kredi Kartı Hesabı</label><select id="ptSsKartHesap"></select></div>
+        </div>
+        <div class="row" style="grid-template-columns:1fr 1fr 1fr;display:grid;gap:10px;margin-top:10px;">
+          <div><label>Kredi Kartı Komisyonu %</label><input id="ptSsKartKomisyon" placeholder="örn. 2.5"></div>
+          <div><label>Kredi/Vadeli (TL)</label><input id="ptSsKredi" placeholder="0"></div>
+          <div><label>Kredi Türü</label>
+            <select id="ptSsKrediType">
+              <option value="">—</option>
+              <option value="ertelenmis">Sonraki siparişe ertelenmiş</option>
+              <option value="vade">Belirli gün vadeli</option>
+            </select>
+          </div>
+        </div>
+        <div class="row" style="grid-template-columns:1fr 1fr 1fr;display:grid;gap:10px;margin-top:10px;">
+          <div id="ptSsGunWrap" style="display:none;"><label>Vade (gün)</label><input id="ptSsGun" placeholder="örn. 30"></div>
+          <div><label>Kredi tahsil edilince Hesap</label><select id="ptSsKrediHesap"></select></div>
+          <div><label>Not (opsiyonel)</label><input id="ptSsNote" placeholder=""></div>
+        </div>
+        <div id="ptSsSumRow" style="margin-top:10px;font-size:13px;"></div>
+        <button type="button" id="ptSsSave" style="margin-top:10px;width:auto;">Ödeme bilgisini kaydet</button>
+        <h3 style="font-family:'Fraunces',serif;font-size:15px;margin:20px 0 8px;">Ödenmemiş ertelenmiş krediler</h3>
+        <div id="ptSsOutstandingList"></div>
+      </div>
+
+      <div id="ptIhracatCard" style="display:none;">
+        <p class="muted" style="margin-top:-6px">Peşinat ve teslimat tarihi elle girilir; teslimat sonrası gelen ödemeler alttaki listeye tek tek eklenir. Kalan bakiye buradan otomatik hesaplanır.</p>
+        <div class="row row2">
+          <div><label>Sipariş seç</label><select id="ptExOrderSelect"></select></div>
+          <div><label>Toplam Tutar (TL)</label><input id="ptExTotal" disabled style="background:var(--paper);color:var(--ink-soft)"></div>
+        </div>
+        <div class="row row3" style="margin-top:10px;">
+          <div><label>Peşinat (TL)</label><input id="ptExPrepaid" placeholder="0"></div>
+          <div><label>Peşinat Hesabı</label><select id="ptExPrepaidHesap"></select></div>
+          <div><label>Teslimat tarihi</label><input type="date" id="ptExDeliveryDate"></div>
+        </div>
+        <div class="row row3" style="margin-top:10px;">
+          <div style="display:flex;align-items:flex-end;"><button type="button" id="ptExSave" style="width:100%;">Kaydet</button></div>
+        </div>
+        <div id="ptExBalance" style="margin-top:10px;font-size:13px;"></div>
+        <h3 style="font-family:'Fraunces',serif;font-size:15px;margin:16px 0 8px;">Teslimat sonrası tahsilat ekle</h3>
+        <div class="row row3">
+          <div><label>Tutar (TL)</label><input id="ptExPayAmount" placeholder="örn. 5000"></div>
+          <div><label>Hesap</label><select id="ptExPayHesap"></select></div>
+          <div><label>Not (opsiyonel)</label><input id="ptExPayNote" placeholder=""></div>
+        </div>
+        <div class="row row3">
+          <div style="display:flex;align-items:flex-end;"><button type="button" id="ptExPayAdd" style="width:100%;">Tahsilatı ekle</button></div>
+        </div>
+        <div id="ptExLedger" style="margin-top:14px"></div>
+      </div>
     </div>
     <div class="card">
       <h2>Tahsilatlar</h2>
@@ -1888,7 +1886,7 @@ function renderOperatorBar(){
         </select>
       </label>
       <button class="ghost small" id="logoutBtn">Çıkış yap</button>
-      <span class="muted" style="font-size:10px;margin-left:auto;" title="Bu sürümün ne zaman oluşturulduğu — canlı sitenin en güncel dosyayı çalıştırıp çalıştırmadığını doğrulamak için.">Sürüm: 2026-09-28 17:12 UTC</span>
+      <span class="muted" style="font-size:10px;margin-left:auto;" title="Bu sürümün ne zaman oluşturulduğu — canlı sitenin en güncel dosyayı çalıştırıp çalıştırmadığını doğrulamak için.">Sürüm: 2026-09-28 17:18 UTC</span>
     </div>`;
   document.getElementById('themeSelect').onchange = (e)=>{
     VALID_THEMES.forEach(t=>document.body.classList.remove(t));
@@ -2086,7 +2084,10 @@ async function loadState(){
       // restored below so re-entering the app picks up exactly where you
       // left off instead of always resetting to Instagram / Sipariş girişi.
       currentEntryMode = loaded.currentEntryMode || 'ig';
-      currentStageMode = loaded.currentStageMode || 'entry';
+      // 'paymenttracking' used to be a fifth stage here — it moved to Finans,
+      // so a session that saved that value before the move falls back to
+      // Sipariş girişi instead of restoring to a stage that no longer exists.
+      currentStageMode = (loaded.currentStageMode && loaded.currentStageMode!=='paymenttracking') ? loaded.currentStageMode : 'entry';
       state.currentEntryMode = currentEntryMode;
       state.currentStageMode = currentStageMode;
       if(loaded.channels && loaded.channels.length) state.channels = loaded.channels;
@@ -2611,7 +2612,6 @@ const entryModesWithForm = {ig:true, ihracat:true, sicaksatis:true, trendyol:tru
 function renderCurrentStage(){
   if(currentStageMode==='entry') renderOrders();
   else if(currentStageMode==='cancelreturn') renderKurumsalCancelReturn();
-  else if(currentStageMode==='paymenttracking') renderPaymentTracking();
   else if(currentStageMode==='bestsellers') renderBestSellers();
   else if(currentStageMode==='queue') renderQueue();
   else if(currentStageMode==='sort') renderSort();
@@ -9075,16 +9075,23 @@ document.getElementById('crThisMonth').addEventListener('click', ()=>{
 // Ödeme Takibi — dispatches by whichever channel tab is active. Only Sıcak
 // Satış and İhracat have anything to show here; the other three channels'
 // payment tracking lives elsewhere (Bayi Finans Takibi / İade-İptal).
+let ptFinChannel = 'sicaksatis'; // Finans → Ödeme Takibi's own kanal toggle, independent of Sipariş Merkezi's
 function renderPaymentTracking(){
-  const notApplicable = document.getElementById('ptNotApplicableCard');
   const ssCard = document.getElementById('ptSicakSatisCard');
   const exCard = document.getElementById('ptIhracatCard');
-  if(!notApplicable || !ssCard || !exCard) return;
-  notApplicable.style.display = 'none'; ssCard.style.display = 'none'; exCard.style.display = 'none';
-  if(currentEntryMode==='sicaksatis'){ ssCard.style.display=''; renderSsPaymentTracking(); }
-  else if(currentEntryMode==='ihracat'){ exCard.style.display=''; renderExPaymentTracking(); }
-  else { notApplicable.style.display=''; }
+  if(!ssCard || !exCard) return;
+  ssCard.style.display = 'none'; exCard.style.display = 'none';
+  if(ptFinChannel==='sicaksatis'){ ssCard.style.display=''; renderSsPaymentTracking(); }
+  else { exCard.style.display=''; renderExPaymentTracking(); }
 }
+document.querySelectorAll('#ptFinChannelTabs .entry-subtab').forEach(t=>{
+  t.addEventListener('click', ()=>{
+    document.querySelectorAll('#ptFinChannelTabs .entry-subtab').forEach(x=>x.classList.remove('active'));
+    t.classList.add('active');
+    ptFinChannel = t.dataset.ptChannel;
+    renderPaymentTracking();
+  });
+});
 
 // Çok Satanlar — best-selling designs for the currently active kanal tab,
 // ranked by baskı kodu (the print/design code assigned during Ayırma &
