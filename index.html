@@ -925,6 +925,40 @@
       </div>
       <div id="tahSummary" style="margin-top:14px"></div>
     </div>
+    <div class="card">
+      <h2>Banka Mutabakatı</h2>
+      <p class="muted" style="margin-top:-6px">Trendyol/Hepsiburada/kargo şirketinden gelen toplu ödemeleri, beklenen sipariş tutarlarıyla karşılaştırır. Trendyol siparişleri sipariş tarihinden 28 gün sonraki ilk Pazartesi veya Perşembe'de tek bir toplu ödeme olarak gelir; bu bölüm o dönemdeki siparişleri otomatik gruplar ve haftalık banka ekstresinden girdiğiniz tutarla karşılaştırır.</p>
+
+      <h3 style="font-family:'Fraunces',serif;font-size:15px;margin:16px 0 8px;">Kanal seç</h3>
+      <div class="entry-subtabs" id="brChannelTabs" style="margin-bottom:12px;">
+        <div class="entry-subtab active" data-br-channel="trendyol">Trendyol</div>
+        <div class="entry-subtab" data-br-channel="hepsiburada">Hepsiburada</div>
+        <div class="entry-subtab" data-br-channel="ig">Instagram (kargo)</div>
+      </div>
+
+      <div class="row row3">
+        <div><label>Ödeme gecikmesi (gün)</label><input id="brDelayDays" placeholder="örn. 28"></div>
+        <div><label>Ödeme günleri</label>
+          <div style="display:flex;gap:14px;align-items:center;height:38px;">
+            <label style="font-weight:400;display:flex;gap:4px;align-items:center;"><input type="checkbox" id="brPayMon" style="width:auto;"> Pazartesi</label>
+            <label style="font-weight:400;display:flex;gap:4px;align-items:center;"><input type="checkbox" id="brPayThu" style="width:auto;"> Perşembe</label>
+          </div>
+        </div>
+        <div><label>Komisyon/kesinti % (opsiyonel)</label><input id="brCommissionPct" placeholder="örn. 12"></div>
+      </div>
+      <div style="margin-top:8px;"><button type="button" class="ghost small" id="brSaveRule">Kuralı kaydet</button></div>
+
+      <h3 style="font-family:'Fraunces',serif;font-size:15px;margin:20px 0 8px;">Banka ekstresi satırı ekle</h3>
+      <div class="row row3">
+        <div><label>Ödeme tarihi (banka ekstresinde göründüğü gün)</label><input type="date" id="brLineDate"></div>
+        <div><label>Tutar (TL)</label><input id="brLineAmount" placeholder="örn. 45000"></div>
+        <div><label>Not (opsiyonel)</label><input id="brLineNote" placeholder=""></div>
+      </div>
+      <div style="margin-top:8px;"><button type="button" id="brAddLine">Ekstre satırı ekle</button></div>
+
+      <h3 style="font-family:'Fraunces',serif;font-size:15px;margin:20px 0 8px;">Ödeme dönemleri — beklenen vs. gerçekleşen</h3>
+      <div id="brBatchList" style="margin-top:8px"></div>
+    </div>
   </div>
 
   <div id="messageFloatToggle" style="position:fixed;bottom:22px;right:22px;z-index:400;width:52px;height:52px;border-radius:50%;background:var(--indigo);color:#fff;display:flex;align-items:center;justify-content:center;cursor:pointer;box-shadow:0 4px 14px rgba(0,0,0,.2);font-size:22px;">
@@ -1770,7 +1804,7 @@ function showPinModal(labelText){
     };
   });
 }
-let state = { orders: [], uploadBatches: [], activityLog: [], setTemplates: [], commonSizes: ['160x220','180x270','200x300'], productCatalog: {}, channelMerges: [], paymentAccounts: ['Şirket Banka Hesabı', 'Kargo Şirketi Tahsilatı', 'Kredi Kartı Linki'], channels: [
+let state = { orders: [], uploadBatches: [], activityLog: [], setTemplates: [], commonSizes: ['160x220','180x270','200x300'], productCatalog: {}, channelMerges: [], paymentAccounts: ['Şirket Banka Hesabı', 'Kargo Şirketi Tahsilatı', 'Kredi Kartı Linki'], bankStatementLines: [], payoutRules: { trendyol: { delayDays: 28, paydays: [1,4], commissionPct: null }, hepsiburada: { delayDays: null, paydays: [], commissionPct: null }, ig: { delayDays: null, paydays: [], commissionPct: null } }, channels: [
   {name:'qatalina', type:'Instagram kurumsal'},
   {name:'7xhome', type:'Instagram kurumsal'},
   {name:'Carpetra Home', type:'Instagram kurumsal'},
@@ -1837,7 +1871,7 @@ function renderOperatorBar(){
         </select>
       </label>
       <button class="ghost small" id="logoutBtn">Çıkış yap</button>
-      <span class="muted" style="font-size:10px;margin-left:auto;" title="Bu sürümün ne zaman oluşturulduğu — canlı sitenin en güncel dosyayı çalıştırıp çalıştırmadığını doğrulamak için.">Sürüm: 2026-09-28 15:11 UTC</span>
+      <span class="muted" style="font-size:10px;margin-left:auto;" title="Bu sürümün ne zaman oluşturulduğu — canlı sitenin en güncel dosyayı çalıştırıp çalıştırmadığını doğrulamak için.">Sürüm: 2026-09-28 16:27 UTC</span>
     </div>`;
   document.getElementById('themeSelect').onchange = (e)=>{
     VALID_THEMES.forEach(t=>document.body.classList.remove(t));
@@ -2028,6 +2062,8 @@ async function loadState(){
       state.commonSizes = (loaded.commonSizes && loaded.commonSizes.length) ? loaded.commonSizes : state.commonSizes;
       state.productCatalog = loaded.productCatalog || {};
       state.paymentAccounts = (loaded.paymentAccounts && loaded.paymentAccounts.length) ? loaded.paymentAccounts : state.paymentAccounts;
+      state.bankStatementLines = loaded.bankStatementLines || [];
+      state.payoutRules = loaded.payoutRules && Object.keys(loaded.payoutRules).length ? loaded.payoutRules : state.payoutRules;
       // Which channel and which of the four operational stages (Sipariş
       // girişi / Baskı öncesi / Ayırma & etiketler / Üretim) was last open —
       // restored below so re-entering the app picks up exactly where you
@@ -2282,6 +2318,8 @@ function saveState(){
         channels: state.channels,
         channelMerges: state.channelMerges,
         paymentAccounts: state.paymentAccounts,
+        bankStatementLines: state.bankStatementLines,
+        payoutRules: state.payoutRules,
         currentEntryMode: state.currentEntryMode,
         currentStageMode: state.currentStageMode,
       };
@@ -9384,6 +9422,150 @@ function renderTahsilatlarSummary(){
   toEl.addEventListener('change', renderTahsilatlarSummary);
 })();
 
+// Banka Mutabakatı — bank-statement reconciliation for lump-sum marketplace/
+// cargo payouts (Trendyol, Hepsiburada, Instagram-via-cargo). Each channel
+// has its own payout rule (delay in days + which weekdays payouts land on);
+// orders are grouped into the payout batch they're expected in, and that
+// expected total is compared against bank statement lines you enter by hand
+// (this app has no live bank feed or PDF parser, so entry is manual/paste).
+let brChannel = 'trendyol';
+const WEEKDAY_MON = 1, WEEKDAY_THU = 4;
+function nextPayoutDate(fromDate, paydays){
+  if(!paydays || !paydays.length) return null;
+  const d = new Date(fromDate.getFullYear(), fromDate.getMonth(), fromDate.getDate());
+  for(let i=0;i<14;i++){
+    if(paydays.includes(d.getDay())) return d;
+    d.setDate(d.getDate()+1);
+  }
+  return null;
+}
+function ordersForBrChannel(channel){
+  return (state.orders||[]).filter(o=>{
+    if(o.saleType==='Kayıp Kargo') return false;
+    const cat = channelCategoryForNumbering(o.channel);
+    if(cat !== channel) return false;
+    // Instagram: cargo company only remits company's own (Kurumsal) sales —
+    // Bayi collections follow the separate dealer-finance flow, not this one.
+    if(channel==='ig' && !isKurumsalOrder(o)) return false;
+    return true;
+  });
+}
+function renderBankReconciliation(){
+  const rule = state.payoutRules[brChannel] || { delayDays: null, paydays: [], commissionPct: null };
+  document.getElementById('brDelayDays').value = rule.delayDays!=null ? rule.delayDays : '';
+  document.getElementById('brPayMon').checked = (rule.paydays||[]).includes(WEEKDAY_MON);
+  document.getElementById('brPayThu').checked = (rule.paydays||[]).includes(WEEKDAY_THU);
+  document.getElementById('brCommissionPct').value = rule.commissionPct!=null ? rule.commissionPct : '';
+
+  const batchListEl = document.getElementById('brBatchList');
+  if(rule.delayDays==null || !(rule.paydays||[]).length){
+    batchListEl.innerHTML = '<p class="muted">Bu kanal için ödeme kuralı henüz tanımlanmadı — yukarıdan gecikme günü ve ödeme günlerini girip kaydedin.</p>';
+    return;
+  }
+  const orders = ordersForBrChannel(brChannel);
+  const batches = {}; // dateISO -> { orders: [], gross: 0 }
+  orders.forEach(o=>{
+    const od = parseDMY(o.date);
+    if(!od) return;
+    const raw = new Date(od.getFullYear(), od.getMonth(), od.getDate() + rule.delayDays);
+    const payoutDate = nextPayoutDate(raw, rule.paydays);
+    if(!payoutDate) return;
+    const key = toDateInputValue(payoutDate);
+    batches[key] = batches[key] || { orders: [], gross: 0 };
+    batches[key].orders.push(o);
+    batches[key].gross += priceToNumber(o.price);
+  });
+  const lines = (state.bankStatementLines||[]).filter(l=>l.channel===brChannel);
+  const linesByDate = {};
+  lines.forEach(l=>{ linesByDate[l.date] = linesByDate[l.date] || []; linesByDate[l.date].push(l); });
+  const allKeys = Array.from(new Set([...Object.keys(batches), ...Object.keys(linesByDate)])).sort((a,b)=>b.localeCompare(a));
+  const today = toDateInputValue(new Date());
+
+  if(!allKeys.length){
+    batchListEl.innerHTML = '<p class="muted">Bu kanal için henüz sipariş veya ekstre kaydı yok.</p>';
+    return;
+  }
+  batchListEl.innerHTML = allKeys.map(key=>{
+    const batch = batches[key] || { orders: [], gross: 0 };
+    const batchLines = linesByDate[key] || [];
+    const actual = batchLines.reduce((s,l)=>s+l.amount, 0);
+    const commissionPct = rule.commissionPct;
+    const expectedNet = commissionPct!=null ? batch.gross * (1 - commissionPct/100) : batch.gross;
+    const isFuture = key > today;
+    const diff = expectedNet - actual;
+    const hasBoth = batch.orders.length>0 && batchLines.length>0;
+    let statusHtml;
+    if(isFuture && !batchLines.length){
+      statusHtml = `<span class="muted">Bekleniyor (${key})</span>`;
+    } else if(!batch.orders.length && batchLines.length){
+      statusHtml = `<span style="color:var(--rust)">Bu tarihte sipariş yok — eşleşmeyen ekstre kaydı</span>`;
+    } else if(!batchLines.length){
+      statusHtml = `<span style="color:var(--rust)">Ekstre kaydı girilmedi</span>`;
+    } else if(Math.abs(diff) < 0.01){
+      statusHtml = `<span style="color:var(--forest)">Eşleşti ✓</span>`;
+    } else {
+      statusHtml = `<span style="color:var(--rust)">Fark: ${formatTL(diff)} TL</span>`;
+    }
+    const linesHtml = batchLines.length ? `<div class="muted" style="font-size:12px;margin-top:4px;">Ekstre: ${batchLines.map(l=>`${formatTL(l.amount)} TL${l.note?` (${l.note})`:''}`).join(', ')}
+        <button type="button" class="ghost small br-delete-lines" data-key="${key}" style="margin-left:6px;">Sil</button></div>` : '';
+    return `
+    <div style="border:1px solid var(--line);border-radius:10px;padding:12px 14px;margin-bottom:10px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;">
+        <span style="font-weight:600;">${key}${!isFuture?` — ${batch.orders.length} sipariş`:''}</span>
+        ${statusHtml}
+      </div>
+      <div class="muted" style="font-size:13px;margin-top:4px;">
+        Beklenen (brüt): ${formatTL(batch.gross)} TL${commissionPct!=null?` · Beklenen (net, %${commissionPct} kesinti sonrası): ${formatTL(expectedNet)} TL`:''} · Gerçekleşen: ${formatTL(actual)} TL
+      </div>
+      ${linesHtml}
+    </div>`;
+  }).join('');
+  batchListEl.querySelectorAll('.br-delete-lines').forEach(b=>{
+    b.onclick = ()=>{
+      const key = b.dataset.key;
+      if(!confirm(`${key} tarihli ekstre kayıtlarını silmek istediğinize emin misiniz?`)) return;
+      state.bankStatementLines = (state.bankStatementLines||[]).filter(l=>!(l.channel===brChannel && l.date===key));
+      logActivity(`Banka ekstresi kaydı silindi: ${brChannel} — ${key}`);
+      saveState(); render();
+    };
+  });
+}
+document.querySelectorAll('#brChannelTabs .entry-subtab').forEach(t=>{
+  t.addEventListener('click', ()=>{
+    document.querySelectorAll('#brChannelTabs .entry-subtab').forEach(x=>x.classList.remove('active'));
+    t.classList.add('active');
+    brChannel = t.dataset.brChannel;
+    renderBankReconciliation();
+  });
+});
+document.getElementById('brSaveRule').addEventListener('click', ()=>{
+  const delayDaysRaw = parseInt(document.getElementById('brDelayDays').value);
+  const paydays = [];
+  if(document.getElementById('brPayMon').checked) paydays.push(WEEKDAY_MON);
+  if(document.getElementById('brPayThu').checked) paydays.push(WEEKDAY_THU);
+  const commissionRaw = parseFloat((document.getElementById('brCommissionPct').value||'').replace(',','.'));
+  state.payoutRules[brChannel] = {
+    delayDays: isNaN(delayDaysRaw) ? null : delayDaysRaw,
+    paydays,
+    commissionPct: isNaN(commissionRaw) ? null : commissionRaw,
+  };
+  logActivity(`Banka mutabakat kuralı güncellendi: ${brChannel} — ${isNaN(delayDaysRaw)?'?':delayDaysRaw} gün, ödeme günleri: ${paydays.length?paydays.map(d=>d===WEEKDAY_MON?'Pzt':'Per').join('/'):'—'}`);
+  saveState(); render();
+});
+document.getElementById('brAddLine').addEventListener('click', ()=>{
+  const dateEl = document.getElementById('brLineDate');
+  const amountEl = document.getElementById('brLineAmount');
+  const noteEl = document.getElementById('brLineNote');
+  const date = dateEl.value;
+  const amount = priceToNumber(amountEl.value);
+  if(!date || !amount){ if(!date) dateEl.style.borderColor='var(--rust)'; if(!amount) amountEl.style.borderColor='var(--rust)'; return; }
+  state.bankStatementLines = state.bankStatementLines || [];
+  state.bankStatementLines.push({ id: 'bsl_'+Date.now()+'_'+Math.random().toString(36).slice(2,7), channel: brChannel, date, amount, note: noteEl.value.trim(), enteredAt: new Date().toISOString() });
+  logActivity(`Banka ekstresi satırı eklendi: ${brChannel} — ${date} — ${formatTL(amount)} TL${noteEl.value.trim()?` (${noteEl.value.trim()})`:''}`);
+  dateEl.value=''; amountEl.value=''; noteEl.value=''; dateEl.style.borderColor=''; amountEl.style.borderColor='';
+  saveState(); render();
+});
+
 document.getElementById('newChanType').addEventListener('change', ()=>{
   const type = document.getElementById('newChanType').value;
   document.getElementById('newChanCityWrap').style.display = type === 'Sıcak Satış bayi' ? '' : 'none';
@@ -9515,7 +9697,7 @@ function renderLog(){
 }
 
 function render(){
-  renderOrders(); renderExportOrders(); renderQueue(); renderSort(); renderProduction(); renderOverview(); renderChannels(); renderUploadLog(); renderTrendyolUploadLog(); renderLog(); renderSetTemplates(); renderCommonSizes(); renderUsers(); renderOperatorBar(); renderReport(); renderCatalogInfo(); renderUretimToplam(); renderKurumsalCancelReturn(); renderPaymentTracking(); renderPaymentAccounts(); renderTahsilatlarSummary();
+  renderOrders(); renderExportOrders(); renderQueue(); renderSort(); renderProduction(); renderOverview(); renderChannels(); renderUploadLog(); renderTrendyolUploadLog(); renderLog(); renderSetTemplates(); renderCommonSizes(); renderUsers(); renderOperatorBar(); renderReport(); renderCatalogInfo(); renderUretimToplam(); renderKurumsalCancelReturn(); renderPaymentTracking(); renderPaymentAccounts(); renderTahsilatlarSummary(); renderBankReconciliation();
   wireImageLightbox();
 }
 
