@@ -1918,7 +1918,7 @@ function renderOperatorBar(){
         </select>
       </label>
       <button class="ghost small" id="logoutBtn">Çıkış yap</button>
-      <span class="muted" style="font-size:10px;margin-left:auto;" title="Bu sürümün ne zaman oluşturulduğu — canlı sitenin en güncel dosyayı çalıştırıp çalıştırmadığını doğrulamak için.">Sürüm: 2026-09-28 18:42 UTC</span>
+      <span class="muted" style="font-size:10px;margin-left:auto;" title="Bu sürümün ne zaman oluşturulduğu — canlı sitenin en güncel dosyayı çalıştırıp çalıştırmadığını doğrulamak için.">Sürüm: 2026-09-28 18:48 UTC</span>
     </div>`;
   document.getElementById('themeSelect').onchange = (e)=>{
     VALID_THEMES.forEach(t=>document.body.classList.remove(t));
@@ -9008,18 +9008,17 @@ function wireFinBayilerTrendyol(el){
   });
 }
 // Sıcak Satış Bayiler — no running deposit here (unlike Trendyol): each
-// dealer has a fillable info box (like Trendyol's "kelly" card) holding the
-// default kredi vadesi, and each order has its own peşinat — which can be
-// paid in several installments before the order ships out, tracked as a
-// dated ledger — plus a kalan bakiye, the unpaid remainder, which IS the
-// "kredi" collected later against its own dated ledger and due date.
+// dealer has a "Finans Detayları" info box (like Trendyol's "kelly" card,
+// always visible, zeroed until there's data) and each order has its own
+// peşinat — which can be paid in several installments before the order
+// ships out, tracked as a dated ledger — plus a kalan bakiye, the unpaid
+// remainder, which IS the "kredi" collected later against its own ledger.
 function renderFinBayilerSicak(){
   const dealers = state.channels.filter(c=>c.type==='Sıcak Satış bayi');
   if(!dealers.length) return '<p class="muted">Henüz Sıcak Satış bayisi yok.</p>';
   const fmt = n => (n||0).toLocaleString('tr-TR', {minimumFractionDigits:2, maximumFractionDigits:2});
   let grandTutar=0, grandPesinat=0, grandBakiye=0;
   const cards = dealers.map(c=>{
-    const idx = state.channels.indexOf(c);
     const orders = state.orders.filter(o=>channelNamesMatch(o.channel,c.name) && o.saleType!=='Kayıp Kargo')
       .slice().sort((a,b)=>{ const da=parseDMY(a.date), db=parseDMY(b.date); return (db?db.getTime():0)-(da?da.getTime():0); });
     let dealerTutar=0, dealerPesinat=0, dealerBakiye=0;
@@ -9033,14 +9032,6 @@ function renderFinBayilerSicak(){
       const bakiye = tutar - prepaid - collected;
       dealerTutar += tutar; dealerPesinat += prepaid; dealerBakiye += bakiye;
       const bakiyeColor = bakiye > 0.01 ? 'var(--rust)' : 'var(--forest)';
-      const termDays = typeof f.creditTermDays==='number' ? f.creditTermDays : (typeof c.creditTermDays==='number' ? c.creditTermDays : null);
-      const orderDate = parseDMY(o.date);
-      let dueHtml = '';
-      if(termDays!=null && orderDate && bakiye > 0.01){
-        const due = new Date(orderDate.getTime()); due.setDate(due.getDate()+termDays);
-        const overdue = due.getTime() < Date.now();
-        dueHtml = `<div class="muted" style="font-size:11px;margin-top:4px;${overdue?'color:var(--rust);font-weight:600;':''}">${overdue?'⚠ Vadesi geçti':'Vade'}: ${due.toLocaleDateString('tr-TR')}</div>`;
-      }
       const prepayRows = prepayments.length
         ? `<div class="muted" style="font-size:11px;margin-top:4px;">Peşinat ödemeleri: ${prepayments.map(p=>`${new Date(p.date).toLocaleDateString('tr-TR')} — ${fmt(p.amount)} TL${p.account?` (${p.account})`:''}`).join(' · ')}</div>`
         : '';
@@ -9056,12 +9047,10 @@ function renderFinBayilerSicak(){
           <button class="ghost small fbs-prepay-add" data-oid="${o.id}">Ekle</button>
         </div>
         ${prepayRows}
-        <div class="row" style="grid-template-columns:1fr 1fr 1fr;display:grid;gap:8px;align-items:flex-end;margin-top:8px;">
+        <div class="row" style="grid-template-columns:1fr 1fr;display:grid;gap:8px;align-items:flex-end;margin-top:8px;">
           <div><label>Toplam peşinat (TL)</label><input disabled value="${fmt(prepaid)} TL" style="background:var(--paper);color:var(--ink-soft)"></div>
           <div><label>Kalan Bakiye (Kredi)</label><input disabled value="${fmt(bakiye)} TL" style="background:var(--paper);color:${bakiyeColor};font-weight:600"></div>
-          <div><label>Vade (gün, bu sipariş için)</label><input class="fbs-order-term" data-oid="${o.id}" value="${typeof f.creditTermDays==='number'?f.creditTermDays:''}" placeholder="bayi varsayılanı"></div>
         </div>
-        ${dueHtml}
         <div class="row" style="grid-template-columns:1fr 1fr auto;display:grid;gap:8px;align-items:flex-end;margin-top:8px;">
           <div><label>Kredi tahsilatı (TL)</label><input class="fbs-credit-amount" data-oid="${o.id}" placeholder="örn. 500"></div>
           <div><label>Hesap</label><select class="fbs-credit-account" data-oid="${o.id}">${paymentAccountOptionsHtml()}</select></div>
@@ -9075,10 +9064,11 @@ function renderFinBayilerSicak(){
     <div style="border:1px solid var(--line);border-radius:10px;padding:14px;margin-bottom:12px;">
       <div style="display:flex;justify-content:space-between;align-items:center;">
         <strong>${c.name}</strong>
-        <span class="muted" style="font-size:12px;">Tutar: ${fmt(dealerTutar)} · Peşinat: ${fmt(dealerPesinat)} · Kalan: ${fmt(dealerBakiye)} TL</span>
       </div>
-      <div class="row" style="grid-template-columns:1fr;display:grid;gap:8px;align-items:flex-end;margin-top:10px;max-width:260px;">
-        <div><label>Varsayılan kredi vadesi (gün)</label><input class="fbs-dealer-term" data-idx="${idx}" value="${typeof c.creditTermDays==='number'?c.creditTermDays:''}" placeholder="örn. 30"></div>
+      <div class="row" style="grid-template-columns:1fr 1fr 1fr;display:grid;gap:8px;align-items:flex-end;margin-top:10px;">
+        <div><label>Finans Detayları — Toplam Tutar</label><input disabled value="${fmt(dealerTutar)} TL" style="background:var(--paper);color:var(--ink-soft)"></div>
+        <div><label>Finans Detayları — Toplam Peşinat</label><input disabled value="${fmt(dealerPesinat)} TL" style="background:var(--paper);color:var(--ink-soft)"></div>
+        <div><label>Finans Detayları — Kalan Bakiye/Kredi</label><input disabled value="${fmt(dealerBakiye)} TL" style="background:var(--paper);color:${dealerBakiye>0.01?'var(--rust)':'var(--forest)'};font-weight:600"></div>
       </div>
       ${orders.length ? orderRows : '<p class="muted" style="margin-top:8px;">Bu bayinin henüz siparişi yok.</p>'}
     </div>`;
@@ -9093,25 +9083,6 @@ function renderFinBayilerSicak(){
   return totalsHtml + cards;
 }
 function wireFinBayilerSicak(el){
-  el.querySelectorAll('.fbs-dealer-term').forEach(inp=>{
-    inp.onchange = ()=>{
-      const c = state.channels[parseInt(inp.dataset.idx)];
-      const val = parseInt(inp.value, 10);
-      c.creditTermDays = isNaN(val) ? undefined : val;
-      logActivity(`Sıcak Satış bayi varsayılan kredi vadesi güncellendi: "${c.name}" → ${isNaN(val)?'(boş)':val+' gün'}`);
-      saveState(); render();
-    };
-  });
-  el.querySelectorAll('.fbs-order-term').forEach(inp=>{
-    inp.onchange = ()=>{
-      const o = state.orders.find(x=>x.id===inp.dataset.oid);
-      if(!o) return;
-      const val = parseInt(inp.value, 10);
-      o.ssBayiFinance = o.ssBayiFinance || {};
-      o.ssBayiFinance.creditTermDays = isNaN(val) ? undefined : val;
-      saveState(); render();
-    };
-  });
   el.querySelectorAll('.fbs-prepay-add').forEach(btn=>{
     btn.onclick = ()=>{
       const oid = btn.dataset.oid;
