@@ -1975,7 +1975,7 @@ function renderOperatorBar(){
         </select>
       </label>
       <button class="ghost small" id="logoutBtn">Çıkış yap</button>
-      <span class="muted" style="font-size:10px;margin-left:auto;" title="Bu sürümün ne zaman oluşturulduğu — canlı sitenin en güncel dosyayı çalıştırıp çalıştırmadığını doğrulamak için.">Sürüm: 2026-10-01 22:02 UTC</span>
+      <span class="muted" style="font-size:10px;margin-left:auto;" title="Bu sürümün ne zaman oluşturulduğu — canlı sitenin en güncel dosyayı çalıştırıp çalıştırmadığını doğrulamak için.">Sürüm: 2026-10-01 22:25 UTC</span>
     </div>`;
   document.getElementById('themeSelect').onchange = (e)=>{
     VALID_THEMES.forEach(t=>document.body.classList.remove(t));
@@ -3777,7 +3777,7 @@ function searchLostCargoCandidates(query){
     o.items.forEach(item=>{
       const groupKey = o.id + '::' + (item.setLabel || item.id);
       const group = item.setLabel ? o.items.filter(i=>i.setLabel===item.setLabel) : [item];
-      const number = itemNumbers[groupKey] || '';
+      const number = o.orderNumber || itemNumbers[groupKey] || '';
       const numberMatches = number && number.toLowerCase().includes(q);
       if(!nameMatches && !numberMatches) return;
       results.push({order:o, item, number, group});
@@ -4461,7 +4461,7 @@ function renderReport(){
           const adet = isCollapsiblePair(bundle) ? (bundle[0].qty||1) : bundle.reduce((s,i)=>s+i.qty,0);
           const m2Total = group.reduce((s,g)=>s+g.m2, 0);
           const numKey = itemGroupKey(o, bundle[0]);
-          return `<tr><td class="ts">${itemNumbers[numKey]||'—'}</td><td>${o.date}</td><td><span class="badge-chan">${o.channel}</span></td><td>${o.customerName}</td><td>${sizeText}</td><td>${adet}</td><td>${m2Total.toFixed(2)}</td><td>${bundle[0].taban}</td><td>${pill(bundle[0].status==='sorted'?'in production':bundle[0].status)}</td></tr>`;
+          return `<tr><td class="ts">${o.orderNumber || itemNumbers[numKey] || '—'}</td><td>${o.date}</td><td><span class="badge-chan">${o.channel}</span></td><td>${o.customerName}</td><td>${sizeText}</td><td>${adet}</td><td>${m2Total.toFixed(2)}</td><td>${bundle[0].taban}</td><td>${pill(bundle[0].status==='sorted'?'in production':bundle[0].status)}</td></tr>`;
         }).join('');
       })()}</tbody>
     </table>`;
@@ -8348,7 +8348,13 @@ function renderSort(){
         const withImg = bundle.find(i=>i.images && i.images.length);
         const thumb = withImg ? `<img src="${withImg.images[0]}" class="thumb" style="width:24px;height:24px">` : '';
         const ids = bundle.map(i=>i.id).join(',');
-        const num = itemNumbers[order.id+'::'+(bundle[0].setLabel||bundle[0].id)] || '—';
+        // Sıcak Satış orders already carry their own order.orderNumber from the
+        // moment they were created (assignSicakOrderNumberIfNeeded) — that's what
+        // Baskı öncesi and the entry list show, so it has to win here too, or this
+        // screen would show a completely different, coding-day-bucket-based number
+        // for the same order. Every other channel still has no order.orderNumber,
+        // so this falls through to the old itemNumbers lookup for them unchanged.
+        const num = order.orderNumber || itemNumbers[order.id+'::'+(bundle[0].setLabel||bundle[0].id)] || '—';
         const carried = isGroupCarriedOver(bundle);
         // Every physical carpet in the order gets its own sequential number —
         // one continuous count across the whole order (701-1/6, 701-2/6, ...),
@@ -8582,7 +8588,10 @@ function printStickers(pairs, itemNumbers){
   // the same label — copies are physically separate carpets.
   if(!pairs.length){ showMessage('Yazdırılacak etiket yok.'); return; }
   const stickersHtml = pairs.map(({order,item,copyIndex})=>{
-    const num = itemNumbers[order.id+'::'+(item.setLabel||item.id)] || '—';
+    // Sıcak Satış: use the order's own creation-time number (order.orderNumber)
+    // instead of the coding-day bucket lookup — see the matching comment in
+    // renderSort/renderProduction. Every other channel is unaffected.
+    const num = order.orderNumber || itemNumbers[order.id+'::'+(item.setLabel||item.id)] || '—';
     const pos = numberWithPosition(num, order, item, copyIndex);
     return `
       <div class="sticker">
@@ -8830,7 +8839,11 @@ function renderProduction(){
         const sizes = bundle.map(i=>i.size).join(', ');
         const withImg = bundle.find(i=>i.images && i.images.length);
         const thumb = withImg ? `<img src="${withImg.images[0]}" class="thumb" style="width:24px;height:24px">` : '';
-        const num = itemNumbers[order.id+'::'+(bundle[0].setLabel||bundle[0].id)] || '—';
+        // Sıcak Satış orders carry their own order.orderNumber from creation —
+        // that's the number shown everywhere else (girişi banner, Baskı öncesi),
+        // so it has to win here too, or Üretim would show a different,
+        // coding-day-bucket-based number for the same order.
+        const num = order.orderNumber || itemNumbers[order.id+'::'+(bundle[0].setLabel||bundle[0].id)] || '—';
         const carried = isGroupCarriedOver(bundle);
         // Sıcak Satış: ageBadge below already shows the one, unified "{N} saat"
         // duration for this channel — this separate sortedAt-based note would
