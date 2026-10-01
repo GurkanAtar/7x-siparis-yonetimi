@@ -1438,10 +1438,50 @@ async function enterApp(user){
   currentUser = user;
   await fetchProfileAndGrants();
   operatorName = currentProfile.name || currentUser.email;
+  // Hides the nav itself before the login overlay ever comes down, so a
+  // restricted role never even gets a flash of tabs it shouldn't see.
+  applyRoleVisibility();
   document.getElementById('loginOverlay').style.display = 'none';
   await loadState();
+  // Switching the default landing stage touches saveState()/render(), both
+  // of which depend on real data — done only now, after loadState() has
+  // actually populated `state`, rather than against the empty placeholder
+  // state the app starts with.
+  applyRoleDefaultStage();
   await loadMessages();
   subscribeToMessages();
+}
+
+// Role-based section visibility — currently just for 'production' (Ebru,
+// Cengiz, Tahir and anyone else given that role): they should only ever see
+// Baskı öncesi, Ayırma & etiketler and Üretim, with every other top-level
+// tab, and every other stage within Sipariş Merkezi (Sipariş girişi,
+// İade/İptal, Çok Satanlar), hidden outright rather than merely locked —
+// the goal is that it never even appears as an option. Other roles are
+// untouched for now. This is UI-only: it controls what the dashboard shows,
+// not what the underlying Supabase tables will answer to a direct API call
+// — the orders/channels tables are still readable by any logged-in user at
+// the database level, so this doesn't by itself keep a technical user from
+// seeing other sections' data if they went around the UI.
+function applyRoleVisibility(){
+  if(!currentProfile || currentProfile.role !== 'production') return;
+  const allowedTopTabs = new Set(['siparismerkezi']);
+  document.querySelectorAll('.tab[data-tab]').forEach(t=>{
+    if(!allowedTopTabs.has(t.dataset.tab)) t.style.display = 'none';
+  });
+  const allowedStages = new Set(['queue','sort','production']);
+  document.querySelectorAll('.entry-subtab[data-stage]').forEach(t=>{
+    if(!allowedStages.has(t.dataset.stage)) t.style.display = 'none';
+  });
+}
+// Sipariş girişi is always the default active stage on login — for
+// 'production', that's now hidden, so this switches them straight to Baskı
+// öncesi instead. Separate from applyRoleVisibility() above because this
+// one needs real loaded data (it triggers saveState()/render()).
+function applyRoleDefaultStage(){
+  if(!currentProfile || currentProfile.role !== 'production') return;
+  const queueBtn = document.querySelector('.entry-subtab[data-stage="queue"]');
+  if(queueBtn) queueBtn.click();
 }
 
 document.getElementById('loginSubmit').onclick = attemptLogin;
@@ -1935,7 +1975,7 @@ function renderOperatorBar(){
         </select>
       </label>
       <button class="ghost small" id="logoutBtn">Çıkış yap</button>
-      <span class="muted" style="font-size:10px;margin-left:auto;" title="Bu sürümün ne zaman oluşturulduğu — canlı sitenin en güncel dosyayı çalıştırıp çalıştırmadığını doğrulamak için.">Sürüm: 2026-10-01 15:39 UTC</span>
+      <span class="muted" style="font-size:10px;margin-left:auto;" title="Bu sürümün ne zaman oluşturulduğu — canlı sitenin en güncel dosyayı çalıştırıp çalıştırmadığını doğrulamak için.">Sürüm: 2026-10-01 16:25 UTC</span>
     </div>`;
   document.getElementById('themeSelect').onchange = (e)=>{
     VALID_THEMES.forEach(t=>document.body.classList.remove(t));
