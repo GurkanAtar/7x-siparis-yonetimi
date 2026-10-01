@@ -1935,7 +1935,7 @@ function renderOperatorBar(){
         </select>
       </label>
       <button class="ghost small" id="logoutBtn">Çıkış yap</button>
-      <span class="muted" style="font-size:10px;margin-left:auto;" title="Bu sürümün ne zaman oluşturulduğu — canlı sitenin en güncel dosyayı çalıştırıp çalıştırmadığını doğrulamak için.">Sürüm: 2026-10-01 14:37 UTC</span>
+      <span class="muted" style="font-size:10px;margin-left:auto;" title="Bu sürümün ne zaman oluşturulduğu — canlı sitenin en güncel dosyayı çalıştırıp çalıştırmadığını doğrulamak için.">Sürüm: 2026-10-01 14:43 UTC</span>
     </div>`;
   document.getElementById('themeSelect').onchange = (e)=>{
     VALID_THEMES.forEach(t=>document.body.classList.remove(t));
@@ -4460,22 +4460,36 @@ function addItemLine(vals){
     </div>
     <div class="item-line-row item-line-row2">
       <input placeholder="Kod (opsiyonel)" class="il-code code-input" value="${vals.code||''}" title="Halı kodunu zaten biliyorsanız buraya girin — baskı öncesini atlar, doğrudan ayırmaya gider.">
-      <label class="upload-photo-wrap il-thumb-wrap" title="Tasarım fotoğrafı ekle">
+      <div class="upload-photo-wrap il-thumb-wrap" title="Tasarım fotoğrafı ekle">
         <span class="thumb-upload il-thumb">+</span><input type="file" accept="image/*" class="il-img" hidden>
         <span class="upload-photo-label">Fotoğraf yükle</span>
-      </label>
+      </div>
       <button type="button" class="ghost small remove-line">×</button>
     </div>
   `;
   const imgLabel = div.querySelector('.il-thumb');
   const imgInput = div.querySelector('.il-img');
+  const uploadLabelEl = div.querySelector('.upload-photo-label');
+  // Once a photo's in, clicking the thumbnail enlarges it (same lightbox as
+  // Baskı öncesi) rather than re-opening the file picker — the whole point
+  // is letting someone confirm the right design actually got uploaded
+  // before the order is saved. Re-uploading still works via the "Fotoğraf
+  // yükle"/"Fotoğraf eklendi" text next to it, or the thumbnail itself
+  // before any photo exists yet (still opens the picker then).
+  imgLabel.onclick = ()=>{
+    const current = itemImages[id];
+    if(current && current.length) openImageLightbox(current[0]);
+    else imgInput.click();
+  };
+  uploadLabelEl.onclick = ()=>imgInput.click();
   if(vals.images && vals.images.length){
     itemImages[id] = vals.images;
     imgLabel.style.backgroundImage = `url(${vals.images[0]})`;
     imgLabel.style.backgroundSize = 'cover';
     imgLabel.style.border = '1px solid var(--line)';
+    imgLabel.style.cursor = 'zoom-in';
     imgLabel.innerHTML = '';
-    div.querySelector('.upload-photo-label').textContent = 'Fotoğraf eklendi';
+    uploadLabelEl.textContent = 'Fotoğraf eklendi';
   }
   imgInput.onchange = ()=>{
     const f = imgInput.files[0]; if(!f) return;
@@ -4487,7 +4501,8 @@ function addItemLine(vals){
       imgLabel.style.backgroundImage = `url(${localPreview})`;
       imgLabel.style.backgroundSize = 'cover';
       imgLabel.style.border = '1px solid var(--line)';
-      div.querySelector('.upload-photo-label').textContent = 'Fotoğraf eklendi';
+      imgLabel.style.cursor = 'zoom-in';
+      uploadLabelEl.textContent = 'Fotoğraf eklendi';
       // Instant preview above uses the local data URL; the durable Storage
       // URL swaps in once the upload finishes, which is what actually gets
       // saved when this order is submitted.
@@ -4554,10 +4569,10 @@ function addItemSet(n, presetSizes, presetName, presetTaban, presetFringe, prese
         <option value="Saçaksız" ${presetFringe!=='Saçaklı'?'selected':''}>Saçaksız</option>
       </select>
       ${showPriceM2Field ? `<input placeholder="Fiyat/m² (set)" class="set-pricem2" value="${presetPriceM2||''}" title="Setin toplam m²'sine uygulanacak m² başına fiyat">` : ''}
-      <label class="upload-photo-wrap set-thumb-wrap" title="Setin tamamı için tasarım fotoğrafını ekleyin">
+      <div class="upload-photo-wrap set-thumb-wrap" title="Setin tamamı için tasarım fotoğrafını ekleyin">
         <span class="thumb-upload set-thumb">+</span><input type="file" accept="image/*" class="set-img" hidden>
         <span class="upload-photo-label">Fotoğraf yükle</span>
-      </label>
+      </div>
       <input placeholder="Kod (opsiyonel)" class="set-code code-input" value="${presetCode||''}" title="Aynı kod bu setteki her parçaya uygulanır.">
       <button type="button" class="ghost small remove-set">Seti kaldır</button>
     </div>
@@ -4565,13 +4580,24 @@ function addItemSet(n, presetSizes, presetName, presetTaban, presetFringe, prese
   `;
   const imgLabel = div.querySelector('.set-thumb');
   const imgInput = div.querySelector('.set-img');
+  const uploadLabelEl = div.querySelector('.upload-photo-label');
+  // Same enlarge-on-click as the single-item thumbnail above — once a photo
+  // is in, clicking it opens the lightbox instead of the file picker, so
+  // the right design can be confirmed before saving.
+  imgLabel.onclick = ()=>{
+    const current = itemImages[setId];
+    if(current && current.length) openImageLightbox(current[0]);
+    else imgInput.click();
+  };
+  uploadLabelEl.onclick = ()=>imgInput.click();
   if(presetImages && presetImages.length){
     itemImages[setId] = presetImages;
     imgLabel.style.backgroundImage = `url(${presetImages[0]})`;
     imgLabel.style.backgroundSize = 'cover';
     imgLabel.style.border = '1px solid var(--line)';
+    imgLabel.style.cursor = 'zoom-in';
     imgLabel.innerHTML = '';
-    div.querySelector('.upload-photo-label').textContent = 'Fotoğraf eklendi';
+    uploadLabelEl.textContent = 'Fotoğraf eklendi';
   }
   imgInput.onchange = ()=>{
     const f = imgInput.files[0]; if(!f) return;
@@ -4583,7 +4609,8 @@ function addItemSet(n, presetSizes, presetName, presetTaban, presetFringe, prese
       imgLabel.style.backgroundImage = `url(${localPreview})`;
       imgLabel.style.backgroundSize = 'cover';
       imgLabel.style.border = '1px solid var(--line)';
-      div.querySelector('.upload-photo-label').textContent = 'Fotoğraf eklendi';
+      imgLabel.style.cursor = 'zoom-in';
+      uploadLabelEl.textContent = 'Fotoğraf eklendi';
       const uploadedUrl = await uploadImageToStorage(localPreview);
       itemImages[setId] = [uploadedUrl];
     };
