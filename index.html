@@ -1935,7 +1935,7 @@ function renderOperatorBar(){
         </select>
       </label>
       <button class="ghost small" id="logoutBtn">Çıkış yap</button>
-      <span class="muted" style="font-size:10px;margin-left:auto;" title="Bu sürümün ne zaman oluşturulduğu — canlı sitenin en güncel dosyayı çalıştırıp çalıştırmadığını doğrulamak için.">Sürüm: 2026-10-01 13:56 UTC</span>
+      <span class="muted" style="font-size:10px;margin-left:auto;" title="Bu sürümün ne zaman oluşturulduğu — canlı sitenin en güncel dosyayı çalıştırıp çalıştırmadığını doğrulamak için.">Sürüm: 2026-10-01 14:37 UTC</span>
     </div>`;
   document.getElementById('themeSelect').onchange = (e)=>{
     VALID_THEMES.forEach(t=>document.body.classList.remove(t));
@@ -2735,8 +2735,28 @@ function applyOrderActionMode(){
 }
 document.querySelectorAll('.mode-toggle-btn').forEach(b=>{
   b.onclick = ()=>{
-    orderActionMode = (orderActionMode === b.dataset.mode) ? null : b.dataset.mode;
+    const turningOn = orderActionMode !== b.dataset.mode;
+    orderActionMode = turningOn ? b.dataset.mode : null;
     applyOrderActionMode();
+    // Düzenle specifically: if whatever's currently showing (after the
+    // Başlangıç/Bitiş/Dosya filters above) has narrowed down to exactly one
+    // order, there's no real choice to make the user click through — jump
+    // straight into that order's edit form instead of just revealing its
+    // one remaining "Düzenle" button for them to click a second time. With
+    // more than one order still visible, leave the mode on as before so
+    // they can pick which one.
+    if(turningOn && b.dataset.mode === 'duzenle'){
+      const visibleCard = [...document.querySelectorAll('#igOrdersListCard, #ihracatOrdersListCard')]
+        .find(c => c.offsetParent !== null);
+      if(visibleCard){
+        const ids = new Set([...visibleCard.querySelectorAll('.edit-order')].map(x=>x.dataset.id));
+        if(ids.size === 1){
+          orderActionMode = null;
+          applyOrderActionMode();
+          startEditOrder([...ids][0]);
+        }
+      }
+    }
   };
 });
 
