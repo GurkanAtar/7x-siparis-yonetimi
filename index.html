@@ -196,6 +196,16 @@
   .dropdown-wrap{position:relative;display:inline-block;}
   .dropdown-menu{display:none;position:absolute;top:calc(100% + 4px);left:0;background:#fff;border:1px solid var(--line);border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,.14);min-width:160px;z-index:200;overflow:hidden;}
   .dropdown-menu.open{display:block;}
+  /* Draws the eye to "+ Halı ekle" right after jumping into an order's edit
+     form — otherwise, with several already-filled item rows above it, the
+     button that actually lets you add a forgotten carpet is easy to miss
+     entirely and the edit form can look like it only lets you touch the
+     rows already there. Purely a visual cue; removed after a few seconds. */
+  @keyframes addItemPulse{
+    0%, 100%{ box-shadow:0 0 0 0 rgba(63,122,94,.55); }
+    50%{ box-shadow:0 0 0 7px rgba(63,122,94,0); }
+  }
+  #addItemToggle.draw-attention{ animation:addItemPulse 1s ease-in-out 3; border-color:var(--forest); color:var(--forest); font-weight:600; }
   .dropdown-item{padding:9px 14px;font-size:13px;cursor:pointer;white-space:nowrap;}
   .dropdown-item:hover{background:var(--paper);}
   .dropdown-divider{border-top:1px solid var(--line);margin:4px 0;}
@@ -498,6 +508,7 @@
     <div class="card" id="sharedItemsCard">
       <div class="items-block" id="itemsBlock">
         <label style="margin-bottom:8px">Halı kalemleri</label>
+        <p class="muted" id="editItemsHint" style="display:none;margin-top:-6px;">Bu siparişi düzenliyorsunuz — aşağıdaki ürünleri değiştirebilir, "× " ile kaldırabilir, ya da unutulan bir halı için <strong>"+ Halı ekle"</strong> ile yeni bir satır ekleyebilirsiniz.</p>
         <div id="itemLines"></div>
         <datalist id="commonSizes"></datalist>
         <div class="dropdown-wrap">
@@ -1868,6 +1879,7 @@ let state = { orders: [], uploadBatches: [], activityLog: [], setTemplates: [], 
 let itemLineCount = 0;
 let itemImages = {}; // lineId -> [dataURL]
 let editingOrderId = null;
+let addItemAttentionTimer = null;
 // Tracks which single Baskı öncesi row is currently in "Düzenle" (edit) mode
 // for its code — null means none. Keyed by the same oid::ids string used for
 // data-oid/data-ids, so it identifies one specific row/group, not a whole
@@ -1923,7 +1935,7 @@ function renderOperatorBar(){
         </select>
       </label>
       <button class="ghost small" id="logoutBtn">Çıkış yap</button>
-      <span class="muted" style="font-size:10px;margin-left:auto;" title="Bu sürümün ne zaman oluşturulduğu — canlı sitenin en güncel dosyayı çalıştırıp çalıştırmadığını doğrulamak için.">Sürüm: 2026-10-01 13:01 UTC</span>
+      <span class="muted" style="font-size:10px;margin-left:auto;" title="Bu sürümün ne zaman oluşturulduğu — canlı sitenin en güncel dosyayı çalıştırıp çalıştırmadığını doğrulamak için.">Sürüm: 2026-10-01 13:38 UTC</span>
     </div>`;
   document.getElementById('themeSelect').onchange = (e)=>{
     VALID_THEMES.forEach(t=>document.body.classList.remove(t));
@@ -5162,6 +5174,9 @@ document.getElementById('saveOrder').onclick = async ()=>{
     editWasAdminAuthorized = null;
     document.getElementById('saveOrder').textContent = 'Siparişi kaydet';
     document.getElementById('cancelEdit').style.display = 'none';
+    document.getElementById('editItemsHint').style.display = 'none';
+    document.getElementById('addItemToggle').classList.remove('draw-attention');
+    clearTimeout(addItemAttentionTimer);
   } else {
     const order = {
       id: uid(),
@@ -5388,13 +5403,22 @@ async function startEditOrder(orderId){
   editingOrderId = orderId;
   document.getElementById('saveOrder').textContent = 'Siparişi güncelle';
   document.getElementById('cancelEdit').style.display = 'inline-block';
-  // Scroll straight to this channel's own manual-entry card, not the top of
-  // the entry stage — Instagram and Trendyol both have an Excel-upload card
-  // sitting above their manual-entry form, so scrolling to the stage's own
-  // top landed on the upload card instead of the now-populated, editable
-  // form, making it look like editing had done nothing at all.
-  const targetCard = document.getElementById('manualEntryCard-'+targetSub);
-  (targetCard || document.getElementById('entry')).scrollIntoView({behavior:'smooth', block:'start'});
+  document.getElementById('editItemsHint').style.display = '';
+  // Scroll straight to the item list itself — not just the top of this
+  // channel's manual-entry card — since that's where the actual point of
+  // confusion was: with several already-filled rows above it, "+ Halı ekle"
+  // sat below the fold and looked like it wasn't there at all, making the
+  // edit form look read-only for anything except the rows already entered.
+  // block:'center' still leaves the customer-info card above it in view.
+  const targetCard = document.getElementById('itemsBlock') || document.getElementById('manualEntryCard-'+targetSub);
+  (targetCard || document.getElementById('entry')).scrollIntoView({behavior:'smooth', block:'center'});
+  // A brief pulse on "+ Halı ekle" itself, so it's unmistakable this is
+  // where a forgotten carpet gets added — cleared after a few seconds and
+  // also whenever a fresh edit/cancel/save resets the form.
+  const addBtn = document.getElementById('addItemToggle');
+  addBtn.classList.add('draw-attention');
+  clearTimeout(addItemAttentionTimer);
+  addItemAttentionTimer = setTimeout(()=>addBtn.classList.remove('draw-attention'), 3200);
 }
 
 document.getElementById('cancelEdit').onclick = ()=>{
@@ -5402,6 +5426,9 @@ document.getElementById('cancelEdit').onclick = ()=>{
   editWasAdminAuthorized = null;
   document.getElementById('saveOrder').textContent = 'Siparişi kaydet';
   document.getElementById('cancelEdit').style.display = 'none';
+  document.getElementById('editItemsHint').style.display = 'none';
+  document.getElementById('addItemToggle').classList.remove('draw-attention');
+  clearTimeout(addItemAttentionTimer);
   if(currentEntryMode==='ihracat'){
     ['exName','exPhone','exCity','exCountry','exForeignAmount','exRate','exNote'].forEach(id=>document.getElementById(id).value='');
     document.getElementById('exSaleType').value='';
@@ -9248,7 +9275,7 @@ function renderFinBayilerSicak(){
       <tbody>${taRows}${otherRow}
         <tr><td><strong>Toplam</strong></td><td>${fmt(tot.om2)}</td><td>${fmt(tot.oc)} TL</td><td>${fmt(tot.nm2)}</td><td>${fmt(tot.nc)} TL</td><td><strong>${fmt(tot.om2+tot.nm2)}</strong></td><td><strong>${fmt(tot.oc+tot.nc)} TL</strong></td></tr>
       </tbody></table>
-      <p class="muted" style="font-size:11px;margin-top:4px;">1 Ekim'den sonraki ciro, Sipariş girişinde her kalem için girilen Fiyat/m²'den hesaplanır.</p>`;
+`;
 
     // --- Orders table with source / approval / dispatch actions ---
     const orderTable = d.orderRows.length ? `
