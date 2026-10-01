@@ -551,7 +551,7 @@
       </div>
       <p class="muted" style="margin-top:-6px">Belirli bir yüklemenin içeriğini kontrol etmek için dosya seçin — hiçbiri seçilmezse hepsi (manuel girişler dahil) gösterilir.</p>
       <table id="ordersTable">
-        <thead><tr><th>Sipariş #</th><th>Sipariş tarihi</th><th id="thOrdersChannel">Satış Kanalı</th><th id="thOrdersCustomer">Müşteri</th><th id="thOrdersPhone">Telefon</th><th id="thOrdersAddress">Adres</th><th>Ölçü</th><th>Taban</th><th>Saçak</th><th>Şekil</th><th>Halı sayısı</th><th>m²</th><th>Fiyat/m²</th><th>Toplam Tutar</th><th id="thPrepaid">Peşinat</th><th id="thBalance">Bakiye</th><th>Süre</th><th></th></tr></thead>
+        <thead id="ordersThead"><tr><th>Sipariş #</th><th>Sipariş tarihi</th><th id="thOrdersChannel">Satış Kanalı</th><th id="thOrdersCustomer">Müşteri</th><th id="thOrdersPhone">Telefon</th><th id="thOrdersAddress">Adres</th><th>Ölçü</th><th>Taban</th><th>Saçak</th><th>Şekil</th><th>Halı sayısı</th><th>m²</th><th>Fiyat/m²</th><th>Toplam Tutar</th><th id="thPrepaid">Peşinat</th><th id="thBalance">Bakiye</th><th>Süre</th><th></th></tr></thead>
         <tbody></tbody>
       </table>
       <div class="empty" id="ordersEmpty" style="display:none">Henüz sipariş yok. Yukarıdan bir liste yükleyin veya manuel ekleyin.</div>
@@ -1975,7 +1975,7 @@ function renderOperatorBar(){
         </select>
       </label>
       <button class="ghost small" id="logoutBtn">Çıkış yap</button>
-      <span class="muted" style="font-size:10px;margin-left:auto;" title="Bu sürümün ne zaman oluşturulduğu — canlı sitenin en güncel dosyayı çalıştırıp çalıştırmadığını doğrulamak için.">Sürüm: 2026-10-01 21:06 UTC</span>
+      <span class="muted" style="font-size:10px;margin-left:auto;" title="Bu sürümün ne zaman oluşturulduğu — canlı sitenin en güncel dosyayı çalıştırıp çalıştırmadığını doğrulamak için.">Sürüm: 2026-10-01 21:18 UTC</span>
     </div>`;
   document.getElementById('themeSelect').onchange = (e)=>{
     VALID_THEMES.forEach(t=>document.body.classList.remove(t));
@@ -3146,6 +3146,14 @@ function exportSectionToExcel(key){
     // just ones that happened to cross a print page boundary.
     const rowspanCarry = [];
     table.querySelectorAll('tr').forEach(tr=>{
+      // A whole <thead> can be CSS-hidden too, not just individual cells
+      // (Sıcak Satış hides its generic thead entirely and builds its own
+      // per-buyer header rows directly in the body instead) — querySelectorAll
+      // still finds that thead's <tr> since it's only hidden visually, so
+      // skip it explicitly here or it would leak into the export as a bogus
+      // extra header row.
+      const hiddenThead = tr.closest('thead');
+      if(hiddenThead && hiddenThead.style.display==='none') return;
       const expanded = [];
       let col = 0;
       let cellIdx = 0;
@@ -7060,17 +7068,19 @@ function renderOrders(){
   const hidePrepaidCols = currentEntryMode==='trendyol' || currentEntryMode==='hepsiburada';
   document.getElementById('thPrepaid').style.display = hidePrepaidCols ? 'none' : '';
   document.getElementById('thBalance').style.display = hidePrepaidCols ? 'none' : '';
-  // Sıcak Satış groups every row under a per-buyer header anyway (the
-  // isFlatList branch below), which already names the buyer — repeating
-  // Satış Kanalı/Müşteri/Telefon/Adres as their own columns on every single
-  // row was pure repetition, and Adres was always empty besides (this
-  // channel only ever collects Şehir, never a street address). The buyer
-  // header picks up Şehir + Telefon instead, right next to the name.
-  const hideSicakContactCols = currentEntryMode === 'sicaksatis';
-  document.getElementById('thOrdersChannel').style.display = hideSicakContactCols ? 'none' : '';
-  document.getElementById('thOrdersCustomer').style.display = hideSicakContactCols ? 'none' : '';
-  document.getElementById('thOrdersPhone').style.display = hideSicakContactCols ? 'none' : '';
-  document.getElementById('thOrdersAddress').style.display = hideSicakContactCols ? 'none' : '';
+  // Sıcak Satış groups every row under a per-buyer section anyway (the
+  // isFlatList branch below, declared just past this point), which already
+  // names the buyer — repeating Sipariş #/Satış Kanalı/Müşteri/Telefon/Adres
+  // as their own columns on every single row was pure repetition, and Adres
+  // was always empty besides (this channel only ever collects Şehir, never a
+  // street address). Rather than just hiding those columns in the shared
+  // <thead>, Sıcak Satış hides the whole thing and builds its own per-buyer
+  // banner + column-header pair directly in the body instead (see below) —
+  // the banner line (name — Şehir — Telefon — sipariş no) comes first, with
+  // the column headers for that buyer's rows right underneath it, rather
+  // than one generic header miles above the buyer it actually describes.
+  const isFlatList = currentEntryMode === 'sicaksatis';
+  document.getElementById('ordersThead').style.display = isFlatList ? 'none' : '';
   const itemNumbers = computeItemNumbers();
   // igOrders is already in its final display order at this point — warning
   // rows first, then genuinely chronological (newest first), Kayıp Kargo
@@ -7088,7 +7098,6 @@ function renderOrders(){
   // still grouped under a header per buyer name purely for readability, with
   // its own subtotal — that grouping is visual only, nothing is shared or
   // rowspanned between the rows underneath it.
-  const isFlatList = currentEntryMode === 'sicaksatis';
 
   // Builds and appends every flat-list row for one order (one per line item),
   // returning that order's own m²/Toplam so the caller can add it to a running
@@ -7110,8 +7119,6 @@ function renderOrders(){
       const sizeCell = isSet
         ? `${group.map(i=>i.size).join(', ')} <span class="muted">(${displaySetLabel(group[0].setLabel)} — ${group.length} parça)</span>`
         : `${group[0].size}${group[0].setLabel ? ` <span class="muted">(${displaySetLabel(group[0].setLabel)})</span>` : ''}`;
-      const groupKey = group[0].setLabel || group[0].id;
-      const numCell = groupNumCell(group, o.id+'::'+groupKey, itemNumbers);
       const tabanCell = group[0].taban || 'Dot Taban';
       const fringeCell = group[0].fringe || 'Saçaksız';
       const shapeCell = isSet ? group.map(i=>i.shape||'Standart').join(', ') : (group[0].shape || 'Standart');
@@ -7157,13 +7164,13 @@ function renderOrders(){
       }
       const missingContactBadge = missingContactInfo
         ? ' <span class="pill" style="background:var(--rust);color:#fff;">İletişim bilgisi eksik</span>' : '';
-      // Satış Kanalı/Müşteri/Telefon/Adres are no longer their own columns
-      // here — the buyer header above this row already names the customer
-      // plus their Şehir/Telefon, so repeating it on every line item was
-      // redundant. The missing-contact warning still needs a home, so it
-      // rides along on the first visible cell instead of the now-gone
-      // Müşteri cell.
-      tr.innerHTML = `<td>${numCell}${missingContactBadge}</td><td>${o.date||'-'}</td>
+      // Sipariş #/Satış Kanalı/Müşteri/Telefon/Adres are no longer their own
+      // columns here — the buyer banner above this row already names the
+      // customer, their Şehir/Telefon, and the order's own number (shared by
+      // every row of the same order, so there's no point repeating it line
+      // by line). The missing-contact warning still needs a home, so it
+      // rides along on the date cell instead of the now-gone Müşteri cell.
+      tr.innerHTML = `<td>${o.date||'-'}${missingContactBadge}</td>
         <td>${sizeCell}</td><td>${tabanCell}</td><td>${fringeCell}</td><td>${shapeCell}</td>
         <td>${groupCarpetCount}</td>
         <td>${groupM2.toFixed(2)}</td><td>${pricePerM2Cell}</td>
@@ -7188,22 +7195,34 @@ function renderOrders(){
       byBuyer.get(key).push(o);
     });
     let grandM2 = 0, grandTutar = 0;
+    // Column count for each actual data row below: Sipariş tarihi, Ölçü,
+    // Taban, Saçak, Şekil, Halı sayısı, m², Fiyat/m², Toplam Tutar,
+    // [Peşinat, Bakiye], Süre, action = 11 or 13. Reused for both the
+    // buyer banner's full-width colspan and the "before m²" colspan in the
+    // subtotal/grand-total rows below.
+    const totalCols = 11 + (hidePrepaidCols ? 0 : 2);
+    const colsBeforeM2 = 6; // Sipariş tarihi, Ölçü, Taban, Saçak, Şekil, Halı sayısı
     byBuyer.forEach((buyerOrders, buyerName)=>{
-      // Channel/Müşteri/Telefon/Adres no longer have their own columns on
-      // this list (see hideSicakContactCols above) — 4 fewer columns to
-      // span everywhere a colspan used to cover the whole row width.
-      const totalCols = (hidePrepaidCols ? 17 : 19) - 4;
+      // The buyer banner comes FIRST now, with the column headers for its
+      // rows directly underneath it — rather than one generic header way up
+      // at the top of the whole table, disconnected from the buyer section
+      // it actually describes. Şehir/Telefon/sipariş no all ride along here
+      // too, since none of them have their own per-row column anymore (a
+      // buyer with more than one separate order gets every distinct order
+      // number listed, since they don't all necessarily share one).
       const headerTr = document.createElement('tr');
-      // Şehir/Telefon ride along right here next to the buyer's name —
-      // this header is the one place that still needs them, now that the
-      // per-row columns are gone.
       const repOrder = buyerOrders[0];
       const contactBits = [repOrder.city, repOrder.phone].filter(Boolean).join(' — ');
-      const buyerHeaderLabel = contactBits
-        ? `${buyerName} <span class="muted" style="font-weight:400;">— ${contactBits}</span>`
+      const orderNums = [...new Set(buyerOrders.map(o=>orderBaseNumCell(o, itemNumbers)))].join(', ');
+      const bannerBits = [contactBits, orderNums].filter(Boolean).join(' — ');
+      const buyerHeaderLabel = bannerBits
+        ? `${buyerName} <span class="muted" style="font-weight:400;">— ${bannerBits}</span>`
         : buyerName;
       headerTr.innerHTML = `<td colspan="${totalCols}" style="background:var(--paper-soft,#f4f1ea);font-weight:600;padding:8px 10px;">${buyerHeaderLabel}</td>`;
       tbody.appendChild(headerTr);
+      const colHeaderTr = document.createElement('tr');
+      colHeaderTr.innerHTML = `<th>Sipariş tarihi</th><th>Ölçü</th><th>Taban</th><th>Saçak</th><th>Şekil</th><th>Halı sayısı</th><th>m²</th><th>Fiyat/m²</th><th>Toplam Tutar</th>${hidePrepaidCols ? '' : '<th>Peşinat</th><th>Bakiye</th>'}<th>Süre</th><th></th>`;
+      tbody.appendChild(colHeaderTr);
       let buyerM2 = 0, buyerTutar = 0;
       buyerOrders.forEach(o=>{
         const sums = appendFlatOrderRows(o);
@@ -7213,7 +7232,7 @@ function renderOrders(){
       const subTr = document.createElement('tr');
       subTr.style.fontWeight = '600';
       subTr.style.borderTop = '1px solid var(--line)';
-      subTr.innerHTML = `<td colspan="7" style="text-align:right">${buyerName} toplamı</td>
+      subTr.innerHTML = `<td colspan="${colsBeforeM2}" style="text-align:right">${buyerName} toplamı</td>
         <td>${buyerM2.toFixed(2)} m²</td><td></td>
         <td>${formatTL(Math.round(buyerTutar))} TL</td>${hidePrepaidCols ? '' : '<td></td><td></td>'}<td></td><td></td>`;
       tbody.appendChild(subTr);
@@ -7223,7 +7242,7 @@ function renderOrders(){
       const tr = document.createElement('tr');
       tr.style.fontWeight = '700';
       tr.style.borderTop = '2px solid var(--line)';
-      tr.innerHTML = `<td colspan="7" style="text-align:right">GENEL TOPLAM (${igOrders.length} sipariş, ${totalCarpets} halı)</td>
+      tr.innerHTML = `<td colspan="${colsBeforeM2}" style="text-align:right">GENEL TOPLAM (${igOrders.length} sipariş, ${totalCarpets} halı)</td>
         <td>${grandM2.toFixed(2)} m²</td><td></td>
         <td>${formatTL(Math.round(grandTutar))} TL</td>${hidePrepaidCols ? '' : '<td></td><td></td>'}<td></td><td></td>`;
       tbody.appendChild(tr);
@@ -8518,6 +8537,25 @@ function isOrderCarriedOver(order){
 function groupNumCell(group, groupKey, itemNumbers){
   const n = itemNumbers[groupKey] || '—';
   return isGroupCarriedOver(group) ? `<span class="ts" style="color:var(--rust);font-weight:600" title="Önceki günden devretmiş">${n}</span>` : n;
+}
+
+// The base order number (e.g. "SS-501", with no "-1/9" position suffix —
+// that suffix only gets added once items reach Baskı öncesi/Üretim and get
+// their physical sticker position). Every item of the same order shares this
+// same base number once ANY of them has been coded, since the number is
+// assigned per (order, coding day), not per item — so it's safe to show once
+// per order rather than repeating it on every line. Returns '—' until at
+// least one item has actually been coded.
+function orderBaseNumCell(order, itemNumbers){
+  const seen = new Set();
+  for(const item of order.items){
+    const key = item.setLabel || item.id;
+    if(seen.has(key)) continue;
+    seen.add(key);
+    const n = itemNumbers[order.id+'::'+key];
+    if(n) return n;
+  }
+  return '—';
 }
 
 function itemLagHours(order, item){
