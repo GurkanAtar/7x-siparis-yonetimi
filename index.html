@@ -1975,7 +1975,7 @@ function renderOperatorBar(){
         </select>
       </label>
       <button class="ghost small" id="logoutBtn">Çıkış yap</button>
-      <span class="muted" style="font-size:10px;margin-left:auto;" title="Bu sürümün ne zaman oluşturulduğu — canlı sitenin en güncel dosyayı çalıştırıp çalıştırmadığını doğrulamak için.">Sürüm: 2026-10-01 22:25 UTC</span>
+      <span class="muted" style="font-size:10px;margin-left:auto;" title="Bu sürümün ne zaman oluşturulduğu — canlı sitenin en güncel dosyayı çalıştırıp çalıştırmadığını doğrulamak için.">Sürüm: 2026-10-01 22:32 UTC</span>
     </div>`;
   document.getElementById('themeSelect').onchange = (e)=>{
     VALID_THEMES.forEach(t=>document.body.classList.remove(t));
@@ -2058,6 +2058,11 @@ async function loadState(){
   // below — used at the very end to trigger one save, persisting those
   // reconstructed records for good instead of just patching them in memory.
   let didReconcileBatches = false;
+  // Set inside this function if any pre-existing Sıcak Satış order gets its
+  // orderNumber backfilled below — triggers one save at the end, same as
+  // didReconcileBatches, so the assigned numbers are persisted for good
+  // instead of being recomputed (and potentially reshuffled) on every load.
+  let didBackfillSicakNumbers = false;
   // Loads orders AND upload batches individually from their own tables (one
   // row per order, one row per batch) — this is what lets Supabase's Row
   // Level Security actually enforce who can delete what, and what stops one
@@ -2111,6 +2116,17 @@ async function loadState(){
       // re-normalizes every already-saved item once, so existing orders merge
       // back into the same group they always should have been in.
       state.orders.forEach(o=>{ o.items.forEach(i=>{ if(i.taban) i.taban = normalizeTaban(i.taban); }); });
+      // Sıcak Satış orders saved before assignSicakOrderNumberIfNeeded existed
+      // never got an order.orderNumber — every list that now prefers that field
+      // over the old coding-time lookup would show them as "—" forever
+      // otherwise (Baskı öncesi, Ayırma & etiketler, Üretim, stickers). Assign
+      // them one now, oldest-first by when they were actually placed, so the
+      // numbering reads the same chronological way it would have if the
+      // feature had existed from the start.
+      state.orders
+        .filter(o=>channelCategoryForNumbering(o.channel)==='sicaksatis' && !o.orderNumber)
+        .sort((a,b)=>{ const at=orderPlacedAt(a)?orderPlacedAt(a).getTime():0; const bt=orderPlacedAt(b)?orderPlacedAt(b).getTime():0; return at-bt; })
+        .forEach(o=>{ assignSicakOrderNumberIfNeeded(o); didBackfillSicakNumbers = true; });
       state.uploadBatches = (batchRows||[]).map(r=>({ ...(r.data||{}), id: r.id }));
       lastSyncedBatchIds = new Set(state.uploadBatches.map(b=>b.id));
       // A batch saved before the Trendyol upload history was split into its
@@ -2363,7 +2379,7 @@ async function loadState(){
   // Persist any reconstructed batch records right away, so they're no longer
   // "orphaned" the next time anyone loads the app — this only actually
   // fires once per genuinely lost batch, ever.
-  if(didReconcileBatches) saveState();
+  if(didReconcileBatches || didBackfillSicakNumbers) saveState();
 }
 let saveTimer = null;
 function stripImages(obj){
