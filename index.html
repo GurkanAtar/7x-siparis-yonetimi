@@ -1918,7 +1918,7 @@ function renderOperatorBar(){
         </select>
       </label>
       <button class="ghost small" id="logoutBtn">Çıkış yap</button>
-      <span class="muted" style="font-size:10px;margin-left:auto;" title="Bu sürümün ne zaman oluşturulduğu — canlı sitenin en güncel dosyayı çalıştırıp çalıştırmadığını doğrulamak için.">Sürüm: 2026-09-28 20:59 UTC</span>
+      <span class="muted" style="font-size:10px;margin-left:auto;" title="Bu sürümün ne zaman oluşturulduğu — canlı sitenin en güncel dosyayı çalıştırıp çalıştırmadığını doğrulamak için.">Sürüm: 2026-10-01 11:42 UTC</span>
     </div>`;
   document.getElementById('themeSelect').onchange = (e)=>{
     VALID_THEMES.forEach(t=>document.body.classList.remove(t));
@@ -8945,23 +8945,34 @@ function renderFinBayilerTrendyol(){
     const balanceColor = balance < 0 ? 'var(--rust)' : (isLow ? 'var(--rust)' : 'var(--forest)');
     const totalSold = state.orders.filter(o=>channelNamesMatch(o.channel,c.name) && o.saleType!=='Kayıp Kargo').reduce((s,o)=>s+priceToNumber(o.price), 0);
     const totalDeposited = (c.financeLedger||[]).filter(l=>l.type==='topup').reduce((s,l)=>s+l.amount, 0);
-    // Full transaction table, oldest first, with a running balance — deposit
-    // top-ups add, production-stage deductions (the actual "sale" event that
-    // touches the deposit) subtract. Running balance is replayed from zero,
-    // so it lines up with today's real bakiye as long as the ledger is complete.
-    const ledgerSorted = (c.financeLedger||[]).slice().sort((a,b)=>new Date(a.date)-new Date(b.date));
+    // Full transaction table, oldest first, with a running balance — a
+    // starting balance (if any) is synthesized in here for display only
+    // (not stored in financeLedger, same as Sıcak Satış), deposit top-ups
+    // add, production-stage deductions (the actual "sale" event that
+    // touches the deposit) subtract. Running balance is replayed from
+    // zero, so it lines up with today's real bakiye (c.depositBalance)
+    // as long as every mutation goes through topup/deduction/starting.
+    const entries = (c.financeLedger||[]).slice();
+    if(c.startingBalance){
+      entries.push({ date: c.startingBalanceDate ? new Date(c.startingBalanceDate).toISOString() : new Date(0).toISOString(), type:'starting', amount: c.startingBalance, note:'Başlangıç bakiyesi (devir)' });
+    }
+    const ledgerSorted = entries.sort((a,b)=>new Date(a.date)-new Date(b.date));
     let running = 0;
     const ledgerRows = ledgerSorted.map(l=>{
-      running += l.type==='topup' ? l.amount : -l.amount;
+      running += (l.type==='topup'||l.type==='starting') ? l.amount : -l.amount;
       const d = new Date(l.date).toLocaleDateString('tr-TR');
-      const label = l.type==='production_deduction' ? 'Satış (üretim düşümü)' : l.type==='topup' ? 'Depozito ödemesi' : l.type;
-      const amountSign = l.type==='topup' ? '+' : '−';
-      const amountColor = l.type==='topup' ? 'var(--forest)' : 'var(--rust)';
+      const label = l.type==='production_deduction' ? 'Satış (üretim düşümü)' : l.type==='topup' ? 'Depozito ödemesi' : l.type==='starting' ? 'Başlangıç bakiyesi' : l.type;
+      const amountSign = (l.type==='topup'||l.type==='starting') ? '+' : '−';
+      const amountColor = (l.type==='topup'||l.type==='starting') ? 'var(--forest)' : 'var(--rust)';
       return `<tr><td>${d}</td><td>${label}</td><td>${l.note||'-'}${l.account?` (${l.account})`:''}</td><td style="color:${amountColor}">${amountSign}${fmt(l.amount)} TL</td><td>${fmt(running)} TL</td></tr>`;
     }).reverse().join('');
     const ledgerHtml = ledgerSorted.length
       ? `<table style="margin-top:10px;"><thead><tr><th>Tarih</th><th>Hareket</th><th>Açıklama</th><th>Tutar</th><th>Bakiye</th></tr></thead><tbody>${ledgerRows}</tbody></table>`
       : '<p class="muted" style="margin-top:10px;">Henüz hareket yok.</p>';
+    const priceHistory = c.priceHistory || [];
+    const priceHistoryHtml = priceHistory.length
+      ? `<div class="muted" style="font-size:11px;margin-top:4px;">Fiyat geçmişi: ${priceHistory.slice().reverse().map(h=>`${new Date(h.date).toLocaleDateString('tr-TR')} — ${fmt(h.from)} → ${fmt(h.to)} TL/m²`).join(' · ')}</div>`
+      : '';
     return `
     <div style="border:1px solid ${isLow?'var(--rust)':'var(--line)'};border-radius:10px;padding:14px;margin-bottom:12px;${isLow?'background:var(--rust-bg);':''}">
       <div style="display:flex;justify-content:space-between;align-items:center;">
@@ -8973,9 +8984,15 @@ function renderFinBayilerTrendyol(){
         <div><label>Bakiye</label><input disabled value="${fmt(balance)} TL" style="background:var(--paper);color:${balanceColor};font-weight:600"></div>
         <div><label>Uyarı eşiği (TL)</label><input class="fbt-threshold" data-idx="${idx}" value="${threshold!=null?threshold:''}" placeholder="örn. 5000"></div>
       </div>
+      <p class="muted" style="font-size:11px;margin-top:4px;">Bu, bayiye üretim düşümünde uygulanan birim fiyat — Trendyol excel dosyasındaki sipariş tutarından (bayinin marketplace'te sattığı fiyat) farklıdır, bayiye bu fiyat üzerinden borç yazılır. Değiştirildiğinde yalnızca bundan sonraki üretimlere uygulanır, geçmiş düşümler değişmez.</p>
+      ${priceHistoryHtml}
       <div class="row" style="grid-template-columns:1fr 1fr;display:grid;gap:8px;align-items:flex-end;margin-top:8px;">
         <div><label>Toplam satılan tutar (tüm zamanlar)</label><input disabled value="${fmt(totalSold)} TL" style="background:var(--paper);color:var(--ink-soft)"></div>
         <div><label>Toplam yatırılan depozito (tüm zamanlar)</label><input disabled value="${fmt(totalDeposited)} TL" style="background:var(--paper);color:var(--ink-soft)"></div>
+      </div>
+      <div class="row" style="grid-template-columns:1fr 1fr;display:grid;gap:8px;align-items:flex-end;margin-top:8px;">
+        <div><label>Başlangıç bakiyesi (TL) — devirden gelen depozito varsa</label><input class="fbt-start-amount" data-idx="${idx}" value="${c.startingBalance||''}" placeholder="0"></div>
+        <div><label>Tarihi</label><input type="date" class="fbt-start-date" data-idx="${idx}" value="${c.startingBalanceDate||''}"></div>
       </div>
       <div class="row" style="grid-template-columns:1fr 1fr auto;display:grid;gap:8px;align-items:flex-end;margin-top:8px;">
         <div><label>Depozito ekle (TL)</label><input class="fbt-topup-amount" data-idx="${idx}" placeholder="örn. 10000"></div>
@@ -8991,8 +9008,18 @@ function wireFinBayilerTrendyol(el){
     inp.onchange = ()=>{
       const c = state.channels[parseInt(inp.dataset.idx)];
       const val = parseFloat((inp.value||'').replace(',','.'));
-      c.pricePerM2 = isNaN(val) ? undefined : val;
-      logActivity(`Trendyol bayi fiyat/m² güncellendi: "${c.name}" → ${isNaN(val)?'(boş)':val+' TL'}`);
+      const newPrice = isNaN(val) ? undefined : val;
+      const oldPrice = c.pricePerM2;
+      if(newPrice!==oldPrice && oldPrice!=null && newPrice!=null){
+        c.priceHistory = c.priceHistory || [];
+        c.priceHistory.push({ date: new Date().toISOString(), from: oldPrice, to: newPrice });
+      }
+      c.pricePerM2 = newPrice;
+      // From here on, only orders produced after this point get the new
+      // price — accrueDealerDepositOnProduction reads c.pricePerM2 live at
+      // production time, and every past deduction already has its amount
+      // locked into the ledger, so this never touches history.
+      logActivity(`Trendyol bayi fiyat/m² güncellendi: "${c.name}" → ${isNaN(val)?'(boş)':val+' TL'} (bundan sonraki üretimlere uygulanır)`);
       saveState(); render();
     };
   });
@@ -9002,6 +9029,25 @@ function wireFinBayilerTrendyol(el){
       const val = parseFloat((inp.value||'').replace(',','.'));
       c.lowBalanceThreshold = isNaN(val) ? undefined : val;
       logActivity(`Trendyol bayi uyarı eşiği güncellendi: "${c.name}" → ${isNaN(val)?'(boş)':val+' TL'}`);
+      saveState(); render();
+    };
+  });
+  el.querySelectorAll('.fbt-start-amount').forEach(inp=>{
+    inp.onchange = ()=>{
+      const c = state.channels[parseInt(inp.dataset.idx)];
+      const val = parseFloat((inp.value||'').replace(',','.'));
+      const newVal = isNaN(val) ? 0 : val;
+      const oldVal = c.startingBalance || 0;
+      c.depositBalance = (c.depositBalance||0) + (newVal - oldVal);
+      c.startingBalance = newVal || undefined;
+      logActivity(`Trendyol bayi başlangıç bakiyesi güncellendi: "${c.name}" → ${newVal||'(boş)'} TL`);
+      saveState(); render();
+    };
+  });
+  el.querySelectorAll('.fbt-start-date').forEach(inp=>{
+    inp.onchange = ()=>{
+      const c = state.channels[parseInt(inp.dataset.idx)];
+      c.startingBalanceDate = inp.value || undefined;
       saveState(); render();
     };
   });
@@ -9021,110 +9067,370 @@ function wireFinBayilerTrendyol(el){
     };
   });
 }
-// Sıcak Satış Bayiler — a running current-account statement per dealer, fed
-// automatically by Sipariş Merkezi: an optional starting balance (debt
-// carried in from before), then every order (adds to what's owed) and every
-// payment instalment (reduces it) interleaved in one chronological ledger
-// with a running bakiye — same shape as Trendyol's deposit ledger, just with
-// orders as the debit side instead of a fixed deposit.
+// Sıcak Satış Bayiler — rebuilt around the real workflow:
+//  * An opening position as of 1 Ekim 2026 00:00 (balance + per-taban m²/ciro,
+//    typed in by hand) — orders dated before that are already baked into it,
+//    so only orders from the cut-over onward feed the account.
+//  * Orders from Sipariş Merkezi become borç lines automatically; payments
+//    (prepayment, remainder, any instalment) are plus lines; a Düzeltme line
+//    (authorized users only, note required) covers anything else.
+//  * Each order is fulfilled "Stoktan" or "Üretimden" and is dispatched
+//    ("Sevk et") only once fully paid — or once finance/owner has approved a
+//    deferred (vadeli) sale for it. Deferred sales have no deadline; they are
+//    simply monitored via the remaining balance.
+// Sign convention everywhere: negative bakiye = the dealer owes us.
+const SS_CUTOVER = new Date(2026, 9, 1); // 1 Ekim 2026 00:00 local
+const SS_TABANS = ['Dot Taban','Deri Taban','Dokuma'];
+function canFinanceAct(){
+  return !!(currentProfile && (currentProfile.role==='owner' || currentProfile.role==='finance'));
+}
+function ssParseNum(str){
+  const s = (str||'').toString().trim().replace(/−/g,'-').replace(/\s/g,'');
+  if(!s) return NaN;
+  if(s.includes(',')) return parseFloat(s.replace(/\./g,'').replace(',','.'));
+  return parseFloat(s);
+}
+function ssOrderM2ByTaban(o){
+  const r = {};
+  (o.items||[]).forEach(i=>{
+    const t = normalizeTaban(i.taban);
+    r[t] = (r[t]||0) + sizeToM2(i.size)*(i.qty||1);
+  });
+  return r;
+}
+// Everything one dealer card needs, computed in one place so the card, the
+// grand totals and the click handlers can never disagree with each other.
+function ssDealerData(c){
+  const opening = c.ssOpening || { balance:0, byTaban:{} };
+  const payments = c.paymentLedger || [];
+  const orders = state.orders
+    .filter(o=>channelNamesMatch(o.channel,c.name) && o.saleType!=='Kayıp Kargo')
+    .filter(o=>{ const d = parseDMY(o.date); return !d || d.getTime()>=SS_CUTOVER.getTime(); })
+    .slice()
+    .sort((a,b)=>{
+      const da = parseDMY(a.date), db = parseDMY(b.date);
+      return (da?da.getTime():0) - (db?db.getTime():0);
+    });
+  const paidByOrder = {};
+  payments.forEach(p=>{
+    if(p.type!=='adjustment' && p.orderId) paidByOrder[p.orderId] = (paidByOrder[p.orderId]||0) + p.amount;
+  });
+  const orderRows = orders.map(o=>{
+    const ssFin = o.ssFin || {};
+    const tutar = priceToNumber(o.price);
+    const paid = paidByOrder[o.id] || 0;
+    const remaining = tutar - paid;
+    const m2 = Object.values(ssOrderM2ByTaban(o)).reduce((s,v)=>s+v,0);
+    const ca = ssFin.creditApproval;
+    let status, ready=false;
+    if(ssFin.shipment) status = 'shipped';
+    else if(remaining <= 0.01){ status = 'paid'; ready = true; }
+    else if(ca && ca.status==='approved'){ status = 'credit-approved'; ready = true; }
+    else if(ca && ca.status==='pending') status = 'credit-pending';
+    else if(ca && ca.status==='rejected') status = 'credit-rejected';
+    else status = 'awaiting-payment';
+    return { o, ssFin, tutar, paid, remaining, m2, ca, status, ready };
+  });
+  // Merged chronological ledger, running bakiye from the opening balance.
+  const entries = [{ sortKey:-Infinity, pri:0, date:SS_CUTOVER, type:'opening', amount: opening.balance||0, note:'Açılış bakiyesi (1 Ekim 2026 00:00)' }];
+  orderRows.forEach(r=>{
+    const d = parseDMY(r.o.date);
+    entries.push({ sortKey: d?d.getTime():0, pri:1, date:d, type:'order', amount:-r.tutar,
+      note:`Sipariş — ${r.o.customerName||'-'}` });
+  });
+  payments.forEach(p=>{
+    const d = new Date(p.date);
+    const linked = p.orderId ? state.orders.find(x=>x.id===p.orderId) : null;
+    const base = p.type==='adjustment' ? 'Düzeltme' : 'Ödeme';
+    const note = [p.note || base, linked?`(${linked.customerName||'-'} siparişi)`:''].filter(Boolean).join(' ');
+    entries.push({ sortKey:d.getTime(), pri:2, date:d, type:p.type==='adjustment'?'adjustment':'payment',
+      amount:p.amount, account:p.account, note });
+  });
+  entries.sort((a,b)=> a.sortKey===b.sortKey ? a.pri-b.pri : a.sortKey-b.sortKey);
+  let running = 0;
+  entries.forEach(e=>{ running += e.amount; e.running = running; });
+  // Per-taban volume/turnover: opening (typed) + everything since the cut-over.
+  // An order carries one price for all its items, so its tutar is spread over
+  // its tabans in proportion to m².
+  const stat = {};
+  SS_TABANS.concat(['Diğer']).forEach(k=>{ stat[k] = { om2:0, oc:0, nm2:0, nc:0 }; });
+  SS_TABANS.forEach(t=>{
+    const ob = (opening.byTaban||{})[t] || {};
+    stat[t].om2 = ob.m2||0; stat[t].oc = ob.ciro||0;
+  });
+  orderRows.forEach(r=>{
+    const byT = ssOrderM2ByTaban(r.o);
+    const tot = Object.values(byT).reduce((s,v)=>s+v,0);
+    Object.entries(byT).forEach(([t,m2])=>{
+      const k = SS_TABANS.includes(t) ? t : 'Diğer';
+      stat[k].nm2 += m2;
+      if(tot>0) stat[k].nc += r.tutar * m2 / tot;
+    });
+  });
+  const totalOrders = orderRows.reduce((s,r)=>s+r.tutar,0);
+  const totalPaid = payments.filter(p=>p.type!=='adjustment').reduce((s,p)=>s+p.amount,0);
+  const pendingCount = orderRows.filter(r=>r.status==='credit-pending').length;
+  return { opening, payments, orderRows, entries, stat, balance: running, totalOrders, totalPaid, pendingCount };
+}
 function renderFinBayilerSicak(){
   const dealers = state.channels.filter(c=>c.type==='Sıcak Satış bayi');
-  if(!dealers.length) return '<p class="muted">Henüz Sıcak Satış bayisi yok.</p>';
+  if(!dealers.length) return '<p class="muted">Henüz Sıcak Satış bayisi yok — Satış Kanalı ve Marka Kayıt sekmesinden ekleyin.</p>';
   const fmt = n => (n||0).toLocaleString('tr-TR', {minimumFractionDigits:2, maximumFractionDigits:2});
-  let grandTutar=0, grandOdeme=0, grandBakiye=0;
+  const can = canFinanceAct();
+  const dis = can ? '' : 'disabled';
+  const STATUS_LABEL = {
+    'shipped':'Sevk edildi', 'paid':'Ödendi — sevke hazır', 'credit-approved':'Vadeli onaylı — sevke hazır',
+    'credit-pending':'Vadeli satış onayı bekliyor', 'credit-rejected':'Vadeli satış reddedildi', 'awaiting-payment':'Ödeme bekliyor'
+  };
+  const STATUS_COLOR = {
+    'shipped':'var(--forest)', 'paid':'var(--forest)', 'credit-approved':'var(--forest)',
+    'credit-pending':'var(--rust)', 'credit-rejected':'var(--rust)', 'awaiting-payment':'var(--ink-soft)'
+  };
+  let grandBalance=0, grandOrders=0, grandPaid=0, grandPending=0;
   const cards = dealers.map(c=>{
     const idx = state.channels.indexOf(c);
-    const orders = state.orders.filter(o=>channelNamesMatch(o.channel,c.name) && o.saleType!=='Kayıp Kargo');
-    const dealerTutar = orders.reduce((s,o)=>s+priceToNumber(o.price), 0);
-    const paymentLedger = c.paymentLedger || [];
-    const dealerOdeme = paymentLedger.reduce((s,p)=>s+p.amount, 0);
-    const startingBalance = c.startingBalance || 0;
+    const d = ssDealerData(c);
+    grandBalance += d.balance; grandOrders += d.totalOrders; grandPaid += d.totalPaid; grandPending += d.pendingCount;
+    const balColor = d.balance < -0.01 ? 'var(--rust)' : 'var(--forest)';
+    const balNote = d.balance < -0.01 ? 'bayi borçlu' : (d.balance > 0.01 ? 'bayi alacaklı' : 'kapalı');
 
-    // Build one merged, chronological ledger: starting balance first (sorts
-    // before everything else regardless of its date), then orders (debit —
-    // increases what's owed) and payments (credit — reduces it) by date.
-    const entries = [];
-    if(startingBalance){
-      entries.push({ sortKey: -Infinity, date: c.startingBalanceDate ? new Date(c.startingBalanceDate) : null, type:'starting', amount: startingBalance, note:'Başlangıç bakiyesi (devir)' });
-    }
-    orders.forEach(o=>{
-      const d = parseDMY(o.date);
-      entries.push({ sortKey: d?d.getTime():0, date:d, type:'order', amount: priceToNumber(o.price), note: `Sipariş — ${o.customerName||'-'}` });
-    });
-    paymentLedger.forEach(p=>{
-      const d = new Date(p.date);
-      entries.push({ sortKey: d.getTime(), date:d, type:'payment', amount: p.amount, account: p.account, note: p.note || 'Ödeme' });
-    });
-    entries.sort((a,b)=>a.sortKey-b.sortKey);
-    let running = 0;
-    const rows = entries.map(e=>{
-      running += e.type==='payment' ? -e.amount : e.amount;
-      const dLabel = e.date ? e.date.toLocaleDateString('tr-TR') : '-';
-      const label = e.type==='starting' ? 'Başlangıç bakiyesi' : e.type==='order' ? 'Sipariş (borç)' : 'Ödeme';
-      const sign = e.type==='payment' ? '−' : '+';
-      const color = e.type==='payment' ? 'var(--forest)' : 'var(--rust)';
-      return `<tr><td>${dLabel}</td><td>${label}</td><td>${e.note||'-'}${e.account?` (${e.account})`:''}</td><td style="color:${color}">${sign}${fmt(e.amount)} TL</td><td>${fmt(running)} TL</td></tr>`;
-    }).reverse().join('');
-    const dealerBakiye = running;
-    grandTutar += dealerTutar; grandOdeme += dealerOdeme; grandBakiye += dealerBakiye;
-    const ledgerHtml = entries.length
-      ? `<table style="margin-top:10px;"><thead><tr><th>Tarih</th><th>Hareket</th><th>Açıklama</th><th>Tutar</th><th>Bakiye</th></tr></thead><tbody>${rows}</tbody></table>`
-      : '<p class="muted" style="margin-top:10px;">Henüz hareket yok.</p>';
-    return `
-    <div style="border:1px solid var(--line);border-radius:10px;padding:14px;margin-bottom:12px;">
-      <div style="display:flex;justify-content:space-between;align-items:center;">
-        <strong>${c.name}</strong>
-        <span class="muted" style="font-size:12px;">Sipariş tutarı: ${fmt(dealerTutar)} · Ödenen: ${fmt(dealerOdeme)} · Bakiye: ${fmt(dealerBakiye)} TL</span>
-      </div>
-      <div class="row" style="grid-template-columns:1fr 1fr;display:grid;gap:8px;align-items:flex-end;margin-top:10px;">
-        <div><label>Başlangıç bakiyesi (TL) — o tarihte borç varsa</label><input class="fbs-start-amount" data-idx="${idx}" value="${startingBalance||''}" placeholder="0"></div>
-        <div><label>Tarihi</label><input type="date" class="fbs-start-date" data-idx="${idx}" value="${c.startingBalanceDate||''}"></div>
-      </div>
-      <div class="row" style="grid-template-columns:1fr 1fr auto;display:grid;gap:8px;align-items:flex-end;margin-top:8px;">
+    // --- Per-taban volume / turnover table (opening cells are typed inputs) ---
+    const taRows = SS_TABANS.map(t=>{
+      const s = d.stat[t];
+      return `<tr><td>${t}</td>
+        <td><input class="fbs-open-m2" data-idx="${idx}" data-taban="${t}" value="${s.om2||''}" placeholder="0" style="width:90px" ${dis}></td>
+        <td><input class="fbs-open-ciro" data-idx="${idx}" data-taban="${t}" value="${s.oc||''}" placeholder="0" style="width:120px" ${dis}></td>
+        <td>${fmt(s.nm2)}</td><td>${fmt(s.nc)} TL</td>
+        <td><strong>${fmt(s.om2+s.nm2)}</strong></td><td><strong>${fmt(s.oc+s.nc)} TL</strong></td></tr>`;
+    }).join('');
+    const other = d.stat['Diğer'];
+    const otherRow = (other.nm2||other.nc) ? `<tr><td>Diğer tabanlar</td><td>—</td><td>—</td><td>${fmt(other.nm2)}</td><td>${fmt(other.nc)} TL</td><td><strong>${fmt(other.nm2)}</strong></td><td><strong>${fmt(other.nc)} TL</strong></td></tr>` : '';
+    const sumKeys = SS_TABANS.concat(['Diğer']);
+    const tot = sumKeys.reduce((a,k)=>({ om2:a.om2+d.stat[k].om2, oc:a.oc+d.stat[k].oc, nm2:a.nm2+d.stat[k].nm2, nc:a.nc+d.stat[k].nc }), {om2:0,oc:0,nm2:0,nc:0});
+    const taTable = `
+      <table style="margin-top:8px;"><thead><tr><th>Taban</th><th>Açılış m²</th><th>Açılış ciro (TL)</th><th>1 Ekim'den m²</th><th>1 Ekim'den ciro</th><th>Toplam m²</th><th>Toplam ciro</th></tr></thead>
+      <tbody>${taRows}${otherRow}
+        <tr><td><strong>Toplam</strong></td><td>${fmt(tot.om2)}</td><td>${fmt(tot.oc)} TL</td><td>${fmt(tot.nm2)}</td><td>${fmt(tot.nc)} TL</td><td><strong>${fmt(tot.om2+tot.nm2)}</strong></td><td><strong>${fmt(tot.oc+tot.nc)} TL</strong></td></tr>
+      </tbody></table>
+      <p class="muted" style="font-size:11px;margin-top:4px;">1 Ekim'den sonraki ciro, her siparişin tutarının taban m²'sine göre dağıtılmasıyla hesaplanır (siparişte tek fiyat girildiği için).</p>`;
+
+    // --- Orders table with source / approval / dispatch actions ---
+    const orderTable = d.orderRows.length ? `
+      <table style="margin-top:8px;"><thead><tr><th>Tarih</th><th>Müşteri</th><th>m²</th><th>Tutar</th><th>Ödenen</th><th>Kalan</th><th>Kaynak</th><th>Durum</th><th>İşlem</th></tr></thead><tbody>
+      ${d.orderRows.slice().reverse().map(r=>{
+        const o = r.o;
+        let actions = '';
+        if(r.status==='shipped'){
+          actions = `<span class="muted" style="font-size:11px;">${new Date(r.ssFin.shipment.date).toLocaleDateString('tr-TR')} — ${escapeHtml(r.ssFin.shipment.by||'')}</span>`;
+        } else {
+          if(r.status==='awaiting-payment' || r.status==='credit-rejected'){
+            actions += `<button class="ghost small fbs-credit-req" data-oid="${o.id}" data-idx="${idx}">Vadeli satış talep et</button> `;
+          }
+          if(r.status==='credit-pending'){
+            actions += can
+              ? `<button class="small fbs-credit-approve" data-oid="${o.id}" data-idx="${idx}">Onayla</button> <button class="ghost small fbs-credit-reject" data-oid="${o.id}" data-idx="${idx}">Reddet</button> `
+              : `<span class="muted" style="font-size:11px;">Finans/yönetici onayı bekleniyor</span> `;
+          }
+          if(r.ready){
+            actions += `<button class="small fbs-ship" data-oid="${o.id}" data-idx="${idx}">Sevk et</button>`;
+          }
+        }
+        const approvalNote = (r.ca && r.ca.status!=='pending' && r.ca.decidedBy)
+          ? `<div class="muted" style="font-size:10px;">${r.ca.status==='approved'?'Onaylayan':'Reddeden'}: ${escapeHtml(r.ca.decidedBy)}</div>` : (r.ca && r.ca.status==='pending' ? `<div class="muted" style="font-size:10px;">Talep eden: ${escapeHtml(r.ca.requestedBy||'')}</div>` : '');
+        const srcSel = `<select class="fbs-source" data-oid="${o.id}" ${r.status==='shipped'?'disabled':''}>
+          <option value="">— seçin —</option>
+          <option value="Stoktan" ${r.ssFin.source==='Stoktan'?'selected':''}>Stoktan</option>
+          <option value="Üretimden" ${r.ssFin.source==='Üretimden'?'selected':''}>Üretimden</option></select>`;
+        const noPrice = r.tutar===0 ? '<div style="font-size:10px;color:var(--rust);">⚠ tutar girilmemiş</div>' : '';
+        return `<tr><td>${escapeHtml(o.date||'-')}</td><td>${escapeHtml(o.customerName||'-')}</td><td>${fmt(r.m2)}</td>
+          <td>${fmt(r.tutar)} TL${noPrice}</td><td>${fmt(r.paid)} TL</td>
+          <td style="color:${r.remaining>0.01?'var(--rust)':'var(--forest)'};font-weight:600">${fmt(r.remaining)} TL</td>
+          <td>${srcSel}</td><td style="color:${STATUS_COLOR[r.status]};font-weight:600">${STATUS_LABEL[r.status]}${approvalNote}</td><td>${actions}</td></tr>`;
+      }).join('')}
+      </tbody></table>` : '<p class="muted" style="margin-top:8px;">1 Ekim 2026\'dan itibaren bu bayiye ait sipariş yok.</p>';
+
+    // --- Payment + correction forms ---
+    const openOrders = d.orderRows.filter(r=>r.remaining>0.01);
+    const orderOpts = `<option value="">Genel ödeme (siparişe bağlama)</option>` + openOrders.map(r=>`<option value="${r.o.id}">${escapeHtml(r.o.date||'')} — ${escapeHtml(r.o.customerName||'-')} (kalan ${fmt(r.remaining)} TL)</option>`).join('');
+    const today = toDateInputValue(new Date());
+    const payForm = `
+      <div class="row" style="grid-template-columns:1fr 1fr 1.6fr 1fr auto;display:grid;gap:8px;align-items:flex-end;margin-top:12px;">
         <div><label>Ödeme ekle (TL)</label><input class="fbs-pay-amount" data-idx="${idx}" placeholder="örn. 1000"></div>
         <div><label>Hesap</label><select class="fbs-pay-account" data-idx="${idx}">${paymentAccountOptionsHtml()}</select></div>
-        <button class="ghost small fbs-pay-add" data-idx="${idx}">Ekle</button>
+        <div><label>Sipariş (peşinat/kalan için seçin)</label><select class="fbs-pay-order" data-idx="${idx}">${orderOpts}</select></div>
+        <div><label>Tarih</label><input type="date" class="fbs-pay-date" data-idx="${idx}" value="${today}"></div>
+        <button class="small fbs-pay-add" data-idx="${idx}">Ekle</button>
+      </div>`;
+    const adjForm = can ? `
+      <details style="margin-top:8px;"><summary class="muted" style="cursor:pointer;font-size:12px;">Düzeltme ekle (yetkili kullanıcılar)</summary>
+      <div class="row" style="grid-template-columns:1fr 2fr 1fr auto;display:grid;gap:8px;align-items:flex-end;margin-top:8px;">
+        <div><label>Tutar (TL) — borcu azaltan +, artıran −</label><input class="fbs-adj-amount" data-idx="${idx}" placeholder="örn. -500"></div>
+        <div><label>Açıklama (zorunlu)</label><input class="fbs-adj-note" data-idx="${idx}" placeholder="örn. iade / fiyat farkı"></div>
+        <div><label>Tarih</label><input type="date" class="fbs-adj-date" data-idx="${idx}" value="${today}"></div>
+        <button class="ghost small fbs-adj-add" data-idx="${idx}">Ekle</button>
+      </div></details>` : '';
+
+    // --- Cari ekstre ---
+    const ledgerRows = d.entries.slice().reverse().map(e=>{
+      const dLabel = e.date ? e.date.toLocaleDateString('tr-TR') : '-';
+      const label = e.type==='opening' ? 'Açılış bakiyesi' : e.type==='order' ? 'Sipariş (borç)' : e.type==='adjustment' ? 'Düzeltme' : 'Ödeme';
+      const sign = e.amount < 0 ? '−' : '+';
+      const color = e.amount < 0 ? 'var(--rust)' : 'var(--forest)';
+      return `<tr><td>${dLabel}</td><td>${label}</td><td>${escapeHtml(e.note||'-')}${e.account?` (${escapeHtml(e.account)})`:''}</td><td style="color:${color}">${sign}${fmt(Math.abs(e.amount))} TL</td><td>${fmt(e.running)} TL</td></tr>`;
+    }).join('');
+    const ledgerHtml = `<table style="margin-top:10px;"><thead><tr><th>Tarih</th><th>Hareket</th><th>Açıklama</th><th>Tutar</th><th>Bakiye</th></tr></thead><tbody>${ledgerRows}</tbody></table>`;
+
+    return `
+    <div style="border:1px solid ${d.pendingCount?'var(--rust)':'var(--line)'};border-radius:10px;padding:14px;margin-bottom:14px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;">
+        <strong style="font-size:15px;">${escapeHtml(c.name)}</strong>
+        <span style="font-weight:700;color:${balColor};">Bakiye: ${fmt(d.balance)} TL <span class="muted" style="font-weight:400;font-size:12px;">(${balNote})</span></span>
       </div>
+      ${d.pendingCount ? `<div style="margin-top:6px;color:var(--rust);font-weight:600;font-size:12px;">⚠ ${d.pendingCount} vadeli satış talebi onay bekliyor</div>` : ''}
+      <div class="row" style="grid-template-columns:1fr 2fr;display:grid;gap:8px;align-items:flex-end;margin-top:10px;">
+        <div><label>Açılış bakiyesi (TL) — 1 Ekim 2026 00:00 · borç varsa eksi (−)</label><input class="fbs-open-balance" data-idx="${idx}" value="${d.opening.balance||''}" placeholder="örn. -25000" ${dis}></div>
+        <div class="muted" style="font-size:12px;padding-bottom:8px;">${can ? '' : 'Açılış bilgilerini yalnızca yönetici/finans değiştirebilir.'}</div>
+      </div>
+      ${taTable}
+      <h3 style="font-size:13px;margin:16px 0 0;">Siparişler (1 Ekim 2026 ve sonrası)</h3>
+      ${orderTable}
+      ${payForm}
+      ${adjForm}
+      <h3 style="font-size:13px;margin:16px 0 0;">Cari ekstre</h3>
       ${ledgerHtml}
     </div>`;
   }).join('');
+  const balColor = grandBalance < -0.01 ? 'var(--rust)' : 'var(--forest)';
   const totalsHtml = `
     <div class="stat-grid" style="margin-bottom:16px;">
       <div class="stat"><div class="n">${dealers.length}</div><div class="l">Sıcak Satış bayisi</div></div>
-      <div class="stat"><div class="n">${fmt(grandTutar)}</div><div class="l">Toplam sipariş tutarı (TL)</div></div>
-      <div class="stat"><div class="n">${fmt(grandOdeme)}</div><div class="l">Toplam alınan ödeme (TL)</div></div>
-      <div class="stat"><div class="n">${fmt(grandBakiye)}</div><div class="l">Toplam kalan bakiye (TL)</div></div>
+      <div class="stat"><div class="n" style="color:${balColor}">${fmt(grandBalance)}</div><div class="l">Toplam bakiye (TL) — eksi: bayiler borçlu</div></div>
+      <div class="stat"><div class="n">${fmt(grandOrders)}</div><div class="l">1 Ekim'den sipariş tutarı (TL)</div></div>
+      <div class="stat"><div class="n">${fmt(grandPaid)}</div><div class="l">1 Ekim'den alınan ödeme (TL)</div></div>
+      <div class="stat"><div class="n" style="${grandPending?'color:var(--rust)':''}">${grandPending}</div><div class="l">Onay bekleyen vadeli satış</div></div>
     </div>`;
   return totalsHtml + cards;
 }
 function wireFinBayilerSicak(el){
-  el.querySelectorAll('.fbs-start-amount').forEach(inp=>{
+  const who = ()=> operatorName || (currentProfile && currentProfile.name) || 'Bilinmeyen';
+  const chan = node => state.channels[parseInt(node.dataset.idx)];
+  const order = node => state.orders.find(x=>x.id===node.dataset.oid);
+  const needAuth = label => {
+    if(canFinanceAct()) return true;
+    showMessage(`${label} için yönetici veya finans yetkisi gerekiyor.`);
+    return false;
+  };
+  // --- Opening position (balance + per-taban m²/ciro) ---
+  el.querySelectorAll('.fbs-open-balance').forEach(inp=>{
     inp.onchange = ()=>{
-      const c = state.channels[parseInt(inp.dataset.idx)];
-      const val = parseFloat((inp.value||'').replace(',','.'));
-      c.startingBalance = isNaN(val) ? undefined : val;
-      logActivity(`Sıcak Satış bayi başlangıç bakiyesi güncellendi: "${c.name}" → ${isNaN(val)?'(boş)':val+' TL'}`);
+      if(!needAuth('Açılış bakiyesi')){ render(); return; }
+      const c = chan(inp); const v = ssParseNum(inp.value);
+      c.ssOpening = c.ssOpening || { balance:0, byTaban:{} };
+      const before = c.ssOpening.balance||0;
+      c.ssOpening.balance = isNaN(v) ? 0 : v;
+      logActivity(`Sıcak Satış bayi açılış bakiyesi değişti: "${c.name}" ${before} → ${c.ssOpening.balance} TL`);
       saveState(); render();
     };
   });
-  el.querySelectorAll('.fbs-start-date').forEach(inp=>{
-    inp.onchange = ()=>{
-      const c = state.channels[parseInt(inp.dataset.idx)];
-      c.startingBalanceDate = inp.value || undefined;
-      saveState(); render();
-    };
+  ['m2','ciro'].forEach(field=>{
+    el.querySelectorAll(`.fbs-open-${field}`).forEach(inp=>{
+      inp.onchange = ()=>{
+        if(!needAuth('Açılış bilgisi')){ render(); return; }
+        const c = chan(inp); const t = inp.dataset.taban; const v = ssParseNum(inp.value);
+        c.ssOpening = c.ssOpening || { balance:0, byTaban:{} };
+        c.ssOpening.byTaban = c.ssOpening.byTaban || {};
+        c.ssOpening.byTaban[t] = c.ssOpening.byTaban[t] || {};
+        const before = c.ssOpening.byTaban[t][field]||0;
+        c.ssOpening.byTaban[t][field] = isNaN(v) ? 0 : v;
+        logActivity(`Sıcak Satış bayi açılış ${field==='m2'?'m²':'ciro'} değişti: "${c.name}" ${t} ${before} → ${c.ssOpening.byTaban[t][field]}`);
+        saveState(); render();
+      };
+    });
   });
+  // --- Payments ---
   el.querySelectorAll('.fbs-pay-add').forEach(btn=>{
     btn.onclick = ()=>{
-      const idx = parseInt(btn.dataset.idx);
-      const c = state.channels[idx];
-      const input = el.querySelector(`.fbs-pay-amount[data-idx="${idx}"]`);
-      const amount = parseFloat((input.value||'').replace(',','.'));
-      if(!amount){ input.style.borderColor = 'var(--rust)'; return; }
-      const account = el.querySelector(`.fbs-pay-account[data-idx="${idx}"]`).value;
+      const idx = btn.dataset.idx; const c = chan(btn);
+      const amtEl = el.querySelector(`.fbs-pay-amount[data-idx="${idx}"]`);
+      const accEl = el.querySelector(`.fbs-pay-account[data-idx="${idx}"]`);
+      const ordEl = el.querySelector(`.fbs-pay-order[data-idx="${idx}"]`);
+      const dateEl = el.querySelector(`.fbs-pay-date[data-idx="${idx}"]`);
+      const amount = ssParseNum(amtEl.value);
+      let bad = false;
+      if(!amount || amount<=0){ amtEl.style.borderColor='var(--rust)'; bad = true; }
+      if(!accEl.value){ accEl.style.borderColor='var(--rust)'; bad = true; }
+      if(bad) return;
+      const when = dateEl.value ? new Date(dateEl.value+'T12:00:00') : new Date();
+      const linked = ordEl.value ? state.orders.find(x=>x.id===ordEl.value) : null;
       c.paymentLedger = c.paymentLedger || [];
-      c.paymentLedger.push({date:new Date().toISOString(), amount, account});
-      logActivity(`Sıcak Satış bayi ödemesi eklendi: "${c.name}" — ${amount.toLocaleString('tr-TR')} TL${account?` (${account})`:''}`);
+      c.paymentLedger.push({ date: when.toISOString(), amount, account: accEl.value, orderId: ordEl.value||undefined, by: who() });
+      logActivity(`Sıcak Satış bayi ödemesi eklendi: "${c.name}" — ${amount.toLocaleString('tr-TR')} TL (${accEl.value})${linked?` — ${linked.customerName||''} siparişi`:''}`);
+      saveState(); render();
+    };
+  });
+  // --- Corrections (authorized only, note required) ---
+  el.querySelectorAll('.fbs-adj-add').forEach(btn=>{
+    btn.onclick = ()=>{
+      if(!needAuth('Düzeltme')) return;
+      const idx = btn.dataset.idx; const c = chan(btn);
+      const amtEl = el.querySelector(`.fbs-adj-amount[data-idx="${idx}"]`);
+      const noteEl = el.querySelector(`.fbs-adj-note[data-idx="${idx}"]`);
+      const dateEl = el.querySelector(`.fbs-adj-date[data-idx="${idx}"]`);
+      const amount = ssParseNum(amtEl.value); const note = (noteEl.value||'').trim();
+      let bad = false;
+      if(!amount){ amtEl.style.borderColor='var(--rust)'; bad = true; }
+      if(!note){ noteEl.style.borderColor='var(--rust)'; bad = true; }
+      if(bad) return;
+      const when = dateEl.value ? new Date(dateEl.value+'T12:00:00') : new Date();
+      c.paymentLedger = c.paymentLedger || [];
+      c.paymentLedger.push({ date: when.toISOString(), amount, type:'adjustment', note, by: who() });
+      logActivity(`Sıcak Satış bayi düzeltmesi eklendi: "${c.name}" — ${amount.toLocaleString('tr-TR')} TL (${note})`);
+      saveState(); render();
+    };
+  });
+  // --- Fulfilment source ---
+  el.querySelectorAll('.fbs-source').forEach(sel=>{
+    sel.onchange = ()=>{
+      const o = order(sel); if(!o) return;
+      o.ssFin = o.ssFin || {};
+      o.ssFin.source = sel.value || undefined;
+      logActivity(`Sıcak Satış siparişi kaynağı: ${o.customerName||'-'} → ${sel.value||'(boş)'}`);
+      saveState(); render();
+    };
+  });
+  // --- Deferred (vadeli) sale: request → finance/owner approval ---
+  el.querySelectorAll('.fbs-credit-req').forEach(btn=>{
+    btn.onclick = ()=>{
+      const o = order(btn); if(!o) return;
+      o.ssFin = o.ssFin || {};
+      o.ssFin.creditApproval = { status:'pending', requestedBy: who(), requestedAt: new Date().toISOString() };
+      logActivity(`Vadeli satış talep edildi: ${o.customerName||'-'} (${o.channel})`);
+      saveState(); render();
+    };
+  });
+  [['fbs-credit-approve','approved','onaylandı'],['fbs-credit-reject','rejected','reddedildi']].forEach(([cls,status,verb])=>{
+    el.querySelectorAll('.'+cls).forEach(btn=>{
+      btn.onclick = ()=>{
+        if(!needAuth('Vadeli satış kararı')) return;
+        const o = order(btn); if(!o) return;
+        o.ssFin = o.ssFin || {};
+        const prev = o.ssFin.creditApproval || {};
+        o.ssFin.creditApproval = { ...prev, status, decidedBy: who(), decidedAt: new Date().toISOString() };
+        logActivity(`Vadeli satış ${verb}: ${o.customerName||'-'} (${o.channel})`);
+        saveState(); render();
+      };
+    });
+  });
+  // --- Dispatch: only when paid in full or credit approved (guarded again here) ---
+  el.querySelectorAll('.fbs-ship').forEach(btn=>{
+    btn.onclick = ()=>{
+      const o = order(btn); if(!o) return; const c = chan(btn);
+      const r = ssDealerData(c).orderRows.find(x=>x.o.id===o.id);
+      if(!r || !r.ready){ showMessage('Bu sipariş tam ödenmedi ve vadeli satışı onaylanmadı — sevk edilemez.'); return; }
+      if(!r.ssFin.source){ showMessage('Sevk etmeden önce kaynağı seçin (Stoktan / Üretimden).'); return; }
+      o.ssFin = o.ssFin || {};
+      o.ssFin.shipment = { date: new Date().toISOString(), by: who() };
+      logActivity(`Sıcak Satış siparişi sevk edildi: ${o.customerName||'-'} (${r.ssFin.source})${r.status==='credit-approved'?' — vadeli':''}`);
       saveState(); render();
     };
   });
