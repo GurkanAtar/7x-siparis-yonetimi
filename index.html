@@ -1923,7 +1923,7 @@ function renderOperatorBar(){
         </select>
       </label>
       <button class="ghost small" id="logoutBtn">Çıkış yap</button>
-      <span class="muted" style="font-size:10px;margin-left:auto;" title="Bu sürümün ne zaman oluşturulduğu — canlı sitenin en güncel dosyayı çalıştırıp çalıştırmadığını doğrulamak için.">Sürüm: 2026-10-01 12:53 UTC</span>
+      <span class="muted" style="font-size:10px;margin-left:auto;" title="Bu sürümün ne zaman oluşturulduğu — canlı sitenin en güncel dosyayı çalıştırıp çalıştırmadığını doğrulamak için.">Sürüm: 2026-10-01 13:01 UTC</span>
     </div>`;
   document.getElementById('themeSelect').onchange = (e)=>{
     VALID_THEMES.forEach(t=>document.body.classList.remove(t));
@@ -9341,7 +9341,8 @@ function renderFinBayilerSicak(){
     <div class="stat-grid" style="margin-bottom:16px;">
       <div class="stat"><div class="n">${dealers.length}</div><div class="l">Sıcak Satış bayisi</div></div>
       <div class="stat"><div class="n" style="color:${balColor}">${fmt(grandBalance)}</div><div class="l">Toplam bakiye (TL)</div></div>
-      <div class="stat" style="background:var(--amber-bg);border-color:var(--amber);"><div class="n" style="color:var(--amber);">${fmt(newDealerM2)}</div><div class="l" style="color:#3a3a3a;">Yeni Bayiler — Satış m² (bu ay ilk siparişini veren ${newDealerCount} bayi)</div></div>
+      <div class="stat" style="background:var(--amber-bg);border-color:var(--amber);"><div class="n" style="color:var(--amber);">${newDealerCount}</div><div class="l" style="color:#3a3a3a;">Yeni Bayiler (bu ay)</div></div>
+      <div class="stat" style="background:var(--amber-bg);border-color:var(--amber);"><div class="n" style="color:var(--amber);">${fmt(newDealerM2)}</div><div class="l" style="color:#3a3a3a;">Yeni Bayiler — Satış m²</div></div>
       <div class="stat" style="background:var(--amber-bg);border-color:var(--amber);"><div class="n" style="color:var(--amber);">${fmt(newDealerTL)}</div><div class="l" style="color:#3a3a3a;">Yeni Bayiler — Satış (TL)</div></div>
       <div class="stat"><div class="n" style="${grandPending?'color:var(--rust)':''}">${grandPending}</div><div class="l">Onay bekleyen vadeli satış</div></div>
     </div>`;
