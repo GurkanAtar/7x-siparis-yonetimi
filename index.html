@@ -551,7 +551,7 @@
       </div>
       <p class="muted" style="margin-top:-6px">Belirli bir yüklemenin içeriğini kontrol etmek için dosya seçin — hiçbiri seçilmezse hepsi (manuel girişler dahil) gösterilir.</p>
       <table id="ordersTable">
-        <thead><tr><th>Sipariş #</th><th>Sipariş tarihi</th><th>Satış Kanalı</th><th>Müşteri</th><th>Telefon</th><th>Adres</th><th>Ölçü</th><th>Taban</th><th>Saçak</th><th>Şekil</th><th>Halı sayısı</th><th>m²</th><th>Fiyat/m²</th><th>Toplam Tutar</th><th id="thPrepaid">Peşinat</th><th id="thBalance">Bakiye</th><th>Süre</th><th></th></tr></thead>
+        <thead><tr><th>Sipariş #</th><th>Sipariş tarihi</th><th id="thOrdersChannel">Satış Kanalı</th><th id="thOrdersCustomer">Müşteri</th><th id="thOrdersPhone">Telefon</th><th id="thOrdersAddress">Adres</th><th>Ölçü</th><th>Taban</th><th>Saçak</th><th>Şekil</th><th>Halı sayısı</th><th>m²</th><th>Fiyat/m²</th><th>Toplam Tutar</th><th id="thPrepaid">Peşinat</th><th id="thBalance">Bakiye</th><th>Süre</th><th></th></tr></thead>
         <tbody></tbody>
       </table>
       <div class="empty" id="ordersEmpty" style="display:none">Henüz sipariş yok. Yukarıdan bir liste yükleyin veya manuel ekleyin.</div>
@@ -648,7 +648,7 @@
         </div>
       </div>
       <table>
-        <thead><tr><th>Sipariş #</th><th>Sipariş tarihi</th><th>Satış Kanalı</th><th>Müşteri</th><th id="thQueuePhone">Telefon</th><th id="thQueueAdres">Adres</th><th id="thQueueCarpetCount" style="display:none;">Halı Sayısı</th><th>Ölçü</th><th>Toplam Tutar</th><th>Peşinat</th><th>Bakiye</th><th>Süre</th><th>Görsel</th><th>Kod</th><th></th></tr></thead>
+        <thead><tr><th>Sipariş #</th><th>Sipariş tarihi</th><th>Satış Kanalı</th><th>Müşteri</th><th id="thQueuePhone">Telefon</th><th id="thQueueAdres">Adres</th><th id="thQueueCarpetCount" style="display:none;">Halı Sayısı</th><th>Ölçü</th><th id="thQueuePrice">Toplam Tutar</th><th id="thQueuePrepaid">Peşinat</th><th id="thQueueBalance">Bakiye</th><th>Süre</th><th>Görsel</th><th>Kod</th><th></th></tr></thead>
         <tbody id="queueBody"></tbody>
       </table>
       <div class="empty" id="queueEmpty" style="display:none">Kod bekleyen yok. Her şey tamam.</div>
@@ -1975,7 +1975,7 @@ function renderOperatorBar(){
         </select>
       </label>
       <button class="ghost small" id="logoutBtn">Çıkış yap</button>
-      <span class="muted" style="font-size:10px;margin-left:auto;" title="Bu sürümün ne zaman oluşturulduğu — canlı sitenin en güncel dosyayı çalıştırıp çalıştırmadığını doğrulamak için.">Sürüm: 2026-10-01 16:25 UTC</span>
+      <span class="muted" style="font-size:10px;margin-left:auto;" title="Bu sürümün ne zaman oluşturulduğu — canlı sitenin en güncel dosyayı çalıştırıp çalıştırmadığını doğrulamak için.">Sürüm: 2026-10-01 21:06 UTC</span>
     </div>`;
   document.getElementById('themeSelect').onchange = (e)=>{
     VALID_THEMES.forEach(t=>document.body.classList.remove(t));
@@ -7060,6 +7060,17 @@ function renderOrders(){
   const hidePrepaidCols = currentEntryMode==='trendyol' || currentEntryMode==='hepsiburada';
   document.getElementById('thPrepaid').style.display = hidePrepaidCols ? 'none' : '';
   document.getElementById('thBalance').style.display = hidePrepaidCols ? 'none' : '';
+  // Sıcak Satış groups every row under a per-buyer header anyway (the
+  // isFlatList branch below), which already names the buyer — repeating
+  // Satış Kanalı/Müşteri/Telefon/Adres as their own columns on every single
+  // row was pure repetition, and Adres was always empty besides (this
+  // channel only ever collects Şehir, never a street address). The buyer
+  // header picks up Şehir + Telefon instead, right next to the name.
+  const hideSicakContactCols = currentEntryMode === 'sicaksatis';
+  document.getElementById('thOrdersChannel').style.display = hideSicakContactCols ? 'none' : '';
+  document.getElementById('thOrdersCustomer').style.display = hideSicakContactCols ? 'none' : '';
+  document.getElementById('thOrdersPhone').style.display = hideSicakContactCols ? 'none' : '';
+  document.getElementById('thOrdersAddress').style.display = hideSicakContactCols ? 'none' : '';
   const itemNumbers = computeItemNumbers();
   // igOrders is already in its final display order at this point — warning
   // rows first, then genuinely chronological (newest first), Kayıp Kargo
@@ -7146,8 +7157,13 @@ function renderOrders(){
       }
       const missingContactBadge = missingContactInfo
         ? ' <span class="pill" style="background:var(--rust);color:#fff;">İletişim bilgisi eksik</span>' : '';
-      tr.innerHTML = `<td>${numCell}</td><td>${o.date||'-'}</td><td><span class="badge-chan">${o.channel}</span></td>
-        <td>${o.customerName}${missingContactBadge}</td><td>${o.phone||'-'}</td><td>${o.address||'-'}</td>
+      // Satış Kanalı/Müşteri/Telefon/Adres are no longer their own columns
+      // here — the buyer header above this row already names the customer
+      // plus their Şehir/Telefon, so repeating it on every line item was
+      // redundant. The missing-contact warning still needs a home, so it
+      // rides along on the first visible cell instead of the now-gone
+      // Müşteri cell.
+      tr.innerHTML = `<td>${numCell}${missingContactBadge}</td><td>${o.date||'-'}</td>
         <td>${sizeCell}</td><td>${tabanCell}</td><td>${fringeCell}</td><td>${shapeCell}</td>
         <td>${groupCarpetCount}</td>
         <td>${groupM2.toFixed(2)}</td><td>${pricePerM2Cell}</td>
@@ -7173,9 +7189,20 @@ function renderOrders(){
     });
     let grandM2 = 0, grandTutar = 0;
     byBuyer.forEach((buyerOrders, buyerName)=>{
-      const totalCols = hidePrepaidCols ? 17 : 19;
+      // Channel/Müşteri/Telefon/Adres no longer have their own columns on
+      // this list (see hideSicakContactCols above) — 4 fewer columns to
+      // span everywhere a colspan used to cover the whole row width.
+      const totalCols = (hidePrepaidCols ? 17 : 19) - 4;
       const headerTr = document.createElement('tr');
-      headerTr.innerHTML = `<td colspan="${totalCols}" style="background:var(--paper-soft,#f4f1ea);font-weight:600;padding:8px 10px;">${buyerName}</td>`;
+      // Şehir/Telefon ride along right here next to the buyer's name —
+      // this header is the one place that still needs them, now that the
+      // per-row columns are gone.
+      const repOrder = buyerOrders[0];
+      const contactBits = [repOrder.city, repOrder.phone].filter(Boolean).join(' — ');
+      const buyerHeaderLabel = contactBits
+        ? `${buyerName} <span class="muted" style="font-weight:400;">— ${contactBits}</span>`
+        : buyerName;
+      headerTr.innerHTML = `<td colspan="${totalCols}" style="background:var(--paper-soft,#f4f1ea);font-weight:600;padding:8px 10px;">${buyerHeaderLabel}</td>`;
       tbody.appendChild(headerTr);
       let buyerM2 = 0, buyerTutar = 0;
       buyerOrders.forEach(o=>{
@@ -7186,7 +7213,7 @@ function renderOrders(){
       const subTr = document.createElement('tr');
       subTr.style.fontWeight = '600';
       subTr.style.borderTop = '1px solid var(--line)';
-      subTr.innerHTML = `<td colspan="11" style="text-align:right">${buyerName} toplamı</td>
+      subTr.innerHTML = `<td colspan="7" style="text-align:right">${buyerName} toplamı</td>
         <td>${buyerM2.toFixed(2)} m²</td><td></td>
         <td>${formatTL(Math.round(buyerTutar))} TL</td>${hidePrepaidCols ? '' : '<td></td><td></td>'}<td></td><td></td>`;
       tbody.appendChild(subTr);
@@ -7196,7 +7223,7 @@ function renderOrders(){
       const tr = document.createElement('tr');
       tr.style.fontWeight = '700';
       tr.style.borderTop = '2px solid var(--line)';
-      tr.innerHTML = `<td colspan="11" style="text-align:right">GENEL TOPLAM (${igOrders.length} sipariş, ${totalCarpets} halı)</td>
+      tr.innerHTML = `<td colspan="7" style="text-align:right">GENEL TOPLAM (${igOrders.length} sipariş, ${totalCarpets} halı)</td>
         <td>${grandM2.toFixed(2)} m²</td><td></td>
         <td>${formatTL(Math.round(grandTutar))} TL</td>${hidePrepaidCols ? '' : '<td></td><td></td>'}<td></td><td></td>`;
       tbody.appendChild(tr);
@@ -7703,6 +7730,15 @@ function renderQueue(){
   document.getElementById('thQueuePhone').style.display = hidePhoneAdres ? 'none' : '';
   document.getElementById('thQueueAdres').style.display = hidePhoneAdres ? 'none' : '';
   document.getElementById('thQueueCarpetCount').style.display = hidePhoneAdres ? '' : 'none';
+  // Production-role staff (Ebru, Cengiz, Tahir) get the ordering party,
+  // m²/characteristics etc. here but not carpet prices — per the owner,
+  // this applies to Sıcak Satış and İhracat specifically (the two channels
+  // hidePhoneAdres already singles out); Trendyol/Hepsiburada/Instagram
+  // price visibility is untouched for now, left for a later decision.
+  const hidePriceForProduction = currentProfile.role==='production' && hidePhoneAdres;
+  document.getElementById('thQueuePrice').style.display = hidePriceForProduction ? 'none' : '';
+  document.getElementById('thQueuePrepaid').style.display = hidePriceForProduction ? 'none' : '';
+  document.getElementById('thQueueBalance').style.display = hidePriceForProduction ? 'none' : '';
 
   // Every order stays visible here once it has at least one item that either
   // still needs a code, or has already been coded — a coded row no longer
@@ -7896,7 +7932,7 @@ function renderQueue(){
         tr.innerHTML = `<td>${numCell}</td><td rowspan="${rowspan}">${o.date||'-'}</td><td rowspan="${rowspan}"><span class="badge-chan">${o.channel}</span></td>
           <td rowspan="${rowspan}">${o.customerName}</td>${hidePhoneAdres ? '' : `<td rowspan="${rowspan}">${o.phone||'-'}</td><td rowspan="${rowspan}">${o.address||'-'}</td>`}${hidePhoneAdres ? `<td>${groupCarpetCount}</td>` : ''}
           <td>${sizeCell}</td>
-          <td rowspan="${rowspan}">${o.price||'-'}</td><td rowspan="${rowspan}">${o.prepaidAmount||'-'}</td><td rowspan="${rowspan}">${collectCell}</td>
+          ${hidePriceForProduction ? '' : `<td rowspan="${rowspan}">${o.price||'-'}</td><td rowspan="${rowspan}">${o.prepaidAmount||'-'}</td><td rowspan="${rowspan}">${collectCell}</td>`}
           <td rowspan="${rowspan}">${orderAgeBadge(o)}</td>
           <td>${thumb}</td>
           ${codeCell}`;
