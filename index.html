@@ -1935,7 +1935,7 @@ function renderOperatorBar(){
         </select>
       </label>
       <button class="ghost small" id="logoutBtn">Çıkış yap</button>
-      <span class="muted" style="font-size:10px;margin-left:auto;" title="Bu sürümün ne zaman oluşturulduğu — canlı sitenin en güncel dosyayı çalıştırıp çalıştırmadığını doğrulamak için.">Sürüm: 2026-10-01 13:38 UTC</span>
+      <span class="muted" style="font-size:10px;margin-left:auto;" title="Bu sürümün ne zaman oluşturulduğu — canlı sitenin en güncel dosyayı çalıştırıp çalıştırmadığını doğrulamak için.">Sürüm: 2026-10-01 13:56 UTC</span>
     </div>`;
   document.getElementById('themeSelect').onchange = (e)=>{
     VALID_THEMES.forEach(t=>document.body.classList.remove(t));
@@ -6985,9 +6985,9 @@ function renderOrders(){
       seenKeys.add(key);
       groups.push(item.setLabel ? o.items.filter(i=>i.setLabel===item.setLabel) : [item]);
     });
-    const editBtn = `<button class="ghost small edit-order" data-id="${o.id}">Düzenle</button>`;
+    const editBtn = `<button class="ghost small edit-order" data-id="${o.id}" title="Bu siparişin tamamını aç — mevcut ürünleri düzenleyin veya yeni bir ürün ekleyin">Düzenle</button>`;
     let orderM2Sum = 0, orderTutarSum = 0;
-    groups.forEach(group=>{
+    groups.forEach((group, groupIdx)=>{
       const isSet = group.length > 1;
       const sizeCell = isSet
         ? `${group.map(i=>i.size).join(', ')} <span class="muted">(${displaySetLabel(group[0].setLabel)} — ${group.length} parça)</span>`
@@ -7046,7 +7046,7 @@ function renderOrders(){
         <td>${groupM2.toFixed(2)}</td><td>${pricePerM2Cell}</td>
         <td>${groupTotalCell}</td>${hidePrepaidCols ? '' : `<td>${o.prepaidAmount ? formatTL(priceToNumber(o.prepaidAmount))+' TL' : '-'}</td><td>${amountToCollect(o)===null ? '<span style="color:var(--rust);font-weight:600">Tutar girilmemiş</span>' : amountToCollect(o)===0 ? '0' : `<span style="font-weight:600">${formatTL(amountToCollect(o))} TL</span>`}</td>`}
         <td>${orderAgeBadge(o)}</td>
-        <td>${editBtn} <button class="ghost small del-order-item" data-id="${o.id}" data-ids="${ids}">Sil</button></td>`;
+        <td>${groupIdx===0 ? editBtn : ''} <button class="ghost small del-order-item" data-id="${o.id}" data-ids="${ids}">Sil</button></td>`;
       tbody.appendChild(tr);
     });
     return { m2: orderM2Sum, tutar: orderTutarSum };
@@ -7118,7 +7118,7 @@ function renderOrders(){
     // admin PIN in that case, rather than blocking editing outright, since a
     // legitimate correction (like a price that failed to parse) shouldn't be
     // permanently impossible just because production already happened.
-    const editBtn = `<button class="ghost small edit-order" data-id="${o.id}">Düzenle</button>`;
+    const editBtn = `<button class="ghost small edit-order" data-id="${o.id}" title="Bu siparişin tamamını aç — mevcut ürünleri düzenleyin veya yeni bir ürün ekleyin">Düzenle</button>`;
     const collectAmt = amountToCollect(o);
     const collectCell = collectAmt===null
       ? '<span style="color:var(--rust);font-weight:600" title="Toplam Tutar girilmemiş — tahsil edilecek tutar bilinmiyor">Tutar girilmemiş</span>'
@@ -7344,7 +7344,7 @@ function renderExportOrders(){
   // Builds and appends every flat row for one order, returning that order's
   // own m²/Toplam so the caller can add it to a running buyer subtotal.
   function appendExportOrderRows(o){
-    const editBtn = `<button class="ghost small edit-order" data-id="${o.id}">Düzenle</button>`;
+    const editBtn = `<button class="ghost small edit-order" data-id="${o.id}" title="Bu siparişin tamamını aç — mevcut ürünleri düzenleyin veya yeni bir ürün ekleyin">Düzenle</button>`;
     const groups = [];
     const seenKeys = new Set();
     o.items.forEach(item=>{
@@ -7355,7 +7355,7 @@ function renderExportOrders(){
     });
     let orderM2Sum = 0, orderTutarSum = 0;
     const orderByCurrency = {};
-    groups.forEach(group=>{
+    groups.forEach((group, groupIdx)=>{
       const isSet = group.length > 1;
       const sizeCell = isSet
         ? `${group.map(i=>i.size).join(', ')} <span class="muted">(${displaySetLabel(group[0].setLabel)} — ${group.length} parça)</span>`
@@ -7395,7 +7395,7 @@ function renderExportOrders(){
         <td>${o.currency||'-'}</td><td>${o.foreignAmount||'-'}</td><td>${o.exchangeRate||'-'}</td>
         <td>${groupM2.toFixed(2)}</td><td>${dovizCell}</td><td>${groupTotalCell}</td>
         <td>${orderAgeBadge(o)}</td>
-        <td>${editBtn} <button class="ghost small del-order-item" data-id="${o.id}" data-ids="${ids}">Sil</button></td>`;
+        <td>${groupIdx===0 ? editBtn : ''} <button class="ghost small del-order-item" data-id="${o.id}" data-ids="${ids}">Sil</button></td>`;
       tbody.appendChild(tr);
     });
     return { m2: orderM2Sum, tutar: orderTutarSum, byCurrency: orderByCurrency };
