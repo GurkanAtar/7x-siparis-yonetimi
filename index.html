@@ -534,7 +534,7 @@
       <div class="row row3" style="margin-bottom:10px;">
         <div><label>Başlangıç</label><input type="date" id="tsFrom"></div>
         <div><label>Bitiş</label><input type="date" id="tsTo"></div>
-        <div><label>Dosya</label>
+        <div><label id="fileFilterLabel">Dosya</label>
           <div class="dropdown-wrap" style="display:block;">
             <button type="button" class="ghost small" id="fileFilterToggle" style="width:100%;text-align:left;">Tüm dosyalar ▾</button>
             <div class="dropdown-menu" id="fileFilterMenu" style="min-width:100%;max-height:280px;overflow-y:auto;">
@@ -549,7 +549,7 @@
           </div>
         </div>
       </div>
-      <p class="muted" style="margin-top:-6px">Belirli bir yüklemenin içeriğini kontrol etmek için dosya seçin — hiçbiri seçilmezse hepsi (manuel girişler dahil) gösterilir.</p>
+      <p class="muted" style="margin-top:-6px" id="fileFilterHelp">Belirli bir yüklemenin içeriğini kontrol etmek için dosya seçin — hiçbiri seçilmezse hepsi (manuel girişler dahil) gösterilir.</p>
       <table id="ordersTable">
         <thead id="ordersThead"><tr><th>Sipariş #</th><th>Sipariş tarihi</th><th id="thOrdersChannel">Satış Kanalı</th><th id="thOrdersCustomer">Müşteri</th><th id="thOrdersPhone">Telefon</th><th id="thOrdersAddress">Adres</th><th>Ölçü</th><th>Taban</th><th>Saçak</th><th>Şekil</th><th>Halı sayısı</th><th>m²</th><th>Fiyat/m²</th><th>Toplam Tutar</th><th id="thPrepaid">Peşinat</th><th id="thBalance">Bakiye</th><th>Süre</th><th></th></tr></thead>
         <tbody></tbody>
@@ -632,7 +632,7 @@
       <div class="row row3" style="margin-bottom:10px;">
         <div><label>Başlangıç</label><input type="date" id="queueTsFrom"></div>
         <div><label>Bitiş</label><input type="date" id="queueTsTo"></div>
-        <div><label>Dosya</label>
+        <div><label id="queueFileFilterLabel">Dosya</label>
           <div class="dropdown-wrap" style="display:block;">
             <button type="button" class="ghost small" id="queueFileFilterToggle" style="width:100%;text-align:left;">Tüm dosyalar ▾</button>
             <div class="dropdown-menu" id="queueFileFilterMenu" style="min-width:100%;max-height:280px;overflow-y:auto;">
@@ -1975,7 +1975,7 @@ function renderOperatorBar(){
         </select>
       </label>
       <button class="ghost small" id="logoutBtn">Çıkış yap</button>
-      <span class="muted" style="font-size:10px;margin-left:auto;" title="Bu sürümün ne zaman oluşturulduğu — canlı sitenin en güncel dosyayı çalıştırıp çalıştırmadığını doğrulamak için.">Sürüm: 2026-10-01 21:31 UTC</span>
+      <span class="muted" style="font-size:10px;margin-left:auto;" title="Bu sürümün ne zaman oluşturulduğu — canlı sitenin en güncel dosyayı çalıştırıp çalıştırmadığını doğrulamak için.">Sürüm: 2026-10-01 21:46 UTC</span>
     </div>`;
   document.getElementById('themeSelect').onchange = (e)=>{
     VALID_THEMES.forEach(t=>document.body.classList.remove(t));
@@ -3438,8 +3438,74 @@ function renderFileFilterListGeneric(listElId, toggleId, searchId, selectedSet, 
   toggle.textContent = (selectedSet.size ? `${selectedSet.size} seçili` : 'Tüm dosyalar') + ' ▾';
 }
 
+// Sıcak Satış is always manual entry — there's never an Excel upload to
+// filter by, so the "Dosya" dropdown only ever offered one dead "Manuel
+// girişler" checkbox for this channel. In its place, Sıcak Satış gets a
+// "Sipariş" dropdown instead: one checkbox per order placed within the
+// current Başlangıç–Bitiş range, labeled by buyer name plus that order's own
+// sipariş no (SS-501, or "henüz kodlanmadı" before its first item is coded)
+// — so two orders placed the same day can be told apart and picked
+// individually. Reused as-is by both Sipariş girişi (Tüm Sıcak Satış
+// Siparişleri) and Baskı öncesi, which each pass their own date-field ids
+// and selection Set. Başlangıç defaults to today the moment this runs with
+// nothing in it yet, so the picker is never scoped to an empty date.
+function renderOrderPickerList(listElId, toggleId, searchId, fromDateId, toDateId, selectedSet, onChange){
+  const listEl = document.getElementById(listElId);
+  const toggle = document.getElementById(toggleId);
+  if(!listEl || !toggle) return;
+  const fromEl = document.getElementById(fromDateId);
+  const toEl = document.getElementById(toDateId);
+  if(fromEl && !fromEl.value) fromEl.value = toDateInputValue(new Date());
+  const from = fromEl && fromEl.value ? (()=>{ const [y,m,d]=fromEl.value.split('-').map(Number); return new Date(y,m-1,d); })() : null;
+  const to = toEl && toEl.value ? (()=>{ const [y,m,d]=toEl.value.split('-').map(Number); return new Date(y,m-1,d,23,59,59,999); })() : null;
+  const itemNumbers = computeItemNumbers();
+  const candidates = state.orders
+    .filter(o=>channelCategoryForNumbering(o.channel)==='sicaksatis')
+    .filter(o=>{
+      const d = parseDMY(o.date);
+      if(!d) return false;
+      if(from && d < from) return false;
+      if(to && d > to) return false;
+      return true;
+    })
+    .sort((a,b)=>{
+      const at = orderPlacedAt(a) ? orderPlacedAt(a).getTime() : 0;
+      const bt = orderPlacedAt(b) ? orderPlacedAt(b).getTime() : 0;
+      return bt - at;
+    });
+  const searchInput = document.getElementById(searchId);
+  const term = searchInput ? searchInput.value.trim().toLocaleLowerCase('tr') : '';
+  const labeled = candidates.map(o=>{
+    const num = orderBaseNumCell(o, itemNumbers);
+    return { o, label: `${o.customerName || '(İsimsiz)'} — ${num==='—' ? 'henüz kodlanmadı' : num}` };
+  }).filter(x=>!term || x.label.toLocaleLowerCase('tr').includes(term));
+  listEl.innerHTML = labeled.length ? labeled.map(({o,label})=>`
+    <label class="dropdown-item" style="display:flex;align-items:center;gap:8px;white-space:normal;padding:8px 14px;border-top:1px solid var(--line);">
+      <input type="checkbox" class="opc-${listElId}" data-id="${o.id}" ${selectedSet.has(o.id)?'checked':''}>
+      <span>${label}</span>
+    </label>`).join('') : '<div class="dropdown-item muted">Bu tarih aralığında sipariş yok</div>';
+  listEl.querySelectorAll(`.opc-${listElId}`).forEach(cb=>{
+    cb.onchange = ()=>{
+      if(cb.checked) selectedSet.add(cb.dataset.id); else selectedSet.delete(cb.dataset.id);
+      onChange();
+    };
+  });
+  toggle.textContent = (selectedSet.size ? `${selectedSet.size} seçili` : 'Tüm siparişler') + ' ▾';
+}
+
+let selectedEntryOrderFilterIds = new Set();
 function renderFileFilterList(){
-  renderFileFilterListGeneric('fileFilterList', 'fileFilterToggle', 'fileFilterSearch', selectedFileFilterIds, currentEntryMode, renderOrders);
+  if(currentEntryMode==='sicaksatis'){
+    document.getElementById('fileFilterLabel').textContent = 'Sipariş';
+    document.getElementById('fileFilterSearch').placeholder = 'Sipariş ara...';
+    document.getElementById('fileFilterHelp').textContent = 'Belirli bir siparişi kontrol etmek için seçin — hiçbiri seçilmezse o tarih aralığındaki tüm siparişler gösterilir.';
+    renderOrderPickerList('fileFilterList', 'fileFilterToggle', 'fileFilterSearch', 'tsFrom', 'tsTo', selectedEntryOrderFilterIds, renderOrders);
+  } else {
+    document.getElementById('fileFilterLabel').textContent = 'Dosya';
+    document.getElementById('fileFilterSearch').placeholder = 'Dosya ara...';
+    document.getElementById('fileFilterHelp').textContent = 'Belirli bir yüklemenin içeriğini kontrol etmek için dosya seçin — hiçbiri seçilmezse hepsi (manuel girişler dahil) gösterilir.';
+    renderFileFilterListGeneric('fileFilterList', 'fileFilterToggle', 'fileFilterSearch', selectedFileFilterIds, currentEntryMode, renderOrders);
+  }
 }
 document.getElementById('fileFilterToggle').onclick = (e)=>{
   e.stopPropagation();
@@ -3449,7 +3515,7 @@ document.getElementById('fileFilterMenu').onclick = (e)=>e.stopPropagation();
 document.addEventListener('click', ()=>document.getElementById('fileFilterMenu').classList.remove('open'));
 document.getElementById('fileFilterSearch').addEventListener('input', renderFileFilterList);
 document.getElementById('fileFilterClear').onclick = ()=>{
-  selectedFileFilterIds.clear();
+  if(currentEntryMode==='sicaksatis') selectedEntryOrderFilterIds.clear(); else selectedFileFilterIds.clear();
   renderOrders();
 };
 
@@ -3472,7 +3538,26 @@ function wireFileFilterDropdown(prefix, selectedSet, onChange){
 let selectedQueueFileFilterIds = new Set();
 let selectedSortFileFilterIds = new Set();
 let selectedProdFileFilterIds = new Set();
-wireFileFilterDropdown('queue', selectedQueueFileFilterIds, ()=>renderQueue());
+// Baskı öncesi's own wiring, kept separate from wireFileFilterDropdown above
+// since it has to pick between the Dosya list and the Sipariş picker
+// (renderQueueFileFilterList, defined next to renderQueue) depending on
+// currentEntryMode — Ayırma & etiketler and Üretim don't have that picker
+// yet, so they keep using the plain version untouched.
+(function wireQueueFileFilter(){
+  const toggle = document.getElementById('queueFileFilterToggle');
+  const menu = document.getElementById('queueFileFilterMenu');
+  const search = document.getElementById('queueFileFilterSearch');
+  const clear = document.getElementById('queueFileFilterClear');
+  if(!toggle || !menu) return;
+  toggle.onclick = (e)=>{ e.stopPropagation(); menu.classList.toggle('open'); };
+  menu.onclick = (e)=>e.stopPropagation();
+  document.addEventListener('click', ()=>menu.classList.remove('open'));
+  search.addEventListener('input', renderQueueFileFilterList);
+  clear.onclick = ()=>{
+    if(currentEntryMode==='sicaksatis') selectedQueueOrderFilterIds.clear(); else selectedQueueFileFilterIds.clear();
+    renderQueue();
+  };
+})();
 wireFileFilterDropdown('sort', selectedSortFileFilterIds, ()=>renderSort());
 wireFileFilterDropdown('prod', selectedProdFileFilterIds, ()=>renderProduction());
 // A manual edit to "Başlangıç" pins it (auto flag off); clearing it by hand
@@ -5319,6 +5404,7 @@ document.getElementById('saveOrder').onclick = async ()=>{
       createdBy: operatorName || 'Bilinmeyen',
       items
     };
+    assignSicakOrderNumberIfNeeded(order);
     state.orders.push(order);
     const preCoded = items.filter(i=>i.status==='coded').length;
     logActivity(`Manuel sipariş eklendi: ${order.customerName} (${items.length} kalem${preCoded?`, ${preCoded} önceden kodlanmış`:''})`);
@@ -7026,7 +7112,13 @@ function renderOrders(){
   if(['sicaksatis','trendyol','hepsiburada','ig'].includes(currentEntryMode)){
     igOrders = igOrders.filter(o=>orderMatchesCategory(o, currentEntryMode));
   }
-  if(selectedBatchIds.length) igOrders = igOrders.filter(o=>o.batchId ? selectedBatchIds.includes(o.batchId) : selectedBatchIds.includes('__manual__'));
+  if(currentEntryMode==='sicaksatis'){
+    // No upload batches ever exist for this channel — the picker above
+    // selects specific orders by id instead (see renderFileFilterList).
+    if(selectedEntryOrderFilterIds.size) igOrders = igOrders.filter(o=>selectedEntryOrderFilterIds.has(o.id));
+  } else if(selectedBatchIds.length){
+    igOrders = igOrders.filter(o=>o.batchId ? selectedBatchIds.includes(o.batchId) : selectedBatchIds.includes('__manual__'));
+  }
   if(tsFrom || tsTo){
     igOrders = igOrders.filter(o=>{
       const d = parseDMY(o.date);
@@ -7735,10 +7827,22 @@ function numberWithPosition(num, order, item, copyIndex){
   return pieces.length > 1 ? `${num}-${itemPosition(order, item, copyIndex)}` : `${num}`;
 }
 
+let selectedQueueOrderFilterIds = new Set();
+function renderQueueFileFilterList(){
+  if(currentEntryMode==='sicaksatis'){
+    document.getElementById('queueFileFilterLabel').textContent = 'Sipariş';
+    document.getElementById('queueFileFilterSearch').placeholder = 'Sipariş ara...';
+    renderOrderPickerList('queueFileFilterList', 'queueFileFilterToggle', 'queueFileFilterSearch', 'queueTsFrom', 'queueTsTo', selectedQueueOrderFilterIds, renderQueue);
+  } else {
+    document.getElementById('queueFileFilterLabel').textContent = 'Dosya';
+    document.getElementById('queueFileFilterSearch').placeholder = 'Dosya ara...';
+    renderFileFilterListGeneric('queueFileFilterList', 'queueFileFilterToggle', 'queueFileFilterSearch', selectedQueueFileFilterIds, currentEntryMode, renderQueue);
+  }
+}
+
 function renderQueue(){
   const tbody = document.getElementById('queueBody');
   tbody.innerHTML='';
-  renderFileFilterListGeneric('queueFileFilterList', 'queueFileFilterToggle', 'queueFileFilterSearch', selectedQueueFileFilterIds, currentEntryMode, renderQueue);
   let count = 0;
   const itemNumbers = computeItemNumbers();
   // Telefon/Adres matter for delivery-focused channels, but not for Sıcak
@@ -7778,10 +7882,21 @@ function renderQueue(){
   const relevantStatuses = currentEntryMode==='ihracat' ? ['pending','coded','sorted'] : ['pending','coded'];
   const queueCandidateOrders = state.orders.filter(o=>o.items.some(i=>relevantStatuses.includes(i.status)) && channelCategoryForNumbering(o.channel)===currentEntryMode);
   setAutoFloorDate('queueTsFrom', queueCandidateOrders, queueTsFromAuto);
-  const ordersWithItemsHere = applyQueueFilters(
+  // Rendered only now, after the auto-floor date above has settled
+  // queueTsFrom's value — the order picker's own "default to today if still
+  // empty" (inside renderOrderPickerList) needs to run AFTER that, or the
+  // auto-floor logic would immediately overwrite its default right back out.
+  renderQueueFileFilterList();
+  let ordersWithItemsHere = applyQueueFilters(
     queueCandidateOrders,
-    selectedQueueFileFilterIds, 'queueTsFrom', 'queueTsTo'
+    // No upload batches ever exist for Sıcak Satış — pass an empty set so
+    // applyQueueFilters' batch-matching step is a no-op; the order picker's
+    // own selection is applied separately, right below.
+    currentEntryMode==='sicaksatis' ? new Set() : selectedQueueFileFilterIds, 'queueTsFrom', 'queueTsTo'
   );
+  if(currentEntryMode==='sicaksatis' && selectedQueueOrderFilterIds.size){
+    ordersWithItemsHere = ordersWithItemsHere.filter(o=>selectedQueueOrderFilterIds.has(o.id));
+  }
   // Grouped by upload batch, most recently uploaded file's block at the
   // top — matching Tüm Siparişler. This used to rely on state.orders
   // still being in its original push order and just reversing that, which
@@ -7907,13 +8022,16 @@ function renderQueue(){
       // Onayla).
       const isPending = group[0].status === 'pending';
       const isBeingEdited = queueEditingKey === rowKey;
-      // A pending item has no number yet (assigned only once coded); a coded
-      // one shows its real assigned number, same lookup Ayırma/Üretim/Tüm
-      // siparişler already use — this is now per-GROUP, not rowspanned across
-      // the whole order, since different items in the same order can be coded
-      // (and thus numbered) at different times.
+      // A pending item normally has no number yet (assigned only once coded,
+      // same lookup Ayırma/Üretim/Tüm siparişler already use) — except Sıcak
+      // Satış, whose orders already carry their sipariş no from the moment
+      // they were created (o.orderNumber), so there's no reason to wait for
+      // coding to show it there. This is now per-GROUP, not rowspanned
+      // across the whole order, since different items in the same order can
+      // still be coded (and numbered, for every other channel) at different
+      // times.
       const groupKey = o.id + '::' + (group[0].setLabel || group[0].id);
-      const numCell = isPending ? '—' : groupNumCell(group, groupKey, itemNumbers, o);
+      const numCell = (o.orderNumber || !isPending) ? groupNumCell(group, groupKey, itemNumbers, o) : '—';
       // Carpet/set count — same bundleStickerCount convention used everywhere
       // else (the two specific bathroom-mat presets count as 1 per copy
       // ordered; every other set counts its actual physical pieces), so this
@@ -8540,21 +8658,25 @@ function isOrderCarriedOver(order){
 // Baskı öncesi wants this too now, rather than the same bare base number
 // "SS-501" on every one of the order's rows with nothing to tell them apart.
 // Tüm Siparişler/Tüm İhracat Siparişleri still call this without `order`,
-// so they keep showing just the plain base number, unaffected.
+// so they keep showing just the plain base number, unaffected. Sıcak Satış
+// orders carry their own order.orderNumber (assigned the moment the order is
+// created — see assignSicakOrderNumberIfNeeded) and take priority over the
+// coding-time itemNumbers lookup every other channel still relies on.
 function groupNumCell(group, groupKey, itemNumbers, order){
-  const n = itemNumbers[groupKey] || '—';
+  const n = (order && order.orderNumber) || itemNumbers[groupKey] || '—';
   const display = (n!=='—' && order) ? numberWithPosition(n, order, group[0]) : n;
   return isGroupCarriedOver(group) ? `<span class="ts" style="color:var(--rust);font-weight:600" title="Önceki günden devretmiş">${display}</span>` : display;
 }
 
-// The base order number (e.g. "SS-501", with no "-1/9" position suffix —
-// that suffix only gets added once items reach Baskı öncesi/Üretim and get
-// their physical sticker position). Every item of the same order shares this
-// same base number once ANY of them has been coded, since the number is
-// assigned per (order, coding day), not per item — so it's safe to show once
-// per order rather than repeating it on every line. Returns '—' until at
-// least one item has actually been coded.
+// Sıcak Satış orders get their sipariş no the moment they're created (see
+// assignSicakOrderNumberIfNeeded) — order.orderNumber is already there from
+// the start, so it's returned directly with no coding-status check at all.
+// Every other channel still only gets a number once an item is actually
+// coded, via the itemNumbers lookup (per the comment that used to live
+// here): every item of the same order shares that number once ANY of them
+// has been coded, since it's assigned per (order, coding day), not per item.
 function orderBaseNumCell(order, itemNumbers){
+  if(order.orderNumber) return order.orderNumber;
   const seen = new Set();
   for(const item of order.items){
     const key = item.setLabel || item.id;
@@ -8564,6 +8686,25 @@ function orderBaseNumCell(order, itemNumbers){
     if(n) return n;
   }
   return '—';
+}
+
+// Sıcak Satış is manual-only — there's no Excel upload to anchor an order to,
+// so unlike every other channel (numbered only once coded at Baskı öncesi),
+// it gets its sipariş no immediately on save. Scoped to Sıcak Satış ONLY —
+// Instagram/Trendyol/Hepsiburada/İhracat are completely untouched by this and
+// keep their existing coding-time numbering exactly as before. Never
+// reassigned once set, so editing an order later can't change its number.
+function assignSicakOrderNumberIfNeeded(order){
+  if(order.orderNumber) return;
+  if(channelCategoryForNumbering(order.channel) !== 'sicaksatis') return;
+  const d = parseDMY(order.date);
+  if(!d) return;
+  const jsDay = d.getDay();
+  const dayDigit = jsDay===0 ? 7 : jsDay;
+  const usedToday = state.orders.filter(o=>
+    o.orderNumber && o.date===order.date && channelCategoryForNumbering(o.channel)==='sicaksatis'
+  ).length;
+  order.orderNumber = `${NUMBERING_PREFIX.sicaksatis}${dayDigit}${String(usedToday+1).padStart(2,'0')}`;
 }
 
 function itemLagHours(order, item){
