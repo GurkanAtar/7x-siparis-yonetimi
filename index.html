@@ -1975,7 +1975,7 @@ function renderOperatorBar(){
         </select>
       </label>
       <button class="ghost small" id="logoutBtn">Çıkış yap</button>
-      <span class="muted" style="font-size:10px;margin-left:auto;" title="Bu sürümün ne zaman oluşturulduğu — canlı sitenin en güncel dosyayı çalıştırıp çalıştırmadığını doğrulamak için.">Sürüm: 2026-10-01 21:18 UTC</span>
+      <span class="muted" style="font-size:10px;margin-left:auto;" title="Bu sürümün ne zaman oluşturulduğu — canlı sitenin en güncel dosyayı çalıştırıp çalıştırmadığını doğrulamak için.">Sürüm: 2026-10-01 21:31 UTC</span>
     </div>`;
   document.getElementById('themeSelect').onchange = (e)=>{
     VALID_THEMES.forEach(t=>document.body.classList.remove(t));
@@ -7749,15 +7749,16 @@ function renderQueue(){
   document.getElementById('thQueuePhone').style.display = hidePhoneAdres ? 'none' : '';
   document.getElementById('thQueueAdres').style.display = hidePhoneAdres ? 'none' : '';
   document.getElementById('thQueueCarpetCount').style.display = hidePhoneAdres ? '' : 'none';
-  // Production-role staff (Ebru, Cengiz, Tahir) get the ordering party,
-  // m²/characteristics etc. here but not carpet prices — per the owner,
-  // this applies to Sıcak Satış and İhracat specifically (the two channels
-  // hidePhoneAdres already singles out); Trendyol/Hepsiburada/Instagram
-  // price visibility is untouched for now, left for a later decision.
-  const hidePriceForProduction = currentProfile.role==='production' && hidePhoneAdres;
-  document.getElementById('thQueuePrice').style.display = hidePriceForProduction ? 'none' : '';
-  document.getElementById('thQueuePrepaid').style.display = hidePriceForProduction ? 'none' : '';
-  document.getElementById('thQueueBalance').style.display = hidePriceForProduction ? 'none' : '';
+  // This list's whole job is matching a design to the code the print
+  // operator needs (see the card's own subtitle) — price has nothing to do
+  // with that, for anyone looking at it, owner included. Scoped to Sıcak
+  // Satış and İhracat specifically (the two channels hidePhoneAdres already
+  // singles out); Trendyol/Hepsiburada/Instagram price visibility is
+  // untouched for now, left for a later decision.
+  const hidePriceHere = hidePhoneAdres;
+  document.getElementById('thQueuePrice').style.display = hidePriceHere ? 'none' : '';
+  document.getElementById('thQueuePrepaid').style.display = hidePriceHere ? 'none' : '';
+  document.getElementById('thQueueBalance').style.display = hidePriceHere ? 'none' : '';
 
   // Every order stays visible here once it has at least one item that either
   // still needs a code, or has already been coded — a coded row no longer
@@ -7912,7 +7913,7 @@ function renderQueue(){
       // the whole order, since different items in the same order can be coded
       // (and thus numbered) at different times.
       const groupKey = o.id + '::' + (group[0].setLabel || group[0].id);
-      const numCell = isPending ? '—' : groupNumCell(group, groupKey, itemNumbers);
+      const numCell = isPending ? '—' : groupNumCell(group, groupKey, itemNumbers, o);
       // Carpet/set count — same bundleStickerCount convention used everywhere
       // else (the two specific bathroom-mat presets count as 1 per copy
       // ordered; every other set counts its actual physical pieces), so this
@@ -7951,7 +7952,7 @@ function renderQueue(){
         tr.innerHTML = `<td>${numCell}</td><td rowspan="${rowspan}">${o.date||'-'}</td><td rowspan="${rowspan}"><span class="badge-chan">${o.channel}</span></td>
           <td rowspan="${rowspan}">${o.customerName}</td>${hidePhoneAdres ? '' : `<td rowspan="${rowspan}">${o.phone||'-'}</td><td rowspan="${rowspan}">${o.address||'-'}</td>`}${hidePhoneAdres ? `<td>${groupCarpetCount}</td>` : ''}
           <td>${sizeCell}</td>
-          ${hidePriceForProduction ? '' : `<td rowspan="${rowspan}">${o.price||'-'}</td><td rowspan="${rowspan}">${o.prepaidAmount||'-'}</td><td rowspan="${rowspan}">${collectCell}</td>`}
+          ${hidePriceHere ? '' : `<td rowspan="${rowspan}">${o.price||'-'}</td><td rowspan="${rowspan}">${o.prepaidAmount||'-'}</td><td rowspan="${rowspan}">${collectCell}</td>`}
           <td rowspan="${rowspan}">${orderAgeBadge(o)}</td>
           <td>${thumb}</td>
           ${codeCell}`;
@@ -8534,9 +8535,16 @@ function isOrderCarriedOver(order){
   });
 }
 
-function groupNumCell(group, groupKey, itemNumbers){
+// `order` is optional — pass it to append the "-X/Y" position suffix
+// (SS-501-1/9, and so on), the same convention Ayırma/Üretim already use.
+// Baskı öncesi wants this too now, rather than the same bare base number
+// "SS-501" on every one of the order's rows with nothing to tell them apart.
+// Tüm Siparişler/Tüm İhracat Siparişleri still call this without `order`,
+// so they keep showing just the plain base number, unaffected.
+function groupNumCell(group, groupKey, itemNumbers, order){
   const n = itemNumbers[groupKey] || '—';
-  return isGroupCarriedOver(group) ? `<span class="ts" style="color:var(--rust);font-weight:600" title="Önceki günden devretmiş">${n}</span>` : n;
+  const display = (n!=='—' && order) ? numberWithPosition(n, order, group[0]) : n;
+  return isGroupCarriedOver(group) ? `<span class="ts" style="color:var(--rust);font-weight:600" title="Önceki günden devretmiş">${display}</span>` : display;
 }
 
 // The base order number (e.g. "SS-501", with no "-1/9" position suffix —
