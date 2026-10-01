@@ -648,7 +648,7 @@
         </div>
       </div>
       <table>
-        <thead><tr><th>Sipariş #</th><th>Sipariş tarihi</th><th>Satış Kanalı</th><th>Müşteri</th><th id="thQueuePhone">Telefon</th><th id="thQueueAdres">Adres</th><th id="thQueueCarpetCount" style="display:none;">Halı Sayısı</th><th>Ölçü</th><th id="thQueuePrice">Toplam Tutar</th><th id="thQueuePrepaid">Peşinat</th><th id="thQueueBalance">Bakiye</th><th>Süre</th><th>Görsel</th><th>Kod</th><th></th></tr></thead>
+        <thead><tr><th>Sipariş #</th><th>Sipariş tarihi</th><th>Satış Kanalı</th><th>Müşteri</th><th id="thQueuePhone">Telefon</th><th id="thQueueAdres">Adres</th><th>Ölçü</th><th id="thQueueCarpetCount" style="display:none;">Halı Sayısı</th><th id="thQueuePrice">Toplam Tutar</th><th id="thQueuePrepaid">Peşinat</th><th id="thQueueBalance">Bakiye</th><th>Süre</th><th>Görsel</th><th>Kod</th><th></th></tr></thead>
         <tbody id="queueBody"></tbody>
       </table>
       <div class="empty" id="queueEmpty" style="display:none">Kod bekleyen yok. Her şey tamam.</div>
@@ -1975,7 +1975,7 @@ function renderOperatorBar(){
         </select>
       </label>
       <button class="ghost small" id="logoutBtn">Çıkış yap</button>
-      <span class="muted" style="font-size:10px;margin-left:auto;" title="Bu sürümün ne zaman oluşturulduğu — canlı sitenin en güncel dosyayı çalıştırıp çalıştırmadığını doğrulamak için.">Sürüm: 2026-10-01 21:46 UTC</span>
+      <span class="muted" style="font-size:10px;margin-left:auto;" title="Bu sürümün ne zaman oluşturulduğu — canlı sitenin en güncel dosyayı çalıştırıp çalıştırmadığını doğrulamak için.">Sürüm: 2026-10-01 22:02 UTC</span>
     </div>`;
   document.getElementById('themeSelect').onchange = (e)=>{
     VALID_THEMES.forEach(t=>document.body.classList.remove(t));
@@ -7085,6 +7085,9 @@ function orderAgeBadge(o){
       if(lag!==null && (worst===null || lag>worst)) worst = lag;
     });
     if(worst===null) return '';
+    if(channelCategoryForNumbering(o.channel)==='sicaksatis'){
+      return `<span class="pill pill-produced">${formatDurationLabel(worst, o)}</span>`;
+    }
     return worst===0 ? `<span class="pill pill-produced">Zamanında üretildi</span>` : `<span class="pill pill-produced">+${formatDurationLabel(worst, o)} üretim süresi</span>`;
   }
   return ageBadge(o, o.items[0]);
@@ -8068,14 +8071,14 @@ function renderQueue(){
 
       if(gi===0){
         tr.innerHTML = `<td>${numCell}</td><td rowspan="${rowspan}">${o.date||'-'}</td><td rowspan="${rowspan}"><span class="badge-chan">${o.channel}</span></td>
-          <td rowspan="${rowspan}">${o.customerName}</td>${hidePhoneAdres ? '' : `<td rowspan="${rowspan}">${o.phone||'-'}</td><td rowspan="${rowspan}">${o.address||'-'}</td>`}${hidePhoneAdres ? `<td>${groupCarpetCount}</td>` : ''}
-          <td>${sizeCell}</td>
+          <td rowspan="${rowspan}">${o.customerName}</td>${hidePhoneAdres ? '' : `<td rowspan="${rowspan}">${o.phone||'-'}</td><td rowspan="${rowspan}">${o.address||'-'}</td>`}
+          <td>${sizeCell}</td>${hidePhoneAdres ? `<td>${groupCarpetCount}</td>` : ''}
           ${hidePriceHere ? '' : `<td rowspan="${rowspan}">${o.price||'-'}</td><td rowspan="${rowspan}">${o.prepaidAmount||'-'}</td><td rowspan="${rowspan}">${collectCell}</td>`}
           <td rowspan="${rowspan}">${orderAgeBadge(o)}</td>
           <td>${thumb}</td>
           ${codeCell}`;
       } else {
-        tr.innerHTML = `<td>${numCell}</td>${hidePhoneAdres ? `<td>${groupCarpetCount}</td>` : ''}<td>${sizeCell}</td><td>${thumb}</td>
+        tr.innerHTML = `<td>${numCell}</td><td>${sizeCell}</td>${hidePhoneAdres ? `<td>${groupCarpetCount}</td>` : ''}<td>${thumb}</td>
           ${codeCell}`;
       }
       tbody.appendChild(tr);
@@ -8731,9 +8734,18 @@ function hoursSinceOrderDate(order){
 // least a full day has passed; still hours for anything under 24, since
 // "0 gün" would read as if nothing had happened yet. Every other channel
 // keeps the existing hour count unchanged.
+// One plain format everywhere "Süre" shows up — Sipariş girişi, Baskı
+// öncesi, Ayırma & etiketler, Üretim — just the number and the unit, no
+// "üretim süresi", "saattir üretimde", "Siparişten bu yana" or "+" dressing.
+// Sıcak Satış ONLY — every other channel keeps its original wording below
+// unchanged. İhracat's own day-conversion (orders run for weeks, so a raw
+// hour count becomes unwieldy) is likewise untouched for non-Sıcak-Satış use.
 function formatDurationLabel(hours, order){
   if(order.channel === 'İhracat' && hours >= 24){
     return `${Math.floor(hours/24)} gün`;
+  }
+  if(channelCategoryForNumbering(order.channel)==='sicaksatis'){
+    return `${hours} saat`;
   }
   return `${hours}sa`;
 }
@@ -8741,15 +8753,23 @@ function formatDurationLabel(hours, order){
 function ageBadge(order, item){
   // A single, consistent age/delay indicator meant to show up everywhere the item
   // actually sits (queue, sorting, production, orders list) — not tucked away in a
-  // separate report. Once produced, it's a fixed historical lag (order date → produced
-  // time); before that, it's a live, growing count of hours since the order was taken.
+  // separate report. The clock always starts at the same moment, everywhere: when
+  // the order was saved in Sipariş girişi (orderPlacedAt, from recordedAt) — never
+  // from when an item was later coded, sorted or sent to production. Once produced,
+  // it's a fixed historical lag (order date → produced time); before that, it's a
+  // live, growing count of hours since the order was taken. Sıcak Satış shows just
+  // the plain number+unit (no extra wording); every other channel keeps its
+  // original phrasing.
+  const isSicak = channelCategoryForNumbering(order.channel)==='sicaksatis';
   if(item.status==='produced'){
     const lag = itemLagHours(order, item);
     if(lag===null) return '';
+    if(isSicak) return `<span class="pill pill-produced">${formatDurationLabel(lag, order)}</span>`;
     return lag===0 ? `<span class="pill pill-produced">Zamanında üretildi</span>` : `<span class="pill pill-produced">+${formatDurationLabel(lag, order)} üretim süresi</span>`;
   }
   const hours = hoursSinceOrderDate(order);
   if(hours===null || hours<=0) return '';
+  if(isSicak) return `<span class="pill pill-pending">${formatDurationLabel(hours, order)}</span>`;
   return `<span class="pill pill-pending">Siparişten bu yana ${formatDurationLabel(hours, order)}</span>`;
 }
 
@@ -8812,8 +8832,13 @@ function renderProduction(){
         const thumb = withImg ? `<img src="${withImg.images[0]}" class="thumb" style="width:24px;height:24px">` : '';
         const num = itemNumbers[order.id+'::'+(bundle[0].setLabel||bundle[0].id)] || '—';
         const carried = isGroupCarriedOver(bundle);
+        // Sıcak Satış: ageBadge below already shows the one, unified "{N} saat"
+        // duration for this channel — this separate sortedAt-based note would
+        // just duplicate it with different wording and a different clock.
+        // Every other channel keeps this note exactly as before.
         const hours = hoursWaiting(bundle[0].sortedAt);
-        const waitNote = hours<=0 ? '' : hours===1
+        const isSicakOrder = channelCategoryForNumbering(order.channel)==='sicaksatis';
+        const waitNote = (isSicakOrder || hours<=0) ? '' : hours===1
           ? ` <span class="pill pill-pending" style="margin-left:4px">1 saattir üretimde</span>`
           : ` <span class="pill pill-pending" style="margin-left:4px">${hours} saattir üretimde</span>`;
         // Each independent physical unit (bundleUnitGroups — one piece of a
