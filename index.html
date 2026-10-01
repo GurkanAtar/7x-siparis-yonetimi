@@ -1085,7 +1085,7 @@
 
 <div id="msgModalOverlay" style="display:none;position:fixed;inset:0;background:rgba(42,38,34,.45);z-index:100;align-items:center;justify-content:center;">
   <div style="background:var(--card);border-radius:12px;padding:22px;width:300px;box-shadow:0 8px 28px rgba(0,0,0,.2);">
-    <p id="msgModalText" style="margin:0 0 16px;font-size:14px;line-height:1.4;"></p>
+    <p id="msgModalText" style="margin:0 0 16px;font-size:14px;line-height:1.4;white-space:pre-wrap;"></p>
     <div style="display:flex;justify-content:flex-end;">
       <button class="small" id="msgModalOk">Tamam</button>
     </div>
@@ -1935,7 +1935,7 @@ function renderOperatorBar(){
         </select>
       </label>
       <button class="ghost small" id="logoutBtn">Çıkış yap</button>
-      <span class="muted" style="font-size:10px;margin-left:auto;" title="Bu sürümün ne zaman oluşturulduğu — canlı sitenin en güncel dosyayı çalıştırıp çalıştırmadığını doğrulamak için.">Sürüm: 2026-10-01 14:43 UTC</span>
+      <span class="muted" style="font-size:10px;margin-left:auto;" title="Bu sürümün ne zaman oluşturulduğu — canlı sitenin en güncel dosyayı çalıştırıp çalıştırmadığını doğrulamak için.">Sürüm: 2026-10-01 15:39 UTC</span>
     </div>`;
   document.getElementById('themeSelect').onchange = (e)=>{
     VALID_THEMES.forEach(t=>document.body.classList.remove(t));
@@ -2370,17 +2370,37 @@ function saveState(){
       // detected and that specific order restored — instead of the whole
       // save silently failing or silently succeeding when it actually didn't.
       const revived = [];
+      const revivedErrors = [];
       for(const id of removedIds){
         const { error } = await sb.from('orders').delete().eq('id', id);
         if(error){
           console.error('delete rejected', id, error);
           const { data: back } = await sb.from('orders').select('*').eq('id', id).maybeSingle();
-          if(back) revived.push({ ...(back.data||{}), id: back.id });
+          if(back){
+            const restored = { ...(back.data||{}), id: back.id };
+            revived.push(restored);
+            revivedErrors.push({ name: restored.customerName || id, error });
+          }
         }
       }
       if(revived.length){
         state.orders = state.orders.concat(revived);
-        showMessage('Bazı silme işlemleri yönetici yetkisi gerektirdiği için geri alındı — o siparişler geri getirildi.');
+        // Used to always blame "yönetici yetkisi" (admin authority) — but a
+        // DELETE can fail for other reasons entirely (a dropped connection,
+        // a constraint, anything else Postgres objects to), and guessing
+        // wrong here buries the real cause. Only RLS's own rejection
+        // (Postgres code 42501, "insufficient privilege", or a message that
+        // actually mentions a policy) gets the permission wording; anything
+        // else shows the database's own error text so it's diagnosable
+        // instead of silently mislabeled.
+        const isPermissionError = (e)=> e && (e.code === '42501' || /polic|permission|privilege/i.test(e.message||''));
+        const allPermission = revivedErrors.every(r=>isPermissionError(r.error));
+        if(allPermission){
+          showMessage('Bazı silme işlemleri yönetici yetkisi gerektirdiği için geri alındı — o siparişler geri getirildi.');
+        } else {
+          const detail = revivedErrors.map(r=>`"${r.name}": ${r.error.message || r.error.code || 'bilinmeyen hata'}`).join('\n');
+          showMessage(`Bazı silme işlemleri veritabanı tarafından reddedildi, o siparişler geri getirildi. Sebep(ler):\n${detail}`);
+        }
         render();
       }
 
@@ -7299,6 +7319,7 @@ function wireOrdersRowHandlers(tbody){
       const order = state.orders.find(o=>o.id===b.dataset.id);
       const auth = await requireDeleteAuth('Bu siparişi silme', order);
       if(!auth) return;
+      if(!confirm(`"${order ? order.customerName : 'Bu'}" siparişini kalıcı olarak silmek istediğinize emin misiniz?`)) return;
       if(order) logActivity(`Sipariş silindi: ${order.customerName} (${order.channel})`, auth==='pin' ? 'Admin' : undefined);
       state.orders = state.orders.filter(o=>o.id!==b.dataset.id); saveState(); render();
       if(order){
@@ -7329,6 +7350,7 @@ function wireOrdersRowHandlers(tbody){
       const originalItems = order.items.slice();
       const removed = order.items.filter(i=>ids.includes(i.id));
       const label = removed.length>1 ? `${displaySetLabel(removed[0].setLabel)} (${removed.length} parça)` : removed[0].size;
+      if(!confirm(`"${label}" kalemini — ${order.customerName} — kalıcı olarak silmek istediğinize emin misiniz?`)) return;
       order.items = order.items.filter(i=>!ids.includes(i.id));
       let orderFullyRemoved = false;
       if(order.items.length){
@@ -7521,6 +7543,7 @@ function renderExportOrders(){
       const originalItems = order.items.slice();
       const removed = order.items.filter(i=>ids.includes(i.id));
       const label = removed.length>1 ? `${displaySetLabel(removed[0].setLabel)} (${removed.length} parça)` : removed[0].size;
+      if(!confirm(`"${label}" kalemini — ${order.customerName} — kalıcı olarak silmek istediğinize emin misiniz?`)) return;
       order.items = order.items.filter(i=>!ids.includes(i.id));
       let orderFullyRemoved = false;
       if(order.items.length){
