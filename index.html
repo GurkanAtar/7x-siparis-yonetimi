@@ -1998,7 +1998,7 @@ function renderOperatorBar(){
         </select>
       </label>
       <button class="ghost small" id="logoutBtn">Çıkış yap</button>
-      <span class="muted" style="font-size:10px;margin-left:auto;" title="Bu sürümün ne zaman oluşturulduğu — canlı sitenin en güncel dosyayı çalıştırıp çalıştırmadığını doğrulamak için.">Sürüm: 2026-10-02 02:11 UTC</span>
+      <span class="muted" style="font-size:10px;margin-left:auto;" title="Bu sürümün ne zaman oluşturulduğu — canlı sitenin en güncel dosyayı çalıştırıp çalıştırmadığını doğrulamak için.">Sürüm: 2026-10-02 02:15 UTC</span>
     </div>`;
   document.getElementById('themeSelect').onchange = (e)=>{
     VALID_THEMES.forEach(t=>document.body.classList.remove(t));
@@ -3785,15 +3785,14 @@ function renderOrderPickerList(listElId, toggleId, searchId, fromDateId, toDateI
   const term = searchInput ? searchInput.value.trim().toLocaleLowerCase('tr') : '';
   const labeled = candidates.map(o=>{
     const num = orderBaseNumCell(o, itemNumbers);
-    // Every identifying detail in one line, so the right order can be picked
-    // without opening it: name — Şehir[, Ülke] — sipariş no — tarih — halı sayısı.
+    // One line per order: name — Şehir[, Ülke] — sipariş no. Date and carpet
+    // count deliberately left out (owner's call — the number already carries
+    // the date).
     const location = [o.city, o.country].filter(Boolean).join(', ');
     const bits = [
       o.customerName || '(İsimsiz)',
       location,
       num==='—' ? 'henüz numara yok' : num,
-      o.date,
-      `${countCarpets(o.items)} halı`,
     ].filter(Boolean);
     return { o, label: bits.join(' — ') };
   }).filter(x=>!term || x.label.toLocaleLowerCase('tr').includes(term));
