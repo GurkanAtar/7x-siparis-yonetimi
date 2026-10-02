@@ -562,12 +562,12 @@
       <div class="row row3" style="margin-bottom:10px;">
         <div><label>Başlangıç</label><input type="date" id="exTsFrom"></div>
         <div><label>Bitiş</label><input type="date" id="exTsTo"></div>
-        <div><label>Dosya</label>
+        <div><label>Sipariş</label>
           <div class="dropdown-wrap" style="display:block;">
-            <button type="button" class="ghost small" id="exFileFilterToggle" style="width:100%;text-align:left;">Tüm dosyalar ▾</button>
+            <button type="button" class="ghost small" id="exFileFilterToggle" style="width:100%;text-align:left;">Tüm siparişler ▾</button>
             <div class="dropdown-menu" id="exFileFilterMenu" style="min-width:100%;max-height:280px;overflow-y:auto;">
               <div style="padding:8px;border-bottom:1px solid var(--line);position:sticky;top:0;background:#fff;">
-                <input type="text" id="exFileFilterSearch" placeholder="Dosya ara..." style="margin:0;">
+                <input type="text" id="exFileFilterSearch" placeholder="Sipariş ara..." style="margin:0;">
               </div>
               <div id="exFileFilterList"></div>
               <div style="padding:8px;border-top:1px solid var(--line);position:sticky;bottom:0;background:#fff;">
@@ -666,7 +666,7 @@
       <div class="row row3" style="margin-bottom:10px;">
         <div><label>Başlangıç</label><input type="date" id="sortTsFrom"></div>
         <div><label>Bitiş</label><input type="date" id="sortTsTo"></div>
-        <div><label>Dosya</label>
+        <div><label id="sortFileFilterLabel">Dosya</label>
           <div class="dropdown-wrap" style="display:block;">
             <button type="button" class="ghost small" id="sortFileFilterToggle" style="width:100%;text-align:left;">Tüm dosyalar ▾</button>
             <div class="dropdown-menu" id="sortFileFilterMenu" style="min-width:100%;max-height:280px;overflow-y:auto;">
@@ -694,7 +694,7 @@
       <div class="row row3" style="margin-bottom:10px;">
         <div><label>Başlangıç</label><input type="date" id="prodTsFrom"></div>
         <div><label>Bitiş</label><input type="date" id="prodTsTo"></div>
-        <div><label>Dosya</label>
+        <div><label id="prodFileFilterLabel">Dosya</label>
           <div class="dropdown-wrap" style="display:block;">
             <button type="button" class="ghost small" id="prodFileFilterToggle" style="width:100%;text-align:left;">Tüm dosyalar ▾</button>
             <div class="dropdown-menu" id="prodFileFilterMenu" style="min-width:100%;max-height:280px;overflow-y:auto;">
@@ -718,6 +718,24 @@
     <div class="card">
       <h2>İhracat Üretimi <button class="ghost small print-btn" data-print="exportProduction" style="margin-left:8px;font-weight:normal;font-family:'Inter',sans-serif;font-size:12px;">Listeyi yazdır</button> <button class="ghost small excel-btn" data-excel="exportProduction" style="font-weight:normal;font-family:'Inter',sans-serif;font-size:12px;">Excel'e aktar</button></h2>
       <p class="muted" style="margin-top:-6px">İhracat kalemleri kodlandığında doğrudan buraya düşer (etiket/ayırma aşaması atlanır). Hedef adet ve o ana kadar üretilen adedi girip Güncelle'ye basın — ilerlemeyi birkaç gün boyunca parça parça takip edebilirsiniz. Hedefe ulaşınca "Tamamlandı olarak kapat" ile kalemi Üretildi durumuna alın.</p>
+      <div class="row row3" style="margin-bottom:10px;">
+        <div><label>Başlangıç</label><input type="date" id="exProdTsFrom"></div>
+        <div><label>Bitiş</label><input type="date" id="exProdTsTo"></div>
+        <div><label>Sipariş</label>
+          <div class="dropdown-wrap" style="display:block;">
+            <button type="button" class="ghost small" id="exProdFileFilterToggle" style="width:100%;text-align:left;">Tüm siparişler ▾</button>
+            <div class="dropdown-menu" id="exProdFileFilterMenu" style="min-width:100%;max-height:280px;overflow-y:auto;">
+              <div style="padding:8px;border-bottom:1px solid var(--line);position:sticky;top:0;background:#fff;">
+                <input type="text" id="exProdFileFilterSearch" placeholder="Sipariş ara..." style="margin:0;">
+              </div>
+              <div id="exProdFileFilterList"></div>
+              <div style="padding:8px;border-top:1px solid var(--line);position:sticky;bottom:0;background:#fff;">
+                <button type="button" class="ghost small" id="exProdFileFilterClear">Seçimi temizle</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
       <div id="exportProductionGroups"></div>
       <div class="empty" id="exportProductionEmpty" style="display:none">Şu anda üretimde ihracat kalemi yok.</div>
     </div>
@@ -1980,7 +1998,7 @@ function renderOperatorBar(){
         </select>
       </label>
       <button class="ghost small" id="logoutBtn">Çıkış yap</button>
-      <span class="muted" style="font-size:10px;margin-left:auto;" title="Bu sürümün ne zaman oluşturulduğu — canlı sitenin en güncel dosyayı çalıştırıp çalıştırmadığını doğrulamak için.">Sürüm: 2026-10-02 01:54 UTC</span>
+      <span class="muted" style="font-size:10px;margin-left:auto;" title="Bu sürümün ne zaman oluşturulduğu — canlı sitenin en güncel dosyayı çalıştırıp çalıştırmadığını doğrulamak için.">Sürüm: 2026-10-02 02:11 UTC</span>
     </div>`;
   document.getElementById('themeSelect').onchange = (e)=>{
     VALID_THEMES.forEach(t=>document.body.classList.remove(t));
@@ -3730,18 +3748,27 @@ function renderFileFilterListGeneric(listElId, toggleId, searchId, selectedSet, 
 // Siparişleri) and Baskı öncesi, which each pass their own date-field ids
 // and selection Set. Başlangıç defaults to today the moment this runs with
 // nothing in it yet, so the picker is never scoped to an empty date.
-function renderOrderPickerList(listElId, toggleId, searchId, fromDateId, toDateId, selectedSet, onChange){
+// `category` — which manual-only channel to list ('sicaksatis' default, or
+// 'ihracat'). Neither has Excel uploads, so a per-order picker replaces the
+// Dosya filter for both.
+// `opts.noDefaultDate` — don't pre-fill Başlangıç with today (the work-queue
+// stages set their own auto floor date instead). `opts.candidates` — limit
+// the list to orders actually present at that stage, rather than every order
+// of the channel.
+function renderOrderPickerList(listElId, toggleId, searchId, fromDateId, toDateId, selectedSet, onChange, category, opts){
+  category = category || 'sicaksatis';
+  opts = opts || {};
   const listEl = document.getElementById(listElId);
   const toggle = document.getElementById(toggleId);
   if(!listEl || !toggle) return;
   const fromEl = document.getElementById(fromDateId);
   const toEl = document.getElementById(toDateId);
-  if(fromEl && !fromEl.value) fromEl.value = toDateInputValue(new Date());
+  if(fromEl && !fromEl.value && !opts.noDefaultDate) fromEl.value = toDateInputValue(new Date());
   const from = fromEl && fromEl.value ? (()=>{ const [y,m,d]=fromEl.value.split('-').map(Number); return new Date(y,m-1,d); })() : null;
   const to = toEl && toEl.value ? (()=>{ const [y,m,d]=toEl.value.split('-').map(Number); return new Date(y,m-1,d,23,59,59,999); })() : null;
   const itemNumbers = computeItemNumbers();
-  const candidates = state.orders
-    .filter(o=>channelCategoryForNumbering(o.channel)==='sicaksatis')
+  const candidates = (opts.candidates || state.orders)
+    .filter(o=>channelCategoryForNumbering(o.channel)===category)
     .filter(o=>{
       const d = parseDMY(o.date);
       if(!d) return false;
@@ -3758,7 +3785,17 @@ function renderOrderPickerList(listElId, toggleId, searchId, fromDateId, toDateI
   const term = searchInput ? searchInput.value.trim().toLocaleLowerCase('tr') : '';
   const labeled = candidates.map(o=>{
     const num = orderBaseNumCell(o, itemNumbers);
-    return { o, label: `${o.customerName || '(İsimsiz)'} — ${num==='—' ? 'henüz kodlanmadı' : num}` };
+    // Every identifying detail in one line, so the right order can be picked
+    // without opening it: name — Şehir[, Ülke] — sipariş no — tarih — halı sayısı.
+    const location = [o.city, o.country].filter(Boolean).join(', ');
+    const bits = [
+      o.customerName || '(İsimsiz)',
+      location,
+      num==='—' ? 'henüz numara yok' : num,
+      o.date,
+      `${countCarpets(o.items)} halı`,
+    ].filter(Boolean);
+    return { o, label: bits.join(' — ') };
   }).filter(x=>!term || x.label.toLocaleLowerCase('tr').includes(term));
   listEl.innerHTML = labeled.length ? labeled.map(({o,label})=>`
     <label class="dropdown-item" style="display:flex;align-items:center;gap:8px;white-space:normal;padding:8px 14px;border-top:1px solid var(--line);">
@@ -3813,8 +3850,36 @@ function wireFileFilterDropdown(prefix, selectedSet, onChange){
   toggle.onclick = (e)=>{ e.stopPropagation(); menu.classList.toggle('open'); };
   menu.onclick = (e)=>e.stopPropagation();
   document.addEventListener('click', ()=>menu.classList.remove('open'));
-  search.addEventListener('input', ()=>renderFileFilterListGeneric(prefix+'FileFilterList', prefix+'FileFilterToggle', prefix+'FileFilterSearch', selectedSet, currentEntryMode, onChange));
-  clear.onclick = ()=>{ selectedSet.clear(); onChange(); };
+  // onChange re-renders the whole stage, which re-renders this list too
+  // (Dosya or Sipariş, whichever applies to the current channel).
+  search.addEventListener('input', ()=>onChange());
+  clear.onclick = ()=>{
+    if(isManualOnlyMode(currentEntryMode)) stagePickSet(prefix).clear(); else selectedSet.clear();
+    onChange();
+  };
+}
+// Sıcak Satış and İhracat are manual-entry only — no Excel file is ever
+// uploaded for them, so a Dosya filter is meaningless there. For those two
+// channels every stage filter becomes a per-order picker instead; every other
+// channel keeps Dosya. Each stage × channel keeps its own selection.
+function isManualOnlyMode(mode){ return mode==='sicaksatis' || mode==='ihracat'; }
+const stageOrderPicks = {};
+function stagePickSet(prefix){
+  const k = prefix + '::' + currentEntryMode;
+  return stageOrderPicks[k] || (stageOrderPicks[k] = new Set());
+}
+function renderStageFilterList(prefix, fileSet, onChange, fromId, toId, candidates){
+  const label = document.getElementById(prefix+'FileFilterLabel');
+  const search = document.getElementById(prefix+'FileFilterSearch');
+  if(isManualOnlyMode(currentEntryMode)){
+    if(label) label.textContent = 'Sipariş';
+    if(search) search.placeholder = 'Sipariş ara...';
+    renderOrderPickerList(prefix+'FileFilterList', prefix+'FileFilterToggle', prefix+'FileFilterSearch', fromId, toId, stagePickSet(prefix), onChange, currentEntryMode, {noDefaultDate:true, candidates});
+  } else {
+    if(label) label.textContent = 'Dosya';
+    if(search) search.placeholder = 'Dosya ara...';
+    renderFileFilterListGeneric(prefix+'FileFilterList', prefix+'FileFilterToggle', prefix+'FileFilterSearch', fileSet, currentEntryMode, onChange);
+  }
 }
 let selectedQueueFileFilterIds = new Set();
 let selectedSortFileFilterIds = new Set();
@@ -3835,12 +3900,30 @@ let selectedProdFileFilterIds = new Set();
   document.addEventListener('click', ()=>menu.classList.remove('open'));
   search.addEventListener('input', renderQueueFileFilterList);
   clear.onclick = ()=>{
-    if(currentEntryMode==='sicaksatis') selectedQueueOrderFilterIds.clear(); else selectedQueueFileFilterIds.clear();
+    if(currentEntryMode==='sicaksatis' || currentEntryMode==='ihracat') queueOrderPickerSet().clear(); else selectedQueueFileFilterIds.clear();
     renderQueue();
   };
 })();
 wireFileFilterDropdown('sort', selectedSortFileFilterIds, ()=>renderSort());
 wireFileFilterDropdown('prod', selectedProdFileFilterIds, ()=>renderProduction());
+// İhracat Üretimi's own Sipariş picker + date range. Closures only reference
+// selectedExProdOrderIds/exProdTsFromAuto when a handler actually fires (they
+// are declared further down, next to renderExportProduction).
+(function wireExportProductionFilters(){
+  const toggle = document.getElementById('exProdFileFilterToggle');
+  const menu = document.getElementById('exProdFileFilterMenu');
+  if(!toggle || !menu) return;
+  toggle.onclick = (e)=>{ e.stopPropagation(); menu.classList.toggle('open'); };
+  menu.onclick = (e)=>e.stopPropagation();
+  document.addEventListener('click', ()=>menu.classList.remove('open'));
+  document.getElementById('exProdFileFilterSearch').addEventListener('input', ()=>renderExportProduction());
+  document.getElementById('exProdFileFilterClear').onclick = ()=>{ selectedExProdOrderIds.clear(); renderExportProduction(); };
+  document.getElementById('exProdTsFrom').addEventListener('change', ()=>{
+    exProdTsFromAuto = !document.getElementById('exProdTsFrom').value;
+    renderExportProduction();
+  });
+  document.getElementById('exProdTsTo').addEventListener('change', ()=>renderExportProduction());
+})();
 // A manual edit to "Başlangıç" pins it (auto flag off); clearing it by hand
 // resumes auto-tracking from the next render — see setAutoFloorDate above.
 document.getElementById('queueTsFrom').addEventListener('change', ()=>{
@@ -3915,8 +3998,11 @@ function applyQueueFilters(orders, selectedSet, fromId, toId){
 }
 
 let selectedExportFileFilterIds = new Set();
+// İhracat is manual-entry only — there are never upload files, so this is a
+// per-order picker (same as Sıcak Satış) rather than a Dosya filter. The set
+// now holds order ids, not batch ids.
 function renderExportFileFilterList(){
-  renderFileFilterListGeneric('exFileFilterList', 'exFileFilterToggle', 'exFileFilterSearch', selectedExportFileFilterIds, 'ihracat', renderExportOrders);
+  renderOrderPickerList('exFileFilterList', 'exFileFilterToggle', 'exFileFilterSearch', 'exTsFrom', 'exTsTo', selectedExportFileFilterIds, renderExportOrders, 'ihracat');
 }
 document.getElementById('exFileFilterToggle').onclick = (e)=>{
   e.stopPropagation();
@@ -7873,13 +7959,13 @@ function renderExportOrders(){
   const tbody = document.querySelector('#ihracatOrdersTable tbody');
   tbody.innerHTML = '';
   renderExportFileFilterList();
-  const selectedBatchIds = [...selectedExportFileFilterIds];
+  const selectedOrderIds = selectedExportFileFilterIds;
   const fromVal = document.getElementById('exTsFrom') ? document.getElementById('exTsFrom').value : '';
   const toVal = document.getElementById('exTsTo') ? document.getElementById('exTsTo').value : '';
   const from = fromVal ? (()=>{ const [y,m,d]=fromVal.split('-').map(Number); return new Date(y,m-1,d); })() : null;
   const to = toVal ? (()=>{ const [y,m,d]=toVal.split('-').map(Number); return new Date(y,m-1,d,23,59,59,999); })() : null;
   let exportOrders = state.orders.filter(o=>o.channel==='İhracat');
-  if(selectedBatchIds.length) exportOrders = exportOrders.filter(o=>o.batchId ? selectedBatchIds.includes(o.batchId) : selectedBatchIds.includes('__manual__'));
+  if(selectedOrderIds.size) exportOrders = exportOrders.filter(o=>selectedOrderIds.has(o.id));
   if(from || to){
     exportOrders = exportOrders.filter(o=>{
       const d = parseDMY(o.date);
@@ -8145,11 +8231,19 @@ function numberWithPosition(num, order, item, copyIndex){
 }
 
 let selectedQueueOrderFilterIds = new Set();
+// İhracat keeps its own selection, separate from Sıcak Satış's, so switching
+// channels never leaves the other channel's picked orders filtering this one.
+let selectedExportQueueOrderFilterIds = new Set();
+// Sıcak Satış and İhracat are manual-entry only — no upload files ever exist
+// for either, so both get a per-order picker here instead of Dosya.
+function queueOrderPickerSet(){
+  return currentEntryMode==='ihracat' ? selectedExportQueueOrderFilterIds : selectedQueueOrderFilterIds;
+}
 function renderQueueFileFilterList(){
-  if(currentEntryMode==='sicaksatis'){
+  if(currentEntryMode==='sicaksatis' || currentEntryMode==='ihracat'){
     document.getElementById('queueFileFilterLabel').textContent = 'Sipariş';
     document.getElementById('queueFileFilterSearch').placeholder = 'Sipariş ara...';
-    renderOrderPickerList('queueFileFilterList', 'queueFileFilterToggle', 'queueFileFilterSearch', 'queueTsFrom', 'queueTsTo', selectedQueueOrderFilterIds, renderQueue);
+    renderOrderPickerList('queueFileFilterList', 'queueFileFilterToggle', 'queueFileFilterSearch', 'queueTsFrom', 'queueTsTo', queueOrderPickerSet(), renderQueue, currentEntryMode);
   } else {
     document.getElementById('queueFileFilterLabel').textContent = 'Dosya';
     document.getElementById('queueFileFilterSearch').placeholder = 'Dosya ara...';
@@ -8209,10 +8303,11 @@ function renderQueue(){
     // No upload batches ever exist for Sıcak Satış — pass an empty set so
     // applyQueueFilters' batch-matching step is a no-op; the order picker's
     // own selection is applied separately, right below.
-    currentEntryMode==='sicaksatis' ? new Set() : selectedQueueFileFilterIds, 'queueTsFrom', 'queueTsTo'
+    (currentEntryMode==='sicaksatis' || currentEntryMode==='ihracat') ? new Set() : selectedQueueFileFilterIds, 'queueTsFrom', 'queueTsTo'
   );
-  if(currentEntryMode==='sicaksatis' && selectedQueueOrderFilterIds.size){
-    ordersWithItemsHere = ordersWithItemsHere.filter(o=>selectedQueueOrderFilterIds.has(o.id));
+  if((currentEntryMode==='sicaksatis' || currentEntryMode==='ihracat') && queueOrderPickerSet().size){
+    const pickSet = queueOrderPickerSet();
+    ordersWithItemsHere = ordersWithItemsHere.filter(o=>pickSet.has(o.id));
   }
   // Grouped by upload batch, most recently uploaded file's block at the
   // top — matching Tüm Siparişler. This used to rely on state.orders
@@ -8619,7 +8714,6 @@ function splitOffOneCopy(order, bundle, newStatus, timestampField){
 function renderSort(){
   const wrap = document.getElementById('sortGroups');
   wrap.innerHTML='';
-  renderFileFilterListGeneric('sortFileFilterList', 'sortFileFilterToggle', 'sortFileFilterSearch', selectedSortFileFilterIds, currentEntryMode, renderSort);
   const groups = {};
   let count=0;
   const seenSets = new Set();
@@ -8629,7 +8723,15 @@ function renderSort(){
     o.items.some(i=>i.status==='coded' || i.status==='sorted')
   );
   setAutoFloorDate('sortTsFrom', sortCandidateOrders, sortTsFromAuto);
-  const filteredOrders = applyQueueFilters(sortCandidateOrders, selectedSortFileFilterIds, 'sortTsFrom', 'sortTsTo');
+  // Rendered after the auto floor date is settled, so the picker lists the
+  // same date range the stage itself shows.
+  renderStageFilterList('sort', selectedSortFileFilterIds, renderSort, 'sortTsFrom', 'sortTsTo', sortCandidateOrders);
+  const manualSort = isManualOnlyMode(currentEntryMode);
+  let filteredOrders = applyQueueFilters(sortCandidateOrders, manualSort ? new Set() : selectedSortFileFilterIds, 'sortTsFrom', 'sortTsTo');
+  if(manualSort && stagePickSet('sort').size){
+    const pick = stagePickSet('sort');
+    filteredOrders = filteredOrders.filter(o=>pick.has(o.id));
+  }
   filteredOrders.forEach(o=>{
     // A sorted (printed) copy stays visible here too now, rather than
     // disappearing the moment its sticker is printed — its own unique
@@ -9152,7 +9254,6 @@ function renderProduction(){
   const wrap = document.getElementById('productionGroups');
   wrap.innerHTML='';
   wrap.classList.toggle('show-edit', productionEditRevealed);
-  renderFileFilterListGeneric('prodFileFilterList', 'prodFileFilterToggle', 'prodFileFilterSearch', selectedProdFileFilterIds, currentEntryMode, renderProduction);
   const groups = {};
   let count=0;
   const seenSets = new Set();
@@ -9168,7 +9269,19 @@ function renderProduction(){
     o.items.some(i=>i.status==='sorted')
   );
   setAutoFloorDate('prodTsFrom', prodCandidateOrders, prodTsFromAuto);
-  const filteredOrders = applyQueueFilters(state.orders, selectedProdFileFilterIds, 'prodTsFrom', 'prodTsTo');
+  // Picker lists every order with something in Üretim (still waiting OR
+  // already produced and still visible here), not only unproduced ones.
+  const prodPickerCandidates = state.orders.filter(o=>
+    o.channel!=='İhracat' && channelCategoryForNumbering(o.channel)===currentEntryMode &&
+    o.items.some(i=>i.status==='sorted' || i.status==='produced')
+  );
+  renderStageFilterList('prod', selectedProdFileFilterIds, renderProduction, 'prodTsFrom', 'prodTsTo', prodPickerCandidates);
+  const manualProd = isManualOnlyMode(currentEntryMode);
+  let filteredOrders = applyQueueFilters(state.orders, manualProd ? new Set() : selectedProdFileFilterIds, 'prodTsFrom', 'prodTsTo');
+  if(manualProd && stagePickSet('prod').size){
+    const pick = stagePickSet('prod');
+    filteredOrders = filteredOrders.filter(o=>pick.has(o.id));
+  }
   filteredOrders.forEach(o=>{
     if(o.channel==='İhracat') return; // İhracat gets its own partial-quantity view below
     // Scoped to whichever channel is currently selected at the top of
@@ -9345,6 +9458,8 @@ function renderProduction(){
   renderExportProduction();
 }
 
+let selectedExProdOrderIds = new Set();
+let exProdTsFromAuto = true;
 function renderExportProduction(){
   // İhracat tracks production as a running count against a target quantity,
   // per PIECE — not a one-click "done" like IG's individual carpets, since
@@ -9355,9 +9470,16 @@ function renderExportProduction(){
   if(!wrap) return;
   wrap.innerHTML = '';
   const itemNumbers = computeItemNumbers();
+  // Same Başlangıç/Bitiş + Sipariş filters as every other stage. Başlangıç
+  // auto-tracks the oldest order still in production (manually overridable,
+  // clearing it resumes auto) — see setAutoFloorDate.
+  const exProdCandidates = state.orders.filter(o=>o.channel==='İhracat' && o.items.some(i=>i.status==='sorted'));
+  setAutoFloorDate('exProdTsFrom', exProdCandidates, exProdTsFromAuto);
+  renderOrderPickerList('exProdFileFilterList', 'exProdFileFilterToggle', 'exProdFileFilterSearch', 'exProdTsFrom', 'exProdTsTo', selectedExProdOrderIds, renderExportProduction, 'ihracat', {noDefaultDate:true, candidates: exProdCandidates});
+  let visibleOrders = applyQueueFilters(exProdCandidates, new Set(), 'exProdTsFrom', 'exProdTsTo');
+  if(selectedExProdOrderIds.size) visibleOrders = visibleOrders.filter(o=>selectedExProdOrderIds.has(o.id));
   const rows = [];
-  state.orders.forEach(o=>{
-    if(o.channel!=='İhracat') return;
+  visibleOrders.forEach(o=>{
     o.items.filter(i=>i.status==='sorted').forEach(item=>{
       rows.push({order:o, item});
     });
