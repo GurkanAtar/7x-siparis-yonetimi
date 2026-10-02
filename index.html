@@ -1980,7 +1980,7 @@ function renderOperatorBar(){
         </select>
       </label>
       <button class="ghost small" id="logoutBtn">Çıkış yap</button>
-      <span class="muted" style="font-size:10px;margin-left:auto;" title="Bu sürümün ne zaman oluşturulduğu — canlı sitenin en güncel dosyayı çalıştırıp çalıştırmadığını doğrulamak için.">Sürüm: 2026-10-02 01:31 UTC</span>
+      <span class="muted" style="font-size:10px;margin-left:auto;" title="Bu sürümün ne zaman oluşturulduğu — canlı sitenin en güncel dosyayı çalıştırıp çalıştırmadığını doğrulamak için.">Sürüm: 2026-10-02 01:42 UTC</span>
     </div>`;
   document.getElementById('themeSelect').onchange = (e)=>{
     VALID_THEMES.forEach(t=>document.body.classList.remove(t));
@@ -2069,6 +2069,7 @@ async function loadState(){
   // instead of being recomputed (and potentially reshuffled) on every load.
   let didBackfillSicakNumbers = false;
   let didBackfillExportNumbers = false;
+  let didMergeDealerDuplicates = false;
   // Loads orders AND upload batches individually from their own tables (one
   // row per order, one row per batch) — this is what lets Supabase's Row
   // Level Security actually enforce who can delete what, and what stops one
@@ -2167,6 +2168,29 @@ async function loadState(){
           assignExportOrderNumberIfNeeded(o, dealerCode);
           didBackfillExportNumbers = true;
         });
+      // One-time backfill for İhracat's partial-production log (producedLog)
+      // — introduced so Toplam Üretim can count a piece the moment "Güncelle"
+      // records progress on it, instead of only once the whole item is later
+      // closed out. Existing items never had this log, so without this pass
+      // they'd show up as 0 m² forever despite real progress already made.
+      // Two cases: an item already fully closed out (status 'produced') has
+      // a real producedAt date to use; one still mid-progress (producedQty>0
+      // but not yet closed) has no real date to recover, so it's logged as
+      // of right now — the best available stand-in, same as any fresh
+      // "Güncelle" click would do.
+      state.orders.forEach(o=>{
+        if(channelCategoryForNumbering(o.channel) !== 'ihracat') return;
+        o.items.forEach(item=>{
+          if(item.producedLog && item.producedLog.length) return;
+          if(item.status==='produced' && item.producedAt){
+            item.producedLog = [{ date: item.producedAt, qty: item.qty }];
+            didBackfillExportNumbers = true;
+          } else if((item.producedQty||0) > 0){
+            item.producedLog = [{ date: new Date().toISOString(), qty: item.producedQty }];
+            didBackfillExportNumbers = true;
+          }
+        });
+      });
       state.uploadBatches = (batchRows||[]).map(r=>({ ...(r.data||{}), id: r.id }));
       lastSyncedBatchIds = new Set(state.uploadBatches.map(b=>b.id));
       // A batch saved before the Trendyol upload history was split into its
@@ -2253,6 +2277,40 @@ async function loadState(){
       state.channels.forEach(c=>{
         if(c.type==='Instagram corporate') c.type = 'Instagram kurumsal';
         if(c.type==='Trendyol mağaza') c.type = 'Trendyol kurumsal';
+      });
+      // One-time cleanup for the "Halidi" + "Halidi — Mahachkale, Rusya"
+      // duplicate bug: a bare-name entry (registered manually before a
+      // city/country was ever collected for it, or from before
+      // getOrAssignDealerCode started upgrading bare entries in place) sits
+      // alongside a location-qualified entry for the very same dealer. Only
+      // NEW orders self-heal this going forward — existing duplicate pairs
+      // need merging once. Safe to do automatically: an order never
+      // references a channel by array position, only by reconstructing the
+      // dealer's name live (dealerRegistryNameForOrder), so removing the
+      // stale bare entry doesn't touch any order. Only merges when there's
+      // exactly ONE location-qualified entry for that bare name — if there
+      // are several (genuinely different cities/customers sharing a name),
+      // it's left alone rather than guessing which one the bare entry meant.
+      ['Sıcak Satış bayi', 'İhracat bayi'].forEach(dealerType=>{
+        const entries = state.channels.filter(c=>c.type===dealerType);
+        const bareKey = name => normalizeChannelKey(name.split(' — ')[0]);
+        entries.filter(c=>!c.name.includes(' — ')).forEach(bareEntry=>{
+          const qualified = entries.filter(c=>c!==bareEntry && c.name.includes(' — ') && bareKey(c.name)===bareKey(bareEntry.name));
+          if(qualified.length !== 1) return;
+          const keep = qualified[0];
+          // Fill in anything the kept (location-qualified) entry is missing
+          // from the bare duplicate, rather than silently dropping it —
+          // code, finance setup, and any payment history.
+          if(!keep.code && bareEntry.code) keep.code = bareEntry.code;
+          if(!keep.financeModel && bareEntry.financeModel) keep.financeModel = bareEntry.financeModel;
+          if(!keep.ssOpening && bareEntry.ssOpening) keep.ssOpening = bareEntry.ssOpening;
+          if(bareEntry.paymentLedger && bareEntry.paymentLedger.length){
+            keep.paymentLedger = (keep.paymentLedger||[]).concat(bareEntry.paymentLedger);
+          }
+          state.channels = state.channels.filter(c=>c!==bareEntry);
+          logActivity(`Bayi kaydı birleştirildi (konumsuz kopya temizlendi): "${bareEntry.name}" → "${keep.name}"`);
+          didMergeDealerDuplicates = true;
+        });
       });
       // Sıcak Satış bayi finance used to live per-order (a peşinat ledger +
       // a separate kredi-tahsilatı ledger on each order). It's now a single
@@ -2419,7 +2477,7 @@ async function loadState(){
   // Persist any reconstructed batch records right away, so they're no longer
   // "orphaned" the next time anyone loads the app — this only actually
   // fires once per genuinely lost batch, ever.
-  if(didReconcileBatches || didBackfillSicakNumbers || didBackfillExportNumbers) saveState();
+  if(didReconcileBatches || didBackfillSicakNumbers || didBackfillExportNumbers || didMergeDealerDuplicates) saveState();
 }
 let saveTimer = null;
 function stripImages(obj){
@@ -4729,17 +4787,35 @@ function renderUretimToplam(){
 
   // (Istanbul-calendar dayKey "DD.MM.YYYY" + taban) -> m² produced
   const byDay = {};
+  // Helper shared by both branches below — buckets one m² amount under a
+  // given timestamp's Istanbul calendar day, respecting the selected range.
+  function addToByDay(ts, taban, m2){
+    const dayKey = new Date(ts).toLocaleDateString('tr-TR', {timeZone:'Europe/Istanbul'});
+    const [dd,mm,yyyy] = dayKey.split('.').map(Number);
+    const dayDate = new Date(yyyy, mm-1, dd);
+    if(dayDate < from || dayDate > to) return;
+    byDay[dayKey] = byDay[dayKey] || {};
+    byDay[dayKey][taban] = (byDay[dayKey][taban]||0) + m2;
+  }
   state.orders.forEach(o=>{
+    // İhracat tracks progress incrementally (producedQty via "Güncelle",
+    // logged per click in item.producedLog — see ex-update-produced) rather
+    // than one single all-at-once completion the way every other channel
+    // does. Each logged increment is counted on ITS OWN date, so partial
+    // progress shows up here immediately instead of staying invisible until
+    // the whole item is later closed out — status/producedAt are no longer
+    // what this channel's m² figures are drawn from.
+    if(channelCategoryForNumbering(o.channel)==='ihracat'){
+      o.items.forEach(item=>{
+        (item.producedLog||[]).forEach(entry=>{
+          addToByDay(entry.date, item.taban || 'Diğer', sizeToM2(item.size) * entry.qty);
+        });
+      });
+      return;
+    }
     const produced = o.items.filter(i=>i.status==='produced' && i.producedAt);
     produced.forEach(item=>{
-      const dayKey = new Date(item.producedAt).toLocaleDateString('tr-TR', {timeZone:'Europe/Istanbul'});
-      const [dd,mm,yyyy] = dayKey.split('.').map(Number);
-      const dayDate = new Date(yyyy, mm-1, dd);
-      if(dayDate < from || dayDate > to) return;
-      const taban = item.taban || 'Diğer';
-      const m2 = sizeToM2(item.size) * (item.qty||1);
-      byDay[dayKey] = byDay[dayKey] || {};
-      byDay[dayKey][taban] = (byDay[dayKey][taban]||0) + m2;
+      addToByDay(item.producedAt, item.taban || 'Diğer', sizeToM2(item.size) * (item.qty||1));
     });
   });
 
