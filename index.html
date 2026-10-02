@@ -578,7 +578,7 @@
         </div>
       </div>
       <table id="ihracatOrdersTable">
-        <thead><tr><th>Sipariş tarihi</th><th>Müşteri</th><th>Telefon</th><th>Şehir</th><th>Ülke</th><th>Ölçü</th><th>Taban</th><th>Saçak</th><th>Şekil</th><th>Halı sayısı</th><th>Para Birimi</th><th>Sipariş Döviz Tutarı</th><th>Kur</th><th>Toplam m²</th><th>Toplam Tutar (Döviz)</th><th>Toplam Tutar (TL)</th><th>Süre</th><th></th></tr></thead>
+        <thead><tr><th>Sipariş tarihi</th><th>Ölçü</th><th>Taban</th><th>Saçak</th><th>Şekil</th><th>Halı sayısı</th><th>Para Birimi</th><th>Sipariş Döviz Tutarı</th><th>Kur</th><th>Toplam m²</th><th>Toplam Tutar (Döviz)</th><th>Toplam Tutar (TL)</th><th>Süre</th><th></th></tr></thead>
         <tbody></tbody>
       </table>
       <div class="empty" id="ihracatOrdersEmpty" style="display:none">Henüz ihracat siparişi yok.</div>
@@ -1998,7 +1998,7 @@ function renderOperatorBar(){
         </select>
       </label>
       <button class="ghost small" id="logoutBtn">Çıkış yap</button>
-      <span class="muted" style="font-size:10px;margin-left:auto;" title="Bu sürümün ne zaman oluşturulduğu — canlı sitenin en güncel dosyayı çalıştırıp çalıştırmadığını doğrulamak için.">Sürüm: 2026-10-02 02:15 UTC</span>
+      <span class="muted" style="font-size:10px;margin-left:auto;" title="Bu sürümün ne zaman oluşturulduğu — canlı sitenin en güncel dosyayı çalıştırıp çalıştırmadığını doğrulamak için.">Sürüm: 2026-10-02 02:36 UTC</span>
     </div>`;
   document.getElementById('themeSelect').onchange = (e)=>{
     VALID_THEMES.forEach(t=>document.body.classList.remove(t));
@@ -5839,7 +5839,7 @@ document.getElementById('saveOrder').onclick = async ()=>{
     }
   }
   if(currentEntryMode==='ihracat'){
-    ['exName','exPhone','exCity','exCountry','exForeignAmount','exRate','exNote'].forEach(id=>document.getElementById(id).value='');
+    ['exName','exPhone','exCity','exCountry','exForeignAmount','exTotalM2','exRate','exNote'].forEach(id=>document.getElementById(id).value='');
     document.getElementById('exSaleType').value='';
     document.getElementById('exPriceTL').value='';
     document.getElementById('exOrderDate').value = toDateInputValue(new Date());
@@ -5858,6 +5858,9 @@ document.getElementById('saveOrder').onclick = async ()=>{
     updateCollectPreview();
   }
   document.getElementById('itemLines').innerHTML='';
+  // Carpet lines just got cleared — recompute so Toplam m²/Döviz Tutarı
+  // don't keep showing the previous order's totals.
+  if(currentEntryMode==='ihracat' || currentEntryMode==='sicaksatis') recalcItemTotals();
   itemImages = {};
   saveState(); render();
 };
@@ -6017,7 +6020,7 @@ document.getElementById('cancelEdit').onclick = ()=>{
   document.getElementById('addItemToggle').classList.remove('draw-attention');
   clearTimeout(addItemAttentionTimer);
   if(currentEntryMode==='ihracat'){
-    ['exName','exPhone','exCity','exCountry','exForeignAmount','exRate','exNote'].forEach(id=>document.getElementById(id).value='');
+    ['exName','exPhone','exCity','exCountry','exForeignAmount','exTotalM2','exRate','exNote'].forEach(id=>document.getElementById(id).value='');
     document.getElementById('exSaleType').value='';
     document.getElementById('exPriceTL').value='';
     document.getElementById('exOrderDate').value = toDateInputValue(new Date());
@@ -6036,6 +6039,9 @@ document.getElementById('cancelEdit').onclick = ()=>{
     updateCollectPreview();
   }
   document.getElementById('itemLines').innerHTML='';
+  // Carpet lines just got cleared — recompute so Toplam m²/Döviz Tutarı
+  // don't keep showing the previous order's totals.
+  if(currentEntryMode==='ihracat' || currentEntryMode==='sicaksatis') recalcItemTotals();
   itemImages = {};
 };
 
@@ -8025,8 +8031,9 @@ function renderExportOrders(){
       }
       const ids = group.map(i=>i.id).join(',');
       const tr = document.createElement('tr');
-      tr.innerHTML = `<td>${o.date||'-'}</td><td>${o.customerName}</td><td>${o.phone||'-'}</td>
-        <td>${o.city||'-'}</td><td>${o.country||'-'}</td><td>${sizeCell}</td>
+      // Müşteri/Telefon/Şehir/Ülke live in the buyer banner row above (name —
+      // Şehir, Ülke — Telefon — sipariş no), so they aren't repeated per row.
+      tr.innerHTML = `<td>${o.date||'-'}</td><td>${sizeCell}</td>
         <td>${tabanCell}</td><td>${fringeCell}</td><td>${shapeCell}</td>
         <td>${groupCarpetCount}</td>
         <td>${o.currency||'-'}</td><td>${o.foreignAmount||'-'}</td><td>${o.exchangeRate||'-'}</td>
@@ -8082,7 +8089,7 @@ function renderExportOrders(){
     const buyerHeaderLabel = bannerBits
       ? `${buyerName} <span class="muted" style="font-weight:400;">— ${bannerBits}</span>`
       : buyerName;
-    headerTr.innerHTML = `<td colspan="18" style="background:var(--paper-soft,#f4f1ea);font-weight:600;padding:8px 10px;">${buyerHeaderLabel}</td>`;
+    headerTr.innerHTML = `<td colspan="14" style="background:var(--paper-soft,#f4f1ea);font-weight:600;padding:8px 10px;">${buyerHeaderLabel}</td>`;
     tbody.appendChild(headerTr);
     let buyerM2 = 0, buyerTutar = 0;
     const buyerByCurrency = {};
@@ -8099,7 +8106,7 @@ function renderExportOrders(){
     // Kalem Tutarı (Döviz) now shows this buyer's own foreign-currency total(s)
     // — safe here since it's summed within ONE buyer's orders, shown per
     // currency separately rather than combined into one meaningless figure.
-    subTr.innerHTML = `<td colspan="13" style="text-align:right">${buyerName} toplamı</td>
+    subTr.innerHTML = `<td colspan="9" style="text-align:right">${buyerName} toplamı</td>
       <td>${buyerM2.toFixed(2)} m²</td>
       <td>${formatCurrencyBreakdown(buyerByCurrency)}</td>
       <td>${formatTL(Math.round(buyerTutar))} TL</td>
@@ -8160,7 +8167,7 @@ function renderExportOrders(){
     const tr = document.createElement('tr');
     tr.style.fontWeight = '700';
     tr.style.borderTop = '2px solid var(--line)';
-    tr.innerHTML = `<td colspan="9" style="text-align:right">GENEL TOPLAM (${exportOrders.length} sipariş, ${totalCarpets} halı)</td>
+    tr.innerHTML = `<td colspan="5" style="text-align:right">GENEL TOPLAM (${exportOrders.length} sipariş, ${totalCarpets} halı)</td>
       <td>${totalCarpets}</td>
       <td></td><td></td><td></td>
       <td>${grandM2.toFixed(2)} m²</td>
