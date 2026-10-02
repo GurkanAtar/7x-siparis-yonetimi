@@ -1979,7 +1979,7 @@ function renderOperatorBar(){
         </select>
       </label>
       <button class="ghost small" id="logoutBtn">Çıkış yap</button>
-      <span class="muted" style="font-size:10px;margin-left:auto;" title="Bu sürümün ne zaman oluşturulduğu — canlı sitenin en güncel dosyayı çalıştırıp çalıştırmadığını doğrulamak için.">Sürüm: 2026-10-02 00:35 UTC</span>
+      <span class="muted" style="font-size:10px;margin-left:auto;" title="Bu sürümün ne zaman oluşturulduğu — canlı sitenin en güncel dosyayı çalıştırıp çalıştırmadığını doğrulamak için.">Sürüm: 2026-10-02 00:58 UTC</span>
     </div>`;
   document.getElementById('themeSelect').onchange = (e)=>{
     VALID_THEMES.forEach(t=>document.body.classList.remove(t));
@@ -2613,6 +2613,107 @@ function normalizeChannelKey(name){
 function channelNamesMatch(a, b){
   return normalizeChannelKey(a) === normalizeChannelKey(b);
 }
+
+// Sıcak Satış and İhracat orders don't carry their dealer's identity in
+// order.channel the way every other channel does — that field is just the
+// fixed literal "Sıcak Satış" / "İhracat" on every single order of that
+// type. Their real dealer identity lives in customerName (+ city/country),
+// the same construction already used when auto-registering a new dealer at
+// order save time. Every place that needs "which registered dealer does
+// this order belong to" has to go through this, not o.channel directly —
+// comparing o.channel straight against a Sıcak Satış/İhracat dealer's
+// registry name can never match anything, since the dealer's name is never
+// literally "Sıcak Satış".
+function dealerRegistryNameForOrder(o){
+  const category = channelCategoryForNumbering(o.channel);
+  if(category === 'sicaksatis') return o.city ? `${o.customerName} — ${o.city}` : o.customerName;
+  if(category === 'ihracat'){
+    const location = [o.city, o.country].filter(Boolean).join(', ');
+    return location ? `${o.customerName} — ${location}` : o.customerName;
+  }
+  return o.channel;
+}
+// Drop-in replacement for channelNamesMatch(o.channel, name) wherever the
+// caller is really asking "does this order belong to this registered
+// dealer/channel" — use this instead everywhere an order needs matching
+// against a Satış Kanalı Kayıt entry (dealer finance, merge, delete,
+// per-dealer stats). Behaves exactly like the old direct comparison for
+// every channel where o.channel already IS the identity (Instagram,
+// Trendyol, Hepsiburada); only Sıcak Satış/İhracat behave differently now.
+function orderMatchesChannelName(o, name){
+  return channelNamesMatch(dealerRegistryNameForOrder(o), name);
+}
+// The merge counterpart of dealerRegistryNameForOrder: moving a Sıcak
+// Satış/İhracat order to a different registered dealer means rewriting
+// customerName (+ city/country) — overwriting o.channel the way the
+// Instagram/Trendyol/Hepsiburada merge already correctly does would corrupt
+// it (it has to stay the literal "Sıcak Satış"/"İhracat" for numbering,
+// stage filtering, everything downstream to keep working). toName is
+// expected in the same "{customer} — {city}" / "{customer} — {city}, {ülke}"
+// shape the registry already stores dealer names in.
+function applyDealerNameToOrder(o, toName){
+  const category = channelCategoryForNumbering(o.channel);
+  if(category !== 'sicaksatis' && category !== 'ihracat'){
+    o.channel = toName;
+    return;
+  }
+  const sepIdx = toName.indexOf(' — ');
+  if(sepIdx === -1){
+    o.customerName = toName;
+    return;
+  }
+  o.customerName = toName.slice(0, sepIdx);
+  const location = toName.slice(sepIdx + 3);
+  if(category === 'ihracat'){
+    const [city, country] = location.split(',').map(s=>(s||'').trim());
+    o.city = city || '';
+    o.country = country || '';
+  } else {
+    o.city = location;
+  }
+}
+
+// Picking an existing dealer from the Müşteri adı suggestions (the datalist
+// options are the full "{name} — {city}"/"{name} — {city}, {ülke}" registry
+// string, so the dropdown stays unambiguous between two dealers who share a
+// plain name) used to leave the whole composite string sitting in the name
+// field, AND still require Şehir/Ülke/Telefon to be retyped by hand. This
+// splits the selected value back into just the name, fills Şehir (and Ülke
+// for İhracat) from the registry entry, and fills Telefon from whatever was
+// typed on that same dealer's most recent order — phone isn't stored on the
+// registry entry itself, so the order history is the only place it lives.
+// Only fires on an EXACT match to a known composite name (i.e. actually
+// picked from the dropdown, not just typing a new name by hand), so a
+// genuinely new customer is never affected.
+function wireDealerAutofill(nameInputId, phoneInputId, cityInputId, countryInputId, channelType){
+  const nameEl = document.getElementById(nameInputId);
+  if(!nameEl) return;
+  nameEl.addEventListener('input', ()=>{
+    const entry = state.channels.find(c=>c.type===channelType && c.name===nameEl.value);
+    if(!entry) return;
+    const sepIdx = entry.name.indexOf(' — ');
+    if(sepIdx !== -1){
+      const bareName = entry.name.slice(0, sepIdx);
+      const location = entry.name.slice(sepIdx + 3);
+      nameEl.value = bareName;
+      if(countryInputId){
+        const [city, country] = location.split(',').map(s=>(s||'').trim());
+        if(cityInputId) document.getElementById(cityInputId).value = city || '';
+        document.getElementById(countryInputId).value = country || '';
+      } else if(cityInputId){
+        document.getElementById(cityInputId).value = location;
+      }
+    }
+    if(phoneInputId){
+      const lastOrder = state.orders
+        .filter(o=>orderMatchesChannelName(o, entry.name) && o.phone)
+        .sort((a,b)=>{ const at=orderPlacedAt(a)?orderPlacedAt(a).getTime():0; const bt=orderPlacedAt(b)?orderPlacedAt(b).getTime():0; return bt-at; })[0];
+      if(lastOrder) document.getElementById(phoneInputId).value = lastOrder.phone;
+    }
+  });
+}
+wireDealerAutofill('ssName', 'ssPhone', 'ssCity', null, 'Sıcak Satış bayi');
+wireDealerAutofill('exName', 'exPhone', 'exCity', 'exCountry', 'İhracat bayi');
 
 function findMatchingChannelName(rawName){
   // Returns the existing registered channel's exact name if rawName is a
@@ -9360,7 +9461,7 @@ function renderChannels(){
   document.querySelectorAll('.del-channel').forEach(b=>{
     b.onclick = async ()=>{
       const c = state.channels[parseInt(b.dataset.idx)];
-      const orderCount = state.orders.filter(o=>channelNamesMatch(o.channel,c.name)).length;
+      const orderCount = state.orders.filter(o=>orderMatchesChannelName(o,c.name)).length;
       const countNote = orderCount ? ` (bu kanala ait ${orderCount} sipariş var — kanal silinir ama siparişler SİLİNMEZ, sadece bu ad artık kayıtlı bir kanal olarak görünmez)` : '';
       const auth = await requireAdmin(`"${c.name}" kanalını silme${countNote}`);
       if(!auth) return;
@@ -9391,7 +9492,7 @@ function renderChannels(){
   const filteredFamily = state.channels.filter(c=>channelFamily(c.type)===family);
   const mergeOptHtml = filteredFamily.length
     ? filteredFamily.map(c=>{
-        const orderCount = state.orders.filter(o=>channelNamesMatch(o.channel,c.name)).length;
+        const orderCount = state.orders.filter(o=>orderMatchesChannelName(o,c.name)).length;
         const markaNote = c.marka ? `, Marka: ${c.marka}` : '';
         return `<option value="${c.name}">${c.name} — ${c.type} (${orderCount} sipariş${markaNote})</option>`;
       }).join('')
@@ -9430,7 +9531,7 @@ function finChannelRowsHtml(type){
   if(!list.length) return '<p class="muted">Bu kategoride henüz kanal/bayi yok.</p>';
   return `<table><thead><tr><th>Ad</th><th>Sipariş sayısı</th></tr></thead><tbody>
     ${list.map(c=>{
-      const count = state.orders.filter(o=>channelNamesMatch(o.channel,c.name)).length;
+      const count = state.orders.filter(o=>orderMatchesChannelName(o,c.name)).length;
       return `<tr><td>${c.name}</td><td>${count}</td></tr>`;
     }).join('')}
   </tbody></table>`;
@@ -9449,7 +9550,7 @@ function renderFinBayilerTrendyol(){
   // don't have to add up each dealer's card by hand.
   let grandSold=0, grandDeposited=0, grandBalance=0;
   list.forEach(c=>{
-    grandSold += state.orders.filter(o=>channelNamesMatch(o.channel,c.name) && o.saleType!=='Kayıp Kargo').reduce((s,o)=>s+priceToNumber(o.price), 0);
+    grandSold += state.orders.filter(o=>orderMatchesChannelName(o,c.name) && o.saleType!=='Kayıp Kargo').reduce((s,o)=>s+priceToNumber(o.price), 0);
     grandDeposited += (c.financeLedger||[]).filter(l=>l.type==='topup').reduce((s,l)=>s+l.amount, 0);
     grandBalance += c.depositBalance || 0;
   });
@@ -9467,7 +9568,7 @@ function renderFinBayilerTrendyol(){
     const threshold = typeof c.lowBalanceThreshold==='number' ? c.lowBalanceThreshold : null;
     const isLow = threshold!=null && balance <= threshold;
     const balanceColor = balance < 0 ? 'var(--rust)' : (isLow ? 'var(--rust)' : 'var(--forest)');
-    const totalSold = state.orders.filter(o=>channelNamesMatch(o.channel,c.name) && o.saleType!=='Kayıp Kargo').reduce((s,o)=>s+priceToNumber(o.price), 0);
+    const totalSold = state.orders.filter(o=>orderMatchesChannelName(o,c.name) && o.saleType!=='Kayıp Kargo').reduce((s,o)=>s+priceToNumber(o.price), 0);
     const totalDeposited = (c.financeLedger||[]).filter(l=>l.type==='topup').reduce((s,l)=>s+l.amount, 0);
     // Full transaction table, oldest first, with a running balance — a
     // starting balance (if any) is synthesized in here for display only
@@ -9639,7 +9740,7 @@ function ssDealerData(c){
   const opening = c.ssOpening || { balance:0, byTaban:{} };
   const payments = c.paymentLedger || [];
   const orders = state.orders
-    .filter(o=>channelNamesMatch(o.channel,c.name) && o.saleType!=='Kayıp Kargo')
+    .filter(o=>orderMatchesChannelName(o,c.name) && o.saleType!=='Kayıp Kargo')
     .filter(o=>{ const d = parseDMY(o.date); return !d || d.getTime()>=SS_CUTOVER.getTime(); })
     .slice()
     .sort((a,b)=>{
@@ -9728,7 +9829,7 @@ function renderFinBayilerSicak(){
   const now = new Date();
   let newDealerM2 = 0, newDealerTL = 0, newDealerCount = 0;
   dealers.forEach(c=>{
-    const allOrders = state.orders.filter(o=>channelNamesMatch(o.channel,c.name) && o.saleType!=='Kayıp Kargo');
+    const allOrders = state.orders.filter(o=>orderMatchesChannelName(o,c.name) && o.saleType!=='Kayıp Kargo');
     if(!allOrders.length) return;
     const dated = allOrders.map(o=>({ o, d: parseDMY(o.date) })).filter(x=>x.d);
     if(!dated.length) return;
@@ -10087,7 +10188,7 @@ function renderDealerFinance(){
           <button class="ghost small dealer-topup-btn" data-idx="${idx}">Ekle</button>
         </div>`;
     } else {
-      const orders = state.orders.filter(o=>channelNamesMatch(o.channel, c.name) && o.saleType!=='Kayıp Kargo');
+      const orders = state.orders.filter(o=>orderMatchesChannelName(o,c.name) && o.saleType!=='Kayıp Kargo');
       const totalSales = orders.reduce((s,o)=>s+priceToNumber(o.price), 0);
       const pct = typeof c.commissionPct==='number' ? c.commissionPct : 0;
       const accrued = totalSales * pct / 100;
@@ -10982,7 +11083,7 @@ document.getElementById('mergeChanBtn').onclick = async ()=>{
   // Every order currently filed under the channel being removed gets moved
   // over to the surviving channel's name — this is what actually combines
   // their sales history into one, not just the registry entry itself.
-  const affectedOrders = state.orders.filter(o=>channelNamesMatch(o.channel,fromName));
+  const affectedOrders = state.orders.filter(o=>orderMatchesChannelName(o,fromName));
   const auth = await requireAdmin(`"${fromName}" kanalını "${toName}" ile birleştirme (${affectedOrders.length} sipariş "${toName}" altına taşınacak, "${fromName}" kanalı kaldırılacak) — bu işlem "Geri al" ile daha sonra geri alınabilir.`);
   if(!auth) return;
   const fromChan = state.channels.find(c=>c.name===fromName);
@@ -10994,6 +11095,11 @@ document.getElementById('mergeChanBtn').onclick = async ()=>{
   state.channelMerges.push({
     id: uid(),
     fromName, fromType: fromChan ? fromChan.type : '',
+    // Dealer code is captured too, so a revert can restore the exact same
+    // code instead of the removed dealer getting a freshly regenerated one
+    // (which might not even match the "MS" still printed on its own already-
+    // issued order numbers from before the merge).
+    fromCode: fromChan ? fromChan.code : null,
     toName,
     orderIds: affectedOrders.map(o=>o.id),
     orderCount: affectedOrders.length,
@@ -11001,7 +11107,7 @@ document.getElementById('mergeChanBtn').onclick = async ()=>{
     mergedBy: operatorName || 'Bilinmeyen',
     revertedAt: null, revertedBy: null,
   });
-  affectedOrders.forEach(o=>{ o.channel = toName; });
+  affectedOrders.forEach(o=>applyDealerNameToOrder(o, toName));
   state.channels = state.channels.filter(c=>c.name!==fromName);
   logActivity(`Kanal birleştirildi: "${fromName}" → "${toName}" (${affectedOrders.length} sipariş taşındı, "${fromName}" kaldırıldı)`, auth==='pin' ? 'Admin' : undefined);
   saveState(); render();
@@ -11038,12 +11144,14 @@ function renderChannelMerges(){
       merge.orderIds.forEach(id=>{
         const o = state.orders.find(x=>x.id===id);
         if(!o){ skipped++; return; }
-        if(!channelNamesMatch(o.channel, merge.toName)){ skipped++; return; }
-        o.channel = merge.fromName;
+        if(!orderMatchesChannelName(o,merge.toName)){ skipped++; return; }
+        applyDealerNameToOrder(o, merge.fromName);
         reverted++;
       });
       if(!state.channels.some(c=>channelNamesMatch(c.name,merge.fromName))){
-        state.channels.push({ name: merge.fromName, type: merge.fromType || 'Instagram bayi' });
+        const restored = { name: merge.fromName, type: merge.fromType || 'Instagram bayi' };
+        if(merge.fromCode) restored.code = merge.fromCode;
+        state.channels.push(restored);
       }
       merge.revertedAt = new Date().toISOString();
       merge.revertedBy = operatorName || 'Bilinmeyen';
