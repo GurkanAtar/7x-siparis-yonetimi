@@ -1979,7 +1979,7 @@ function renderOperatorBar(){
         </select>
       </label>
       <button class="ghost small" id="logoutBtn">Çıkış yap</button>
-      <span class="muted" style="font-size:10px;margin-left:auto;" title="Bu sürümün ne zaman oluşturulduğu — canlı sitenin en güncel dosyayı çalıştırıp çalıştırmadığını doğrulamak için.">Sürüm: 2026-10-02 00:58 UTC</span>
+      <span class="muted" style="font-size:10px;margin-left:auto;" title="Bu sürümün ne zaman oluşturulduğu — canlı sitenin en güncel dosyayı çalıştırıp çalıştırmadığını doğrulamak için.">Sürüm: 2026-10-02 01:09 UTC</span>
     </div>`;
   document.getElementById('themeSelect').onchange = (e)=>{
     VALID_THEMES.forEach(t=>document.body.classList.remove(t));
@@ -7767,6 +7767,7 @@ function renderExportOrders(){
   }
   document.getElementById('ihracatOrdersEmpty').style.display = exportOrders.length ? 'none' : 'block';
   const sorted = exportOrders.slice().reverse();
+  const itemNumbers = computeItemNumbers();
 
   // Builds and appends every flat row for one order, returning that order's
   // own m²/Toplam so the caller can add it to a running buyer subtotal.
@@ -7859,8 +7860,20 @@ function renderExportOrders(){
   let grandM2 = 0, grandTutar = 0;
   const grandByCurrency = {};
   byBuyer.forEach((buyerOrders, buyerName)=>{
+    // Same buyer-banner convention as Tüm Sıcak Satış Siparişleri: name, then
+    // Şehir/Ülke/Telefon and every distinct sipariş no this buyer has, so the
+    // same at-a-glance identification works here too instead of just the
+    // bare name.
     const headerTr = document.createElement('tr');
-    headerTr.innerHTML = `<td colspan="18" style="background:var(--paper-soft,#f4f1ea);font-weight:600;padding:8px 10px;">${buyerName}</td>`;
+    const repOrder = buyerOrders[0];
+    const location = [repOrder.city, repOrder.country].filter(Boolean).join(', ');
+    const contactBits = [location, repOrder.phone].filter(Boolean).join(' — ');
+    const orderNums = [...new Set(buyerOrders.map(o=>orderBaseNumCell(o, itemNumbers)))].join(', ');
+    const bannerBits = [contactBits, orderNums].filter(Boolean).join(' — ');
+    const buyerHeaderLabel = bannerBits
+      ? `${buyerName} <span class="muted" style="font-weight:400;">— ${bannerBits}</span>`
+      : buyerName;
+    headerTr.innerHTML = `<td colspan="18" style="background:var(--paper-soft,#f4f1ea);font-weight:600;padding:8px 10px;">${buyerHeaderLabel}</td>`;
     tbody.appendChild(headerTr);
     let buyerM2 = 0, buyerTutar = 0;
     const buyerByCurrency = {};
@@ -8246,9 +8259,19 @@ function renderQueue(){
           <td><span style="color:var(--forest);font-weight:600">✓ Onaylandı</span> <button class="ghost small edit-code" data-oid="${o.id}" data-ids="${ids}">Düzenle</button></td>`;
       }
 
+      // Sıcak Satış/İhracat hide the separate Telefon/Adres columns at this
+      // stage (see hidePhoneAdres above) — but that also means their Şehir,
+      // Ülke and Telefon were nowhere on this screen at all, unlike the
+      // "{isim} — {şehir} — {telefon} — {sipariş no}" banner Tüm Siparişler
+      // already shows for them. Folding those same bits into the Müşteri
+      // cell here keeps that identification available on this screen too.
+      const customerCell = hidePhoneAdres
+        ? `${o.customerName}${[[o.city, o.country].filter(Boolean).join(', '), o.phone].filter(Boolean).length ? ` <span class="muted" style="font-weight:400;">— ${[[o.city, o.country].filter(Boolean).join(', '), o.phone].filter(Boolean).join(' — ')}</span>` : ''}`
+        : o.customerName;
+
       if(gi===0){
         tr.innerHTML = `<td>${numCell}</td><td rowspan="${rowspan}">${o.date||'-'}</td><td rowspan="${rowspan}"><span class="badge-chan">${o.channel}</span></td>
-          <td rowspan="${rowspan}">${o.customerName}</td>${hidePhoneAdres ? '' : `<td rowspan="${rowspan}">${o.phone||'-'}</td><td rowspan="${rowspan}">${o.address||'-'}</td>`}
+          <td rowspan="${rowspan}">${customerCell}</td>${hidePhoneAdres ? '' : `<td rowspan="${rowspan}">${o.phone||'-'}</td><td rowspan="${rowspan}">${o.address||'-'}</td>`}
           <td>${sizeCell}</td>${hidePhoneAdres ? `<td>${groupCarpetCount}</td>` : ''}
           ${hidePriceHere ? '' : `<td rowspan="${rowspan}">${o.price||'-'}</td><td rowspan="${rowspan}">${o.prepaidAmount||'-'}</td><td rowspan="${rowspan}">${collectCell}</td>`}
           <td rowspan="${rowspan}">${orderAgeBadge(o)}</td>
@@ -9176,6 +9199,7 @@ function renderExportProduction(){
   const wrap = document.getElementById('exportProductionGroups');
   if(!wrap) return;
   wrap.innerHTML = '';
+  const itemNumbers = computeItemNumbers();
   const rows = [];
   state.orders.forEach(o=>{
     if(o.channel!=='İhracat') return;
@@ -9205,13 +9229,25 @@ function renderExportProduction(){
            <button class="ghost small ex-save-code" data-oid="${order.id}" data-id="${item.id}">Kaydet</button>`
         : `<span>${item.code}</span>
            <button class="ghost small ex-edit-code" data-oid="${order.id}" data-id="${item.id}" title="Kod yazım hatası varsa düzeltin">Düzenle</button>`;
+      // Same identifying info as everywhere else (Tüm İhracat Siparişleri,
+      // Baskı öncesi): Şehir/Ülke, Telefon, and this piece's own sipariş no
+      // (with its -X/Y position) — previously missing here entirely, leaving
+      // just the bare customer name with nothing to tell one buyer's orders
+      // apart from another's, or identify the piece against its paper trail.
+      const key = item.setLabel || item.id;
+      const baseNum = itemNumbers[order.id+'::'+key] || '—';
+      const pieceNum = baseNum!=='—' ? numberWithPosition(baseNum, order, item) : baseNum;
+      const location = [order.city, order.country].filter(Boolean).join(', ');
+      const contactBits = [location, order.phone].filter(Boolean).join(' — ');
+      const infoBits = [contactBits, pieceNum].filter(Boolean).join(' — ');
+
       const row = document.createElement('div');
       row.className = 'tag';
       row.style.display = 'flex';
       row.style.alignItems = 'center';
       row.style.gap = '10px';
       row.innerHTML = `
-        <span>${order.customerName} — ${item.size}${item.setLabel?` <span class="muted">(${displaySetLabel(item.setLabel)})</span>`:''}</span>
+        <span>${order.customerName} — ${item.size}${item.setLabel?` <span class="muted">(${displaySetLabel(item.setLabel)})</span>`:''}${infoBits ? ` <span class="muted">— ${infoBits}</span>` : ''}</span>
         ${codeCell}
         <span class="muted">Hedef: ${target}</span>
         <label style="margin:0">Üretilen:</label>
