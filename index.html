@@ -1979,7 +1979,7 @@ function renderOperatorBar(){
         </select>
       </label>
       <button class="ghost small" id="logoutBtn">Çıkış yap</button>
-      <span class="muted" style="font-size:10px;margin-left:auto;" title="Bu sürümün ne zaman oluşturulduğu — canlı sitenin en güncel dosyayı çalıştırıp çalıştırmadığını doğrulamak için.">Sürüm: 2026-10-02 01:19 UTC</span>
+      <span class="muted" style="font-size:10px;margin-left:auto;" title="Bu sürümün ne zaman oluşturulduğu — canlı sitenin en güncel dosyayı çalıştırıp çalıştırmadığını doğrulamak için.">Sürüm: 2026-10-02 01:25 UTC</span>
     </div>`;
   document.getElementById('themeSelect').onchange = (e)=>{
     VALID_THEMES.forEach(t=>document.body.classList.remove(t));
@@ -8898,9 +8898,14 @@ function isOrderCarriedOver(order){
 // orders carry their own order.orderNumber (assigned the moment the order is
 // created — see assignSicakOrderNumberIfNeeded) and take priority over the
 // coding-time itemNumbers lookup every other channel still relies on.
+// İhracat is the one exception to the position suffix itself: export orders
+// run high item counts and never get an Etiketler print run (that whole
+// stage is skipped for this channel), so a "-1/50" suffix would just be
+// visual noise with nothing for it to actually identify on a physical label.
 function groupNumCell(group, groupKey, itemNumbers, order){
   const n = (order && order.orderNumber) || itemNumbers[groupKey] || '—';
-  const display = (n!=='—' && order) ? numberWithPosition(n, order, group[0]) : n;
+  const skipPosition = order && channelCategoryForNumbering(order.channel)==='ihracat';
+  const display = (n!=='—' && order && !skipPosition) ? numberWithPosition(n, order, group[0]) : n;
   return isGroupCarriedOver(group) ? `<span class="ts" style="color:var(--rust);font-weight:600" title="Önceki günden devretmiş">${display}</span>` : display;
 }
 
@@ -9285,8 +9290,10 @@ function renderExportProduction(){
       // just the bare customer name with nothing to tell one buyer's orders
       // apart from another's, or identify the piece against its paper trail.
       const key = item.setLabel || item.id;
-      const baseNum = order.orderNumber || itemNumbers[order.id+'::'+key] || '—';
-      const pieceNum = baseNum!=='—' ? numberWithPosition(baseNum, order, item) : baseNum;
+      // No position suffix here — İhracat never prints Etiketler, so a
+      // "-X/Y" piece position has nothing to label on, and with these order
+      // sizes it would mostly just be noise.
+      const pieceNum = order.orderNumber || itemNumbers[order.id+'::'+key] || '—';
       const location = [order.city, order.country].filter(Boolean).join(', ');
       const contactBits = [location, order.phone].filter(Boolean).join(' — ');
       const infoBits = [contactBits, pieceNum].filter(Boolean).join(' — ');
