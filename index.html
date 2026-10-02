@@ -715,7 +715,7 @@
 
     <div class="card" id="dispatchCard" style="display:none">
       <h2>Barkod okut &amp; Sevk</h2>
-      <p class="muted" style="margin-top:-6px">Etiketteki QR kodu okutun — okutulan parça üretildi sayılır. Siparişin <b>tüm parçaları</b> okutulmadan sevk edilemez. Tüm parçalar tamam olunca "Kargoya teslim edildi" ile tarih, saat, firma ve belge no girerek sevki kapatın.</p>
+      <p class="muted" style="margin-top:-6px">Etiketteki QR kodu okutun — hangi kanaldan olursa olsun, karışık sırayla. Okutulan parça üretildi sayılır. Siparişin <b>tüm parçaları</b> okutulmadan sevk edilemez. Tüm parçalar tamam olunca "Kargoya teslim edildi" ile tarih, saat, firma ve belge no girerek sevki kapatın.</p>
       <div class="row row3" style="align-items:end;margin-bottom:8px;">
         <div style="grid-column:span 2;"><label>Kod (okuyucu ile okutun veya yazıp Enter'a basın)</label>
           <input type="text" id="scanInput" placeholder="SS-MS-401-021026-3/9" autocomplete="off" autocapitalize="characters" style="margin:0;">
@@ -2030,7 +2030,7 @@ function renderOperatorBar(){
         </select>
       </label>
       <button class="ghost small" id="logoutBtn">Çıkış yap</button>
-      <span class="muted" style="font-size:10px;margin-left:auto;" title="Bu sürümün ne zaman oluşturulduğu — canlı sitenin en güncel dosyayı çalıştırıp çalıştırmadığını doğrulamak için.">Sürüm: 2026-10-02 03:26 UTC</span>
+      <span class="muted" style="font-size:10px;margin-left:auto;" title="Bu sürümün ne zaman oluşturulduğu — canlı sitenin en güncel dosyayı çalıştırıp çalıştırmadığını doğrulamak için.">Sürüm: 2026-10-02 03:58 UTC</span>
     </div>`;
   document.getElementById('themeSelect').onchange = (e)=>{
     VALID_THEMES.forEach(t=>document.body.classList.remove(t));
@@ -2241,6 +2241,13 @@ async function loadState(){
           }
         });
       });
+      // One-time: Instagram orders still in progress get their IG-{kod}-... number
+      // (finished orders keep what they had). Oldest first so the daily sequence
+      // follows the order they came in.
+      state.orders
+        .filter(o=>channelCategoryForNumbering(o.channel)==='ig' && !o.orderNumber && o.channel && o.items && o.items.some(i=>i.status!=='produced' && i.status!=='lostcargo-found'))
+        .sort((a,b)=>{ const at=orderPlacedAt(a)?orderPlacedAt(a).getTime():0; const bt=orderPlacedAt(b)?orderPlacedAt(b).getTime():0; return at-bt; })
+        .forEach(o=>{ assignInstagramOrderNumberIfNeeded(o); if(o.orderNumber) didBackfillExportNumbers = true; });
       // One-time: give every physical piece of every non-İhracat order its
       // permanent number (item.pieceNos) — what the sticker QR / scan matches on.
       state.orders.forEach(o=>{
@@ -5870,6 +5877,7 @@ document.getElementById('saveOrder').onclick = async ()=>{
         logActivity(`Yeni Instagram kanalı otomatik eklendi: "${f.channel}" (Instagram bayi)`);
       }
     }
+    if(currentEntryMode==='ig') assignInstagramOrderNumberIfNeeded(order);
     if(currentEntryMode==='trendyol' && f.channel){
       const alreadyRegistered = state.channels.some(c=>normalizeChannelKey(c.name)===normalizeChannelKey(f.channel));
       if(!alreadyRegistered){
@@ -7152,6 +7160,7 @@ function renderUploadPreview(){
       logActivity(`Yüklemeden yeni kanal otomatik eklendi: "${group.canonicalName}" (Instagram bayi)`);
     });
     state.orders.push(...pendingUpload.orders);
+    pendingUpload.orders.forEach(o=>assignInstagramOrderNumberIfNeeded(o));
     logActivity(`"${batch.fileName}" yüklendi — ${batch.orderCount} sipariş kaydedildi`);
     pendingUpload = null;
     document.getElementById('uploadStatus').textContent = 'Kaydedildi.';
@@ -9091,6 +9100,12 @@ function expandBundleForStickers(order, bundle){
   return pairs;
 }
 
+// What the sticker's QR carries: the order's own id + this piece's permanent
+// number — unique across every channel and day (the printed number alone, e.g.
+// IG-101, repeats from day to day). Scan screen: ssParseScan.
+function scanPayload(order, pieceNo){
+  return `ORD:${order.id}:${pieceNo}/${orderPieceTotal(order)}`;
+}
 // Builds the inline SVG of a QR code for `text` (library inlined below), or ''
 // if it's unavailable — the sticker still prints fine without it.
 function qrSvg(text){
@@ -9118,7 +9133,7 @@ function printStickers(pairs, itemNumbers){
     const pos = pieceNo ? pieceLabel(num, order, pieceNo) : numberWithPosition(num, order, item, copyIndex);
     // The QR carries exactly the number printed on the sticker, so the scan
     // screen can match it back to this one physical piece.
-    const qr = (num !== '—') ? qrSvg(pos) : '';
+    const qr = qrSvg(scanPayload(order, pieceNo || itemPieceNo(order, item, copyIndex)));
     return `
       <div class="sticker">
         <div class="s-num">${pos}</div>
@@ -9262,6 +9277,31 @@ function assignSicakOrderNumberIfNeeded(order, dealerCode){
   const mm = String(d.getMonth()+1).padStart(2,'0');
   const yy = String(d.getFullYear()).slice(-2);
   order.orderNumber = `${NUMBERING_PREFIX.sicaksatis}${dealerCode}-${dayDigit}${String(usedToday+1).padStart(2,'0')}-${dd}${mm}${yy}`;
+}
+
+// Instagram's version — IG-{channel code}-{day digit}{daily seq, 2 digits}-{DDMMYY},
+// e.g. IG-7X-101-021026. The code is the 2-letter code of the Instagram channel
+// (7xhome → 7X) from Kanallar & bayiler, editable there. Assigned the moment the
+// order is saved/uploaded, never changed afterwards. Trendyol/Hepsiburada are
+// untouched (their own numbering stays as is).
+function assignInstagramOrderNumberIfNeeded(order){
+  if(order.orderNumber) return;
+  if(channelCategoryForNumbering(order.channel) !== 'ig') return;
+  if(!order.channel) return;
+  const entry = state.channels.find(c=>channelNamesMatch(c.name, order.channel));
+  const code = getOrAssignDealerCode(entry ? entry.name : order.channel, order.channel, entry ? entry.type : 'Instagram bayi');
+  if(!code) return;
+  const d = parseDMY(order.date);
+  if(!d) return;
+  const jsDay = d.getDay();
+  const dayDigit = jsDay===0 ? 7 : jsDay;
+  const usedToday = state.orders.filter(o=>
+    o.orderNumber && o.date===order.date && channelCategoryForNumbering(o.channel)==='ig'
+  ).length;
+  const dd = String(d.getDate()).padStart(2,'0');
+  const mm = String(d.getMonth()+1).padStart(2,'0');
+  const yy = String(d.getFullYear()).slice(-2);
+  order.orderNumber = `${NUMBERING_PREFIX.ig}${code}-${dayDigit}${String(usedToday+1).padStart(2,'0')}-${dd}${mm}${yy}`;
 }
 
 // İhracat's own version of the same thing — also manual-only entry (no Excel
@@ -9608,8 +9648,22 @@ function ssFindOrderByNumber(base){
 }
 function ssParseScan(raw){
   const t = String(raw||'').trim().replace(/\s+/g,'');
+  // New stickers: ORD:<order id>:<piece>/<total> (works for every channel)
+  const q = t.match(/^ORD:(.+):(\d+)\/(\d+)$/i);
+  if(q) return { id:q[1], piece:parseInt(q[2],10), total:parseInt(q[3],10) };
+  // Typed / older Sıcak Satış stickers: the printed order number (+ -X/N)
   const m = t.match(/^(.+)-(\d+)\/(\d+)$/);
   return m ? { base:m[1], piece:parseInt(m[2],10), total:parseInt(m[3],10) } : { base:t, piece:null, total:null };
+}
+function ssResolveOrder(parsed){
+  if(parsed.id) return state.orders.find(o=>o.id===parsed.id) || null;
+  return parsed.base ? ssFindOrderByNumber(parsed.base) : null;
+}
+function ssOrderTag(order){
+  const cat = channelCategoryForNumbering(order.channel);
+  const nm = order.customerName || order.channel || '';
+  const num = order.orderNumber || order.trendyolNumber || '';
+  return cat==='sicaksatis' ? `${nm} — ${num}` : `${nm} (${order.channel||cat})${num?' — '+num:''}`;
 }
 function ssFmtDate(iso){
   const m = String(iso||'').match(/^(\d{4})-(\d{2})-(\d{2})$/);
@@ -9623,12 +9677,13 @@ function ssFmtClock(iso){
 // Returns {level:'ok'|'warn'|'err', msg, ready?}. Mutates + saves only on 'ok'.
 function ssProcessScan(raw){
   const parsed = ssParseScan(raw);
-  if(!parsed.base) return { level:'err', msg:'Boş kod.' };
-  const order = ssFindOrderByNumber(parsed.base);
+  if(!parsed.base && !parsed.id) return { level:'err', msg:'Boş kod.' };
+  const order = ssResolveOrder(parsed);
   if(!order) return { level:'err', msg:`Tanınmayan kod: ${raw}` };
+  if(order.channel === 'İhracat') return { level:'err', msg:`${order.customerName}: İhracat siparişlerinde barkod okutma yok (adet bazlı üretim).` };
   ensurePieceNumbers(order);
   const total = orderPieceTotal(order);
-  const label = `${order.customerName} — ${order.orderNumber}`;
+  const label = ssOrderTag(order);
   if(order.dispatch) return { level:'err', msg:`${label}: bu sipariş zaten sevk edildi (${ssFmtDate(order.dispatch.date)} ${order.dispatch.time}).` };
   let piece = parsed.piece;
   if(piece == null){
@@ -9655,8 +9710,79 @@ function ssProcessScan(raw){
   const p = ssOrderProgress(order);
   logActivity(`Barkod okutuldu — üretildi: ${label} ${piece}/${total} (${p.scannedCount}/${total})`);
   saveState();
-  if(!p.missing.length) return { level:'ok', ready:true, msg:`✓ ${order.customerName}: ${total}/${total} parçanın hepsi okundu — SEVKE HAZIR` };
-  return { level:'ok', msg:`✓ ${pText} okundu — ${p.scannedCount}/${total}, eksik: ${p.missing.map(n=>ssPieceText(order,n,total)).join(', ')}` };
+  return { level:'ok', order, piece, msg: ssOkMsg(order, piece) };
+}
+function ssOkMsg(order, piece){
+  const p = ssOrderProgress(order), total = p.total;
+  if(!p.missing.length) return `✓ ${order.customerName}: ${total}/${total} parçanın hepsi okundu — SEVKE HAZIR`;
+  return `✓ ${order.customerName} ${piece}/${total} okundu — ${p.scannedCount}/${total}, eksik: ${p.missing.map(n=>ssPieceText(order,n,total)).join(', ')}`;
+}
+
+// ---- Multi-phone safety ----
+// Several people may scan pieces of the SAME order from different phones. The app
+// saves a whole order at a time, so before each scan we pull in what other phones
+// already saved (scannedPieces + dispatch), and after saving we check nobody
+// overwrote us in between (merging and re-saving if so). A 5s refresh keeps the
+// list live while the scan card is open.
+function ssReconcileOrder(order){
+  // Item statuses follow scannedPieces: any scanned piece must be 'produced'.
+  let changed = false;
+  ensurePieceNumbers(order);
+  Object.keys(order.scannedPieces || {}).forEach(k=>{
+    const piece = parseInt(k, 10);
+    const holders = order.items.filter(i=>Array.isArray(i.pieceNos) && i.pieceNos.includes(piece));
+    if(holders.length && holders[0].status !== 'produced' && holders[0].status !== 'pending'){
+      splitOffOneCopy(order, holders, 'produced', 'producedAt', holders[0].pieceNos.indexOf(piece) + 1);
+      changed = true;
+    }
+  });
+  return changed;
+}
+async function ssSyncOrders(ids){
+  let changed = false;
+  if(!ids || !ids.length) return false;
+  try{
+    const { data, error } = await sb.from('orders').select('id,data').in('id', ids);
+    if(error || !data) return false;
+    data.forEach(row=>{
+      const local = state.orders.find(o=>o.id===row.id); if(!local) return;
+      const rd = row.data || {};
+      const rs = rd.scannedPieces || {};
+      local.scannedPieces = local.scannedPieces || {};
+      Object.keys(rs).forEach(k=>{ if(!local.scannedPieces[k]){ local.scannedPieces[k] = rs[k]; changed = true; } });
+      if(rd.dispatch && !local.dispatch){ local.dispatch = rd.dispatch; changed = true; }
+      if(ssReconcileOrder(local)) changed = true;
+    });
+  }catch(e){ console.error('ssSyncOrders', e); }
+  return changed;
+}
+async function ssPersistNow(order){
+  for(let attempt = 0; attempt < 3; attempt++){
+    try{
+      const { error } = await sb.from('orders').upsert([{ id:order.id, order_number:order.orderNumber||null, data:stripImages(order) }], { onConflict:'id' });
+      if(error){ console.error('ssPersistNow', error); return false; }
+    }catch(e){ console.error('ssPersistNow', e); return false; }
+    if(!(await ssSyncOrders([order.id]))) return true;   // nothing new from other phones
+    // another phone saved in the meantime — merged above, save the merged result
+  }
+  return true;
+}
+function ssPendingList(){
+  const ssOrders = state.orders.filter(o=>o.channel!=='İhracat' && channelCategoryForNumbering(o.channel)===currentEntryMode && o.items && o.items.length);
+  const cutoff = Date.now() - 45*24*60*60*1000;
+  const recent = o=>{ const d = orderPlacedAt(o); return !d || d.getTime() >= cutoff; };
+  return ssOrders.filter(o=>!o.dispatch && ((o.scannedPieces && Object.keys(o.scannedPieces).length) || (recent(o) && o.items.some(i=>i.status==='sorted' || i.status==='produced'))));
+}
+let ssPollTimer = null;
+function ssStartPoll(){
+  if(ssPollTimer) return;
+  ssPollTimer = setInterval(async ()=>{
+    const card = document.getElementById('dispatchCard');
+    if(document.hidden || !card || card.offsetParent === null) return;
+    const ids = ssPendingList().map(o=>o.id);
+    if(!ids.length) return;
+    if(await ssSyncOrders(ids) && !ssDispatchOpenId) render();
+  }, 5000);
 }
 
 function ssBeep(ok){
@@ -9677,10 +9803,24 @@ function ssShowScanResult(res){
   ssRecentScans = ssRecentScans.slice(0, 8);
   ssBeep(res.level === 'ok');
 }
+let ssScanChain = Promise.resolve();
 function ssHandleScan(raw){
+  // one scan at a time (camera + scanner can fire back to back)
+  ssScanChain = ssScanChain.then(()=>ssHandleScanNow(raw)).catch(e=>console.error('scan', e));
+  return ssScanChain;
+}
+async function ssHandleScanNow(raw){
+  const parsed = ssParseScan(raw);
+  const known = ssResolveOrder(parsed);
+  if(known) await ssSyncOrders([known.id]);      // see what other phones already scanned
   const res = ssProcessScan(raw);
-  if(res.level === 'ok') render();            // refresh lists (also re-runs renderDispatchPanel)
-  else renderDispatchPanel();
+  if(res.level === 'ok'){
+    await ssPersistNow(res.order);                // save now + merge anything saved by others meanwhile
+    res.msg = ssOkMsg(res.order, res.piece);
+    render();
+  } else {
+    renderDispatchPanel();
+  }
   ssShowScanResult(res);
   renderScanRecent();
 }
@@ -9747,7 +9887,7 @@ function ssStopCamera(){
 // ---- Panel ----
 function renderDispatchPanel(){
   const card = document.getElementById('dispatchCard'); if(!card) return;
-  const show = currentEntryMode === 'sicaksatis';
+  const show = currentEntryMode !== 'ihracat';
   card.style.display = show ? '' : 'none';
   if(!show){ ssStopCamera(); return; }
 
@@ -9762,10 +9902,9 @@ function renderDispatchPanel(){
   document.getElementById('scanCameraBtn').onclick = ssStartCamera;
   document.getElementById('scanCameraStop').onclick = ssStopCamera;
 
-  const ssOrders = state.orders.filter(o=>channelCategoryForNumbering(o.channel)==='sicaksatis' && o.items && o.items.length);
-  const cutoff = Date.now() - 45*24*60*60*1000;
-  const recent = o=>{ const d = orderPlacedAt(o); return !d || d.getTime() >= cutoff; };
-  const pending = ssOrders.filter(o=>!o.dispatch && (o.scannedPieces && Object.keys(o.scannedPieces).length || (recent(o) && o.items.some(i=>i.status==='sorted' || i.status==='produced'))));
+  ssStartPoll();
+  const ssOrders = state.orders.filter(o=>o.channel!=='İhracat' && channelCategoryForNumbering(o.channel)===currentEntryMode && o.items && o.items.length);
+  const pending = ssPendingList();
   pending.sort((a,b)=>{ const at = orderPlacedAt(a), bt = orderPlacedAt(b); return (at?at.getTime():0) - (bt?bt.getTime():0); });
   const done = ssOrders.filter(o=>o.dispatch).sort((a,b)=>String(b.dispatch.recordedAt||'').localeCompare(String(a.dispatch.recordedAt||''))).slice(0,30);
 
@@ -9789,7 +9928,7 @@ function renderDispatchPanel(){
       ? `<span class="pill" style="background:var(--forest);color:#fff;">Sevke hazır ${p.total}/${p.total}</span>`
       : `<span class="pill pill-pending">${p.scannedCount}/${p.total} okundu</span>`;
     const missingTxt = ready ? '' : ` <span class="muted">eksik: ${p.missing.map(n=>ssPieceText(o,n,p.total)||'1').join(', ')}</span>`;
-    row.innerHTML = `<b>${escapeHtml(o.customerName||'')}</b>${loc?' — '+escapeHtml(loc):''} — ${escapeHtml(o.orderNumber||'—')} ${chip}${missingTxt}
+    row.innerHTML = `<b>${escapeHtml(o.customerName||'')}</b>${loc?' — '+escapeHtml(loc):''} — ${escapeHtml(o.orderNumber||o.trendyolNumber||o.channel||'—')} ${chip}${missingTxt}
       <button class="small dp-open" data-oid="${o.id}" ${ready?'':'disabled title="Tüm parçalar okutulmadan sevk edilemez"'} style="margin-left:6px;">Kargoya teslim edildi</button>`;
     if(ssDispatchOpenId === o.id && ready){
       const now = new Date();
@@ -9814,17 +9953,20 @@ function renderDispatchPanel(){
   });
   pendEl.querySelectorAll('.dp-cancel').forEach(b=>{ b.onclick = ()=>{ ssDispatchOpenId = null; renderDispatchPanel(); }; });
   pendEl.querySelectorAll('.dp-save').forEach(b=>{
-    b.onclick = ()=>{
+    b.onclick = async ()=>{
       const order = state.orders.find(x=>x.id===b.dataset.oid); if(!order) return;
       const f = b.parentElement;
       const date = f.querySelector('.dp-date').value, time = f.querySelector('.dp-time').value;
       const company = f.querySelector('.dp-company').value.trim(), docNo = f.querySelector('.dp-doc').value.trim();
       if(!date || !time || !company || !docNo){ showMessage('Tarih, saat, firma ve belge no dördü de girilmeli.'); return; }
+      await ssSyncOrders([order.id]);     // latest scans/dispatch from other phones
+      if(order.dispatch){ showMessage('Bu sipariş başka bir cihazdan zaten sevk edilmiş.'); render(); return; }
       const p = ssOrderProgress(order);
-      if(p.missing.length){ showMessage(`Eksik parça var: ${p.missing.map(n=>ssPieceText(order,n,p.total)).join(', ')} — sevk edilemez.`); return; }
+      if(p.missing.length){ showMessage(`Eksik parça var: ${p.missing.map(n=>ssPieceText(order,n,p.total)).join(', ')} — sevk edilemez.`); render(); return; }
       order.dispatch = { date, time, company, docNo, recordedAt: new Date().toISOString(), by: ssScanActor() };
-      logActivity(`Sevk edildi: ${order.customerName} — ${order.orderNumber} — ${company}, belge no ${docNo}, ${ssFmtDate(date)} ${time}`);
+      logActivity(`Sevk edildi: ${ssOrderTag(order)} — ${company}, belge no ${docNo}, ${ssFmtDate(date)} ${time}`);
       ssDispatchOpenId = null;
+      await ssPersistNow(order);
       saveState(); render();
     };
   });
@@ -9836,7 +9978,7 @@ function renderDispatchPanel(){
     const d = o.dispatch;
     const row = document.createElement('div');
     row.className = 'tag'; row.style.display = 'block'; row.style.marginBottom = '4px';
-    row.innerHTML = `<b>${escapeHtml(o.customerName||'')}</b> — ${escapeHtml(o.orderNumber||'—')} —
+    row.innerHTML = `<b>${escapeHtml(o.customerName||'')}</b> — ${escapeHtml(o.orderNumber||o.trendyolNumber||o.channel||'—')} —
       <span style="color:var(--forest);font-weight:600;">Sevk edildi: ${ssFmtDate(d.date)} ${escapeHtml(d.time)}</span> · ${escapeHtml(d.company)} · Belge: ${escapeHtml(d.docNo)}
       <button class="ghost small dp-undo" data-oid="${o.id}" style="margin-left:6px;">Sevki geri al</button>`;
     doneEl.appendChild(row);
@@ -9844,8 +9986,8 @@ function renderDispatchPanel(){
   doneEl.querySelectorAll('.dp-undo').forEach(b=>{
     b.onclick = ()=>{
       const order = state.orders.find(x=>x.id===b.dataset.oid); if(!order || !order.dispatch) return;
-      if(!confirm(`${order.customerName} — ${order.orderNumber} siparişinin sevk kaydı silinsin mi?`)) return;
-      logActivity(`Sevk kaydı geri alındı: ${order.customerName} — ${order.orderNumber} (${order.dispatch.company}, belge no ${order.dispatch.docNo})`);
+      if(!confirm(`${ssOrderTag(order)} siparişinin sevk kaydı silinsin mi?`)) return;
+      logActivity(`Sevk kaydı geri alındı: ${ssOrderTag(order)} (${order.dispatch.company}, belge no ${order.dispatch.docNo})`);
       delete order.dispatch;
       saveState(); render();
     };
@@ -10163,7 +10305,7 @@ function renderChannels(){
     // letters) — once edited, the system never recomputes it again, but it
     // stays editable any time after.
     let codeNote = '';
-    if(c.type==='Sıcak Satış bayi' || c.type==='İhracat bayi'){
+    if(c.type==='Sıcak Satış bayi' || c.type==='İhracat bayi' || c.type==='Instagram bayi' || c.type==='Instagram kurumsal'){
       if(editingDealerCodeIdx===idx){
         codeNote = ` — <input type="text" class="dealer-code-input" data-idx="${idx}" value="${c.code||''}" maxlength="8" style="width:70px;text-transform:uppercase;">
           <button class="ghost small save-dealer-code" data-idx="${idx}">Kaydet</button>`;
@@ -10183,7 +10325,8 @@ function renderChannels(){
       const input = document.querySelector(`.dealer-code-input[data-idx="${idx}"]`);
       const newCode = (input.value||'').trim().toUpperCase();
       if(!newCode){ editingDealerCodeIdx = null; renderChannels(); return; }
-      const clash = state.channels.some((other,i)=>i!==idx && other.type===c.type && other.code===newCode);
+      const sameFamily = (a,b)=> a===b || (/^Instagram/.test(a) && /^Instagram/.test(b));
+      const clash = state.channels.some((other,i)=>i!==idx && sameFamily(other.type,c.type) && other.code===newCode);
       if(clash){ showMessage(`"${newCode}" kodu zaten başka bir bayide kullanılıyor — farklı bir kod seçin.`); return; }
       const oldCode = c.code;
       c.code = newCode;
