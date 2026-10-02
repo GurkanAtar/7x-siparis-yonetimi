@@ -771,6 +771,7 @@
           </select>
         </div>
         <div id="newChanCityWrap" style="display:none"><label>Şehir</label><input id="newChanCity" placeholder="örn. Bursa"></div>
+        <div id="newChanCountryWrap" style="display:none"><label>Ülke</label><input id="newChanCountry" placeholder="örn. Rusya"></div>
         <div id="newChanMarkaWrap" style="display:none"><label>Marka</label><input id="newChanMarka" placeholder="örn. Qatalina"></div>
       </div>
       <p class="muted" id="newChanMarkaNote" style="display:none;margin-top:-4px;">Instagram bayilerinde marka doğrudan kaynaktan gelmez — burada bir kere kaydedin, bayi adını sonradan değiştirseniz bile marka bağlantısı korunur.</p>
@@ -1979,7 +1980,7 @@ function renderOperatorBar(){
         </select>
       </label>
       <button class="ghost small" id="logoutBtn">Çıkış yap</button>
-      <span class="muted" style="font-size:10px;margin-left:auto;" title="Bu sürümün ne zaman oluşturulduğu — canlı sitenin en güncel dosyayı çalıştırıp çalıştırmadığını doğrulamak için.">Sürüm: 2026-10-02 01:25 UTC</span>
+      <span class="muted" style="font-size:10px;margin-left:auto;" title="Bu sürümün ne zaman oluşturulduğu — canlı sitenin en güncel dosyayı çalıştırıp çalıştırmadığını doğrulamak için.">Sürüm: 2026-10-02 01:31 UTC</span>
     </div>`;
   document.getElementById('themeSelect').onchange = (e)=>{
     VALID_THEMES.forEach(t=>document.body.classList.remove(t));
@@ -2795,13 +2796,34 @@ function generateDealerCode(name, type){
 // this always lines up with the same entry that registration would find or
 // create. Each type keeps its own independent code namespace (generateDealerCode
 // only checks collisions within the same type), same as Sıcak Satış always has.
+//
+// Before creating a brand-new entry, this also checks for a BARE-name entry
+// (no " — location" suffix) of the same type/customer — one registered
+// manually before a city/country was ever collected for it (or from an order
+// placed before location was known). If one exists, its name is upgraded in
+// place to the full location-qualified name instead of spawning a second,
+// disconnected entry for what is really the same dealer — this is exactly
+// the "Halidi" + "Halidi — Mahachkale, Rusya" duplicate bug. Logs either the
+// new registration or the upgrade so it's visible in İşlem kayıtları.
 function getOrAssignDealerCode(fullName, baseName, type){
   let entry = state.channels.find(c=>c.type===type && normalizeChannelKey(c.name)===normalizeChannelKey(fullName));
+  let isNew = false, upgradedFrom = null;
+  if(!entry && fullName !== baseName){
+    const bareEntry = state.channels.find(c=>c.type===type && normalizeChannelKey(c.name)===normalizeChannelKey(baseName));
+    if(bareEntry){
+      upgradedFrom = bareEntry.name;
+      bareEntry.name = fullName;
+      entry = bareEntry;
+    }
+  }
   if(!entry){
     entry = { name: fullName, type };
     state.channels.push(entry);
+    isNew = true;
   }
   if(!entry.code) entry.code = generateDealerCode(baseName, type);
+  if(upgradedFrom) logActivity(`Bayi kaydı güncellendi — konum eklendi: "${upgradedFrom}" → "${fullName}" (${type}, kod: ${entry.code})`);
+  else if(isNew) logActivity(`${type} otomatik kanal olarak eklendi: "${fullName}" (kod: ${entry.code})`);
   return entry.code;
 }
 // Kept as a thin wrapper — existing call sites name it explicitly and it
@@ -5616,9 +5638,11 @@ document.getElementById('saveOrder').onclick = async ()=>{
     // this dealer's code as part of it.
     if(currentEntryMode==='sicaksatis'){
       const fullName = f.city ? `${f.name} — ${f.city}` : f.name;
-      const alreadyRegistered = state.channels.some(c=>normalizeChannelKey(c.name)===normalizeChannelKey(fullName));
+      // getOrAssignSicakDealerCode now handles registration itself — exact
+      // match reused, a bare-name entry upgraded in place, or a new one
+      // created, each logged on its own — so there's nothing left to do here
+      // but resolve the code.
       const dealerCode = getOrAssignSicakDealerCode(fullName, f.name);
-      if(!alreadyRegistered) logActivity(`Sıcak Satış müşterisi otomatik kanal olarak eklendi: "${fullName}" (kod: ${dealerCode})`);
       assignSicakOrderNumberIfNeeded(order, dealerCode);
     }
     state.orders.push(order);
@@ -5630,9 +5654,9 @@ document.getElementById('saveOrder').onclick = async ()=>{
     if(currentEntryMode==='ihracat'){
       const location = [f.city, f.country].filter(Boolean).join(', ');
       const fullName = location ? `${f.name} — ${location}` : f.name;
-      const alreadyRegistered = state.channels.some(c=>normalizeChannelKey(c.name)===normalizeChannelKey(fullName));
+      // Same as Sıcak Satış above — getOrAssignDealerCode handles registration
+      // (including upgrading a bare-name duplicate) and its own logging.
       const dealerCode = getOrAssignDealerCode(fullName, f.name, 'İhracat bayi');
-      if(!alreadyRegistered) logActivity(`İhracat müşterisi otomatik kanal olarak eklendi: "${fullName}" (kod: ${dealerCode})`);
       assignExportOrderNumberIfNeeded(order, dealerCode);
     }
     // Same idea for a newly-typed Instagram channel name — matching how a new
@@ -11128,7 +11152,14 @@ document.getElementById('brAddLine').addEventListener('click', ()=>{
 
 document.getElementById('newChanType').addEventListener('change', ()=>{
   const type = document.getElementById('newChanType').value;
-  document.getElementById('newChanCityWrap').style.display = type === 'Sıcak Satış bayi' ? '' : 'none';
+  // İhracat bayi needs this just as much as Sıcak Satış does — a dealer
+  // registered here with no Şehir/Ülke used to get a bare name ("Halidi")
+  // that could never match the full "Halidi — Mahachkale, Rusya" an actual
+  // order later builds, silently spawning a duplicate channel for the same
+  // real dealer. Ülke is additionally shown only for İhracat (Sıcak Satış is
+  // domestic-only and has never collected a country).
+  document.getElementById('newChanCityWrap').style.display = (type === 'Sıcak Satış bayi' || type === 'İhracat bayi') ? '' : 'none';
+  document.getElementById('newChanCountryWrap').style.display = type === 'İhracat bayi' ? '' : 'none';
   // Marka is only ever manually registered for Instagram bayi — Instagram
   // kurumsal already has a known fixed brand mapping, and Trendyol/
   // Hepsiburada (both kurumsal and bayi) get their brand straight from the
@@ -11144,13 +11175,17 @@ document.getElementById('addChannel').onclick = ()=>{
   if(!name) return;
   const type = document.getElementById('newChanType').value;
   const city = document.getElementById('newChanCity').value.trim();
+  const country = document.getElementById('newChanCountry').value.trim();
   const marka = document.getElementById('newChanMarka').value.trim();
   const bareName = name;
-  // Sıcak Satış dealers are identified by name AND city — folded into one string
-  // here so it flows through everywhere a channel is just referenced by name
-  // (order entry, Excel SATIŞ KANALI, Genel Bakış, Raporlar) with no other
-  // changes needed.
-  if(city) name = `${name} — ${city}`;
+  // Sıcak Satış/İhracat dealers are identified by name AND location — folded
+  // into one string here so it flows through everywhere a channel is just
+  // referenced by name (order entry, Excel SATIŞ KANALI, Genel Bakış,
+  // Raporlar) with no other changes needed. İhracat's location is
+  // "Şehir, Ülke" (matching dealerRegistryNameForOrder's own construction),
+  // Sıcak Satış's is just Şehir.
+  const location = type==='İhracat bayi' ? [city, country].filter(Boolean).join(', ') : city;
+  if(location) name = `${name} — ${location}`;
   const chan = { name, type };
   if(type==='Instagram bayi' && marka) chan.marka = marka;
   // A dealer added here manually gets its code immediately too, same as one
@@ -11165,6 +11200,7 @@ document.getElementById('addChannel').onclick = ()=>{
   logActivity(`Kanal eklendi: "${name}" (${type})${chan.marka ? ` — Marka: "${chan.marka}"` : ''}`);
   document.getElementById('newChanName').value='';
   document.getElementById('newChanCity').value='';
+  document.getElementById('newChanCountry').value='';
   document.getElementById('newChanMarka').value='';
   saveState(); render();
 };
