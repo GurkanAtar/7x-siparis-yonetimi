@@ -728,11 +728,11 @@
       </div>
       <div id="scanResult" style="min-height:22px;margin-bottom:8px;font-weight:600;"></div>
       <div id="scanRecent" class="muted" style="font-size:12px;margin-bottom:12px;"></div>
-      <h3 style="margin:10px 0 6px;">Sevk bekleyen siparişler</h3>
+      <h3 id="dispatchPendingTitle" style="margin:10px 0 6px;">Sevk bekleyen siparişler</h3>
       <div id="dispatchPending"></div>
       <div class="empty" id="dispatchPendingEmpty" style="display:none">Sevk bekleyen sipariş yok.</div>
-      <h3 style="margin:16px 0 6px;">Sevk edilenler (son 30)</h3>
-      <div id="dispatchDone"></div>
+      <div id="dispatchDoneWrap"><h3 style="margin:16px 0 6px;">Sevk edilenler (son 30)</h3>
+      <div id="dispatchDone"></div></div>
       <datalist id="dispatchCompanyList"></datalist>
     </div>
     </div>
@@ -2030,7 +2030,7 @@ function renderOperatorBar(){
         </select>
       </label>
       <button class="ghost small" id="logoutBtn">Çıkış yap</button>
-      <span class="muted" style="font-size:10px;margin-left:auto;" title="Bu sürümün ne zaman oluşturulduğu — canlı sitenin en güncel dosyayı çalıştırıp çalıştırmadığını doğrulamak için.">Sürüm: 2026-10-02 03:58 UTC</span>
+      <span class="muted" style="font-size:10px;margin-left:auto;" title="Bu sürümün ne zaman oluşturulduğu — canlı sitenin en güncel dosyayı çalıştırıp çalıştırmadığını doğrulamak için.">Sürüm: 2026-10-02 04:10 UTC</span>
     </div>`;
   document.getElementById('themeSelect').onchange = (e)=>{
     VALID_THEMES.forEach(t=>document.body.classList.remove(t));
@@ -9625,6 +9625,8 @@ function renderProduction(){
 // closed by hand (date, time, company, document no → order.dispatch).
 // ===========================================================================
 let ssRecentScans = [];
+let ssManualFlag = false;        // true while ticking pieces by hand instead of scanning
+let ssPiecesOpenId = null;       // order whose per-piece tick list is open
 let ssDispatchOpenId = null;
 let ssCamStream = null, ssCamTimer = null, ssCamDetector = null, ssCamBusy = false;
 let ssCamLastCode = '', ssCamLastAt = 0;
@@ -9706,9 +9708,9 @@ function ssProcessScan(raw){
     const k = holders[0].pieceNos.indexOf(piece) + 1;
     splitOffOneCopy(order, holders, 'produced', 'producedAt', k);
   }
-  order.scannedPieces[piece] = { at: new Date().toISOString(), by: ssScanActor() };
+  order.scannedPieces[piece] = { at: new Date().toISOString(), by: ssScanActor(), ...(ssManualFlag ? { manual: true } : {}) };
   const p = ssOrderProgress(order);
-  logActivity(`Barkod okutuldu — üretildi: ${label} ${piece}/${total} (${p.scannedCount}/${total})`);
+  logActivity(`${ssManualFlag ? 'Elle işaretlendi (okutmadan) — üretildi' : 'Barkod okutuldu — üretildi'}: ${label} ${piece}/${total} (${p.scannedCount}/${total})`);
   saveState();
   return { level:'ok', order, piece, msg: ssOkMsg(order, piece) };
 }
@@ -9830,6 +9832,25 @@ function renderScanRecent(){
   el.innerHTML = ssRecentScans.slice(1).map(r=>`<div>${icon[r.level]||''} ${escapeHtml(r.msg)}</div>`).join('');
 }
 
+// ---- Manual ticking (when scanning isn't possible) ----
+// Marks the given pieces (or every missing one) as done by hand: same effect as a
+// scan (piece becomes produced, counts toward "Sevke hazır"), recorded as manual.
+async function ssManualTick(orderId, pieces){
+  const order = state.orders.find(o=>o.id===orderId); if(!order) return;
+  await ssSyncOrders([order.id]);
+  const prog = ssOrderProgress(order);
+  const todo = (pieces && pieces.length ? pieces : prog.missing).filter(n=>prog.missing.includes(n));
+  if(!todo.length){ renderDispatchPanel(); return; }
+  ssManualFlag = true;
+  let doneCount = 0;
+  try{ todo.forEach(n=>{ const r = ssProcessScan(scanPayload(order, n)); if(r.level === 'ok') doneCount++; }); }
+  finally{ ssManualFlag = false; }
+  await ssPersistNow(order);
+  render();
+  ssShowScanResult({ level:'ok', msg: ssOkMsg(order, todo[todo.length-1]).replace('okundu','işaretlendi') + (doneCount>1 ? ` (${doneCount} parça elle işaretlendi)` : '') });
+  renderScanRecent();
+}
+
 // ---- Camera ----
 async function ssStartCamera(){
   const wrap = document.getElementById('scanCameraWrap'), video = document.getElementById('scanVideo');
@@ -9891,6 +9912,12 @@ function renderDispatchPanel(){
   card.style.display = show ? '' : 'none';
   if(!show){ ssStopCamera(); return; }
 
+  // Manual dispatch closing is for Sıcak Satış only (logistics companies). Instagram /
+  // Trendyol / Hepsiburada hand over to DHL — that will come from the DHL integration,
+  // so here they only get scanning + progress ("Sevke hazır"), no dispatch form.
+  const manualDispatch = currentEntryMode === 'sicaksatis';
+  document.getElementById('dispatchPendingTitle').textContent = manualDispatch ? 'Sevk bekleyen siparişler' : 'Okutulan / okutulacak siparişler';
+  document.getElementById('dispatchDoneWrap').style.display = manualDispatch ? '' : 'none';
   const input = document.getElementById('scanInput');
   input.onkeydown = e=>{
     if(e.key !== 'Enter') return;
@@ -9929,8 +9956,26 @@ function renderDispatchPanel(){
       : `<span class="pill pill-pending">${p.scannedCount}/${p.total} okundu</span>`;
     const missingTxt = ready ? '' : ` <span class="muted">eksik: ${p.missing.map(n=>ssPieceText(o,n,p.total)||'1').join(', ')}</span>`;
     row.innerHTML = `<b>${escapeHtml(o.customerName||'')}</b>${loc?' — '+escapeHtml(loc):''} — ${escapeHtml(o.orderNumber||o.trendyolNumber||o.channel||'—')} ${chip}${missingTxt}
-      <button class="small dp-open" data-oid="${o.id}" ${ready?'':'disabled title="Tüm parçalar okutulmadan sevk edilemez"'} style="margin-left:6px;">Kargoya teslim edildi</button>`;
-    if(ssDispatchOpenId === o.id && ready){
+      ${ready ? '' : `<button class="ghost small dp-markall" data-oid="${o.id}" style="margin-left:6px;" title="Okutma çalışmıyorsa tüm eksik parçaları elle işaretle">Tümünü elle işaretle</button>`}
+      <button class="ghost small dp-pieces" data-oid="${o.id}" style="margin-left:4px;">${ssPiecesOpenId===o.id?'Parçalar ▴':'Parçalar ▾'}</button>
+      ${manualDispatch ? `<button class="small dp-open" data-oid="${o.id}" ${ready?'':'disabled title="Tüm parçalar okutulmadan sevk edilemez"'} style="margin-left:6px;">Kargoya teslim edildi</button>` : ''}`;
+    if(ssPiecesOpenId === o.id){
+      const list = document.createElement('div');
+      list.style.cssText = 'margin-top:8px;display:flex;flex-wrap:wrap;gap:6px;';
+      for(let n=1; n<=p.total; n++){
+        const sc = (o.scannedPieces||{})[n];
+        const holder = o.items.find(i=>Array.isArray(i.pieceNos) && i.pieceNos.includes(n));
+        const desc = holder ? ` ${escapeHtml(holder.size||'')}` : '';
+        const chipEl = document.createElement('span');
+        chipEl.className = 'tag';
+        chipEl.innerHTML = sc
+          ? `<span style="color:var(--forest);font-weight:600;">✓</span> ${ssPieceText(o,n,p.total)||'1'}${desc} <span class="muted">${sc.manual?'✋ elle':'📷 okundu'}</span>`
+          : `${ssPieceText(o,n,p.total)||'1'}${desc} <button class="small dp-mark1" data-oid="${o.id}" data-piece="${n}">İşaretle</button>`;
+        list.appendChild(chipEl);
+      }
+      row.appendChild(list);
+    }
+    if(manualDispatch && ssDispatchOpenId === o.id && ready){
       const now = new Date();
       const today = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}`;
       const clock = `${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
@@ -9950,6 +9995,20 @@ function renderDispatchPanel(){
   });
   pendEl.querySelectorAll('.dp-open').forEach(b=>{
     b.onclick = ()=>{ ssDispatchOpenId = (ssDispatchOpenId === b.dataset.oid) ? null : b.dataset.oid; renderDispatchPanel(); };
+  });
+  pendEl.querySelectorAll('.dp-pieces').forEach(b=>{
+    b.onclick = ()=>{ ssPiecesOpenId = (ssPiecesOpenId === b.dataset.oid) ? null : b.dataset.oid; renderDispatchPanel(); };
+  });
+  pendEl.querySelectorAll('.dp-mark1').forEach(b=>{
+    b.onclick = ()=>ssManualTick(b.dataset.oid, [parseInt(b.dataset.piece, 10)]);
+  });
+  pendEl.querySelectorAll('.dp-markall').forEach(b=>{
+    b.onclick = ()=>{
+      const o = state.orders.find(x=>x.id===b.dataset.oid); if(!o) return;
+      const miss = ssOrderProgress(o).missing.length;
+      if(!confirm(`${ssOrderTag(o)} — eksik ${miss} parça okutulmadan elle işaretlenecek (üretildi sayılacak). Emin misiniz?`)) return;
+      ssManualTick(o.id, null);
+    };
   });
   pendEl.querySelectorAll('.dp-cancel').forEach(b=>{ b.onclick = ()=>{ ssDispatchOpenId = null; renderDispatchPanel(); }; });
   pendEl.querySelectorAll('.dp-save').forEach(b=>{
