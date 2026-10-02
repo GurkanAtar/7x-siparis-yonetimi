@@ -325,10 +325,10 @@
       <div class="card" id="manualEntryCard-ig">
         <h2>Siparişi manuel ekle</h2>
         <div class="row row3">
-          <div><label>Satış Kanalı</label><input id="mChannel" placeholder="Kayıtlı bir hesap seçin veya yeni bir bayi adı yazın" list="mChannelSuggestions">
+          <div><label>Satış Kanalı</label><input id="mChannel" autocomplete="off" placeholder="Kayıtlı bir hesap seçin veya yeni bir bayi adı yazın" list="mChannelSuggestions">
             <datalist id="mChannelSuggestions"></datalist>
           </div>
-          <div><label>Müşteri adı</label><input id="mName" placeholder="İsim Soyisim" list="mNameSuggestions">
+          <div><label>Müşteri adı</label><input id="mName" autocomplete="off" placeholder="İsim Soyisim" list="mNameSuggestions">
             <datalist id="mNameSuggestions"></datalist>
           </div>
           <div><label>Telefon</label><input id="mPhone" placeholder="05xx xxx xx xx"></div>
@@ -422,7 +422,7 @@
       <div class="card" id="manualEntryCard-sicaksatis">
         <h2>Sıcak Satış siparişi ekle</h2>
         <div class="row row2">
-          <div><label>Müşteri adı</label><input id="ssName" placeholder="İsim Soyisim veya şirket adı" list="ssNameSuggestions">
+          <div><label>Müşteri adı</label><input id="ssName" autocomplete="off" placeholder="İsim Soyisim veya şirket adı" list="ssNameSuggestions">
             <datalist id="ssNameSuggestions"></datalist>
           </div>
           <div><label>Telefon</label><input id="ssPhone" placeholder="05xx xxx xx xx"></div>
@@ -461,7 +461,7 @@
       <div class="card" id="manualEntryCard-ihracat">
         <h2>İhracat siparişi ekle</h2>
         <div class="row row2">
-          <div><label>Müşteri adı</label><input id="exName" placeholder="Kişi veya şirket adı" list="exNameSuggestions">
+          <div><label>Müşteri adı</label><input id="exName" autocomplete="off" placeholder="Kişi veya şirket adı" list="exNameSuggestions">
             <datalist id="exNameSuggestions"></datalist>
           </div>
           <div><label>Telefon</label><input id="exPhone" placeholder="opsiyonel"></div>
@@ -1980,7 +1980,7 @@ function renderOperatorBar(){
         </select>
       </label>
       <button class="ghost small" id="logoutBtn">Çıkış yap</button>
-      <span class="muted" style="font-size:10px;margin-left:auto;" title="Bu sürümün ne zaman oluşturulduğu — canlı sitenin en güncel dosyayı çalıştırıp çalıştırmadığını doğrulamak için.">Sürüm: 2026-10-02 01:42 UTC</span>
+      <span class="muted" style="font-size:10px;margin-left:auto;" title="Bu sürümün ne zaman oluşturulduğu — canlı sitenin en güncel dosyayı çalıştırıp çalıştırmadığını doğrulamak için.">Sürüm: 2026-10-02 01:54 UTC</span>
     </div>`;
   document.getElementById('themeSelect').onchange = (e)=>{
     VALID_THEMES.forEach(t=>document.body.classList.remove(t));
