@@ -9372,6 +9372,18 @@ function renderExportProduction(){
       val = Math.max(0, Math.min(val, item.qty));
       const prevQty = item.producedQty || 0;
       item.producedQty = val;
+      // The moment "Güncelle" is clicked IS the production moment for
+      // whatever quantity just got added — logged here with its own date so
+      // Toplam Üretim (and anything else that tallies m² by day) can count
+      // it right away, rather than this piece staying invisible to every
+      // date-bucketed report until the whole item is later closed out via
+      // "Tamamlandı olarak kapat". A drop in the number (a correction) logs
+      // nothing — only a genuine increase is "production".
+      const delta = val - prevQty;
+      if(delta > 0){
+        item.producedLog = item.producedLog || [];
+        item.producedLog.push({ date: new Date().toISOString(), qty: delta });
+      }
       logActivity(`Üretim güncellendi: ${item.size} — ${order.customerName} (${prevQty} → ${val} / ${item.qty})`);
       saveState(); render();
     };
@@ -9380,6 +9392,17 @@ function renderExportProduction(){
     b.onclick = ()=>{
       const order = state.orders.find(o=>o.id===b.dataset.oid);
       const item = order.items.find(i=>i.id===b.dataset.id);
+      // Safety net: every piece should already be logged via Güncelle by the
+      // time this reaches 100%, but if it was ever finalized without going
+      // through that (older data, or a manual nudge straight to the target),
+      // log whatever gap is left now rather than silently losing that m²
+      // from every date-bucketed report.
+      const alreadyLogged = (item.producedLog||[]).reduce((s,e)=>s+e.qty, 0);
+      const gap = item.qty - alreadyLogged;
+      if(gap > 0){
+        item.producedLog = item.producedLog || [];
+        item.producedLog.push({ date: new Date().toISOString(), qty: gap });
+      }
       item.status = 'produced';
       item.producedAt = new Date().toISOString();
       logActivity(`Üretim tamamlandı olarak kapatıldı: ${item.size} — ${order.customerName} (${item.producedQty}/${item.qty})`);
