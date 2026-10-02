@@ -1998,7 +1998,7 @@ function renderOperatorBar(){
         </select>
       </label>
       <button class="ghost small" id="logoutBtn">Çıkış yap</button>
-      <span class="muted" style="font-size:10px;margin-left:auto;" title="Bu sürümün ne zaman oluşturulduğu — canlı sitenin en güncel dosyayı çalıştırıp çalıştırmadığını doğrulamak için.">Sürüm: 2026-10-02 02:36 UTC</span>
+      <span class="muted" style="font-size:10px;margin-left:auto;" title="Bu sürümün ne zaman oluşturulduğu — canlı sitenin en güncel dosyayı çalıştırıp çalıştırmadığını doğrulamak için.">Sürüm: 2026-10-02 02:40 UTC</span>
     </div>`;
   document.getElementById('themeSelect').onchange = (e)=>{
     VALID_THEMES.forEach(t=>document.body.classList.remove(t));
@@ -7477,7 +7477,7 @@ function orderAgeBadge(o){
       if(lag!==null && (worst===null || lag>worst)) worst = lag;
     });
     if(worst===null) return '';
-    if(channelCategoryForNumbering(o.channel)==='sicaksatis'){
+    if(['sicaksatis','ihracat'].includes(channelCategoryForNumbering(o.channel))){
       return `<span class="pill pill-produced">${formatDurationLabel(worst, o)}</span>`;
     }
     return worst===0 ? `<span class="pill pill-produced">Zamanında üretildi</span>` : `<span class="pill pill-produced">+${formatDurationLabel(worst, o)} üretim süresi</span>`;
@@ -9224,8 +9224,10 @@ function hoursSinceOrderDate(order){
 // unchanged. İhracat's own day-conversion (orders run for weeks, so a raw
 // hour count becomes unwieldy) is likewise untouched for non-Sıcak-Satış use.
 function formatDurationLabel(hours, order){
-  if(order.channel === 'İhracat' && hours >= 24){
-    return `${Math.floor(hours/24)} gün`;
+  // İhracat: plain "{N} saat" for the first 24 hours after the order was
+  // entered, then whole days ("{N} gün") — orders run for weeks.
+  if(channelCategoryForNumbering(order.channel)==='ihracat'){
+    return hours < 24 ? `${hours} saat` : `${Math.floor(hours/24)} gün`;
   }
   if(channelCategoryForNumbering(order.channel)==='sicaksatis'){
     return `${hours} saat`;
@@ -9244,6 +9246,18 @@ function ageBadge(order, item){
   // the plain number+unit (no extra wording); every other channel keeps its
   // original phrasing.
   const isSicak = channelCategoryForNumbering(order.channel)==='sicaksatis';
+  // İhracat uses the same plain number+unit style as Sıcak Satış, and shows
+  // from the very first moment (0 saat) — it used to stay blank for the whole
+  // first hour, which looked like the Süre column was simply broken.
+  const isExport = channelCategoryForNumbering(order.channel)==='ihracat';
+  if(isExport){
+    if(item.status==='produced'){
+      const lag = itemLagHours(order, item);
+      return lag===null ? '' : `<span class="pill pill-produced">${formatDurationLabel(lag, order)}</span>`;
+    }
+    const h = hoursSinceOrderDate(order);
+    return h===null ? '' : `<span class="pill pill-pending">${formatDurationLabel(h, order)}</span>`;
+  }
   if(item.status==='produced'){
     const lag = itemLagHours(order, item);
     if(lag===null) return '';
