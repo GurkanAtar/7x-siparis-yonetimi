@@ -1979,7 +1979,7 @@ function renderOperatorBar(){
         </select>
       </label>
       <button class="ghost small" id="logoutBtn">Çıkış yap</button>
-      <span class="muted" style="font-size:10px;margin-left:auto;" title="Bu sürümün ne zaman oluşturulduğu — canlı sitenin en güncel dosyayı çalıştırıp çalıştırmadığını doğrulamak için.">Sürüm: 2026-10-02 01:09 UTC</span>
+      <span class="muted" style="font-size:10px;margin-left:auto;" title="Bu sürümün ne zaman oluşturulduğu — canlı sitenin en güncel dosyayı çalıştırıp çalıştırmadığını doğrulamak için.">Sürüm: 2026-10-02 01:19 UTC</span>
     </div>`;
   document.getElementById('themeSelect').onchange = (e)=>{
     VALID_THEMES.forEach(t=>document.body.classList.remove(t));
@@ -2067,6 +2067,7 @@ async function loadState(){
   // didReconcileBatches, so the assigned numbers are persisted for good
   // instead of being recomputed (and potentially reshuffled) on every load.
   let didBackfillSicakNumbers = false;
+  let didBackfillExportNumbers = false;
   // Loads orders AND upload batches individually from their own tables (one
   // row per order, one row per batch) — this is what lets Supabase's Row
   // Level Security actually enforce who can delete what, and what stops one
@@ -2148,6 +2149,22 @@ async function loadState(){
           const dealerCode = getOrAssignSicakDealerCode(fullName, o.customerName);
           assignSicakOrderNumberIfNeeded(o, dealerCode);
           didBackfillSicakNumbers = true;
+        });
+      // Same upgrade for İhracat: every existing order relied purely on the
+      // old coding-time day-bucket number (no dealer code, nothing stored on
+      // the order itself) — now that order.orderNumber is assigned at save
+      // time with a dealer code baked in (EXP-{code}-{day+seq}-{date}), every
+      // existing İhracat order needs that number assigned retroactively too,
+      // oldest-first, exactly like the Sıcak Satış backfill above.
+      state.orders
+        .filter(o=>channelCategoryForNumbering(o.channel)==='ihracat' && !o.orderNumber)
+        .sort((a,b)=>{ const at=orderPlacedAt(a)?orderPlacedAt(a).getTime():0; const bt=orderPlacedAt(b)?orderPlacedAt(b).getTime():0; return at-bt; })
+        .forEach(o=>{
+          const location = [o.city, o.country].filter(Boolean).join(', ');
+          const fullName = location ? `${o.customerName} — ${location}` : o.customerName;
+          const dealerCode = getOrAssignDealerCode(fullName, o.customerName, 'İhracat bayi');
+          assignExportOrderNumberIfNeeded(o, dealerCode);
+          didBackfillExportNumbers = true;
         });
       state.uploadBatches = (batchRows||[]).map(r=>({ ...(r.data||{}), id: r.id }));
       lastSyncedBatchIds = new Set(state.uploadBatches.map(b=>b.id));
@@ -2401,7 +2418,7 @@ async function loadState(){
   // Persist any reconstructed batch records right away, so they're no longer
   // "orphaned" the next time anyone loads the app — this only actually
   // fires once per genuinely lost batch, ever.
-  if(didReconcileBatches || didBackfillSicakNumbers) saveState();
+  if(didReconcileBatches || didBackfillSicakNumbers || didBackfillExportNumbers) saveState();
 }
 let saveTimer = null;
 function stripImages(obj){
@@ -2770,19 +2787,27 @@ function generateDealerCode(name, type){
   return base+n;
 }
 
-// Finds (or creates) the Sıcak Satış bayi registry entry for this order's buyer
-// and makes sure it has a dealer code, assigning one if it doesn't yet — then
-// returns that code. fullName/baseName mirror exactly how the existing
-// auto-registration below builds the registry name (customer + city), so this
-// always lines up with the same entry that registration would find or create.
-function getOrAssignSicakDealerCode(fullName, baseName){
-  let entry = state.channels.find(c=>c.type==='Sıcak Satış bayi' && normalizeChannelKey(c.name)===normalizeChannelKey(fullName));
+// Finds (or creates) the bayi registry entry (of whichever `type` is passed —
+// 'Sıcak Satış bayi' or 'İhracat bayi' so far) for this order's buyer and
+// makes sure it has a dealer code, assigning one if it doesn't yet — then
+// returns that code. fullName/baseName mirror exactly how each channel's own
+// auto-registration builds the registry name (customer + city[, country]), so
+// this always lines up with the same entry that registration would find or
+// create. Each type keeps its own independent code namespace (generateDealerCode
+// only checks collisions within the same type), same as Sıcak Satış always has.
+function getOrAssignDealerCode(fullName, baseName, type){
+  let entry = state.channels.find(c=>c.type===type && normalizeChannelKey(c.name)===normalizeChannelKey(fullName));
   if(!entry){
-    entry = { name: fullName, type: 'Sıcak Satış bayi' };
+    entry = { name: fullName, type };
     state.channels.push(entry);
   }
-  if(!entry.code) entry.code = generateDealerCode(baseName, 'Sıcak Satış bayi');
+  if(!entry.code) entry.code = generateDealerCode(baseName, type);
   return entry.code;
+}
+// Kept as a thin wrapper — existing call sites name it explicitly and it
+// reads clearly at each of them.
+function getOrAssignSicakDealerCode(fullName, baseName){
+  return getOrAssignDealerCode(fullName, baseName, 'Sıcak Satış bayi');
 }
 
 function normPhone(s){
@@ -5606,10 +5631,9 @@ document.getElementById('saveOrder').onclick = async ()=>{
       const location = [f.city, f.country].filter(Boolean).join(', ');
       const fullName = location ? `${f.name} — ${location}` : f.name;
       const alreadyRegistered = state.channels.some(c=>normalizeChannelKey(c.name)===normalizeChannelKey(fullName));
-      if(!alreadyRegistered){
-        state.channels.push({name: fullName, type:'İhracat bayi'});
-        logActivity(`İhracat müşterisi otomatik kanal olarak eklendi: "${fullName}"`);
-      }
+      const dealerCode = getOrAssignDealerCode(fullName, f.name, 'İhracat bayi');
+      if(!alreadyRegistered) logActivity(`İhracat müşterisi otomatik kanal olarak eklendi: "${fullName}" (kod: ${dealerCode})`);
+      assignExportOrderNumberIfNeeded(order, dealerCode);
     }
     // Same idea for a newly-typed Instagram channel name — matching how a new
     // dealer showing up in an Excel upload already gets auto-registered, this
@@ -8930,6 +8954,32 @@ function assignSicakOrderNumberIfNeeded(order, dealerCode){
   order.orderNumber = `${NUMBERING_PREFIX.sicaksatis}${dealerCode}-${dayDigit}${String(usedToday+1).padStart(2,'0')}-${dd}${mm}${yy}`;
 }
 
+// İhracat's own version of the same thing — also manual-only entry (no Excel
+// upload to anchor to), so it gets its sipariş no immediately on save too,
+// now carrying the same 2-letter dealer code as Sıcak Satış: EXP-{dealerCode}-
+// {day digit}{daily seq}-{DDMMYY}. Scoped to İhracat ONLY — Instagram/Trendyol/
+// Hepsiburada are untouched and keep their existing coding-time numbering.
+// Seq is unpadded here (1, 2, ... not 01, 02) since export volume per day is
+// low enough that a leading zero adds nothing. Caller resolves dealerCode
+// first (getOrAssignDealerCode(..., 'İhracat bayi')); missing it is a no-op,
+// same guard as the Sıcak Satış version.
+function assignExportOrderNumberIfNeeded(order, dealerCode){
+  if(order.orderNumber) return;
+  if(channelCategoryForNumbering(order.channel) !== 'ihracat') return;
+  if(!dealerCode) return;
+  const d = parseDMY(order.date);
+  if(!d) return;
+  const jsDay = d.getDay();
+  const dayDigit = jsDay===0 ? 7 : jsDay;
+  const usedToday = state.orders.filter(o=>
+    o.orderNumber && o.date===order.date && channelCategoryForNumbering(o.channel)==='ihracat'
+  ).length;
+  const dd = String(d.getDate()).padStart(2,'0');
+  const mm = String(d.getMonth()+1).padStart(2,'0');
+  const yy = String(d.getFullYear()).slice(-2);
+  order.orderNumber = `${NUMBERING_PREFIX.ihracat}${dealerCode}-${dayDigit}${usedToday+1}-${dd}${mm}${yy}`;
+}
+
 function itemLagHours(order, item){
   // How many hours after the order was actually placed it ended up being produced.
   // Not the same as "hours waiting in Production" (hoursWaiting), which measures
@@ -9235,7 +9285,7 @@ function renderExportProduction(){
       // just the bare customer name with nothing to tell one buyer's orders
       // apart from another's, or identify the piece against its paper trail.
       const key = item.setLabel || item.id;
-      const baseNum = itemNumbers[order.id+'::'+key] || '—';
+      const baseNum = order.orderNumber || itemNumbers[order.id+'::'+key] || '—';
       const pieceNum = baseNum!=='—' ? numberWithPosition(baseNum, order, item) : baseNum;
       const location = [order.city, order.country].filter(Boolean).join(', ');
       const contactBits = [location, order.phone].filter(Boolean).join(' — ');
@@ -9458,14 +9508,15 @@ function renderChannels(){
   document.getElementById('channelTags').innerHTML = filtered.length ? filtered.map(c=>{
     const idx = state.channels.indexOf(c);
     const markaNote = c.marka ? ` <span class="muted">(Marka: ${c.marka})</span>` : '';
-    // Dealer code — only Sıcak Satış bayi entries carry one today (it's what
-    // feeds the SS-{code}-... order number). Auto-assigned the moment a
-    // dealer is first registered, shown here with its own edit affordance so
-    // it can be corrected by hand (e.g. to resolve a collision manually, or
-    // just to pick a more recognizable pair of letters) — once edited, the
-    // system never recomputes it again, but it stays editable any time after.
+    // Dealer code — Sıcak Satış bayi and İhracat bayi entries both carry one
+    // (it's what feeds the SS-{code}-... / EXP-{code}-... order number).
+    // Auto-assigned the moment a dealer is first registered, shown here with
+    // its own edit affordance so it can be corrected by hand (e.g. to resolve
+    // a collision manually, or just to pick a more recognizable pair of
+    // letters) — once edited, the system never recomputes it again, but it
+    // stays editable any time after.
     let codeNote = '';
-    if(c.type==='Sıcak Satış bayi'){
+    if(c.type==='Sıcak Satış bayi' || c.type==='İhracat bayi'){
       if(editingDealerCodeIdx===idx){
         codeNote = ` — <input type="text" class="dealer-code-input" data-idx="${idx}" value="${c.code||''}" maxlength="8" style="width:70px;text-transform:uppercase;">
           <button class="ghost small save-dealer-code" data-idx="${idx}">Kaydet</button>`;
@@ -9485,7 +9536,7 @@ function renderChannels(){
       const input = document.querySelector(`.dealer-code-input[data-idx="${idx}"]`);
       const newCode = (input.value||'').trim().toUpperCase();
       if(!newCode){ editingDealerCodeIdx = null; renderChannels(); return; }
-      const clash = state.channels.some((other,i)=>i!==idx && other.type==='Sıcak Satış bayi' && other.code===newCode);
+      const clash = state.channels.some((other,i)=>i!==idx && other.type===c.type && other.code===newCode);
       if(clash){ showMessage(`"${newCode}" kodu zaten başka bir bayide kullanılıyor — farklı bir kod seçin.`); return; }
       const oldCode = c.code;
       c.code = newCode;
@@ -11098,7 +11149,7 @@ document.getElementById('addChannel').onclick = ()=>{
   // A dealer added here manually gets its code immediately too, same as one
   // auto-registered from a new order — derived from the bare name (not the
   // name+city string), so the code itself stays just letters/digits.
-  if(type==='Sıcak Satış bayi') chan.code = generateDealerCode(bareName, type);
+  if(type==='Sıcak Satış bayi' || type==='İhracat bayi') chan.code = generateDealerCode(bareName, type);
   // Every bayi channel starts on Depozito/Bakiye by default — Trendyol/
   // Hepsiburada bayi stay locked to it forever, Instagram bayi can switch to
   // Komisyonlu afterward from the Bayi Finans Ayarları card.
